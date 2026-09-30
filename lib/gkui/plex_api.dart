@@ -10,7 +10,7 @@ import 'package:uuid/uuid.dart';
 import 'diagnostics.dart';
 
 const String plexProduct = 'Plezy GKUI';
-const String plexVersion = '1.2.6';
+const String plexVersion = '1.2.7';
 
 class PlexPin {
   const PlexPin({required this.id, required this.code});
@@ -403,8 +403,17 @@ PlexTrack? trackForPreference(
       return positioned;
     }
   }
+  // Without a remembered language there is nothing left to match, so return
+  // null and let the caller keep Plex's own default (which may be no subtitle).
+  if (wantedLanguage == null) return null;
   return languageMatches.firstOrNull;
 }
+
+/// Subtitles are on by default in the car: Plex's selected subtitle when it
+/// has one, otherwise the first available track. Choosing CC Off is remembered
+/// per title/show and wins over this.
+PlexTrack? defaultSubtitleTrack(List<PlexTrack> tracks) =>
+    tracks.where((track) => track.selected).firstOrNull ?? tracks.firstOrNull;
 
 class PlexMedia {
   const PlexMedia({

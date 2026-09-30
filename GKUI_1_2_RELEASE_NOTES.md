@@ -1,6 +1,12 @@
-# Plezy GKUI 1.2.6 — Car Controls and Track Memory
+# Plezy GKUI 1.2.7 — Subtitles On by Default
 
 This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit. Phone remote and mirroring are intentionally excluded.
+
+## 1.2.7 subtitles on by default
+
+- Subtitles are on by default: a title without a remembered choice uses Plex's selected subtitle, or the first available one when Plex has none. Turning CC Off is still remembered for that title or show.
+- A title without a remembered audio choice uses Plex's default audio track again instead of the first one.
+- New releases are built, signed with the 1.2.5 certificate, checked and published automatically when a new version is merged.
 
 ## 1.2.6 car controls and track memory
 
@@ -66,7 +72,7 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 
 - Flutter static analysis and the GKUI Flutter test suite pass.
 - Android unit tests, Kotlin/ExoPlayer compilation, and fatal API-19 `NewApi` lint pass.
-- The release APK is version 1.2.6 (12), minimum API 19, target API 34, and ARMv7 only.
+- The release APK is version 1.2.7 (13), minimum API 19, target API 34, and ARMv7 only.
 - APK v1/v2 signatures, certificate continuity, manifest, ABI, and SHA-256 are verified before publishing; the checksum is recorded on the GitHub release.
 
 ## One-pass M5 check
