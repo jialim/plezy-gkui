@@ -72,6 +72,8 @@ The existing performance overlay continues to expose live playback information. 
 
 `.github/workflows/xgimi-lite.yml` builds and uploads both `arm64-v8a` and `armeabi-v7a` APKs plus tarballs. Both variants should be retained until the projector confirms its Android userspace ABI.
 
+Every push to `plezy-xgimi-lite` that passes the checks is published as the next GitHub pre-release, `xgimi-lite-v<version>-test<N>`, with both APKs, the tarballs, their SHA-256 and the commits since the previous test release.
+
 Builds are signed with the key in the `XGIMI_KEYSTORE_BASE64`, `XGIMI_KEYSTORE_PASSWORD`, `XGIMI_KEY_ALIAS` and `XGIMI_KEY_PASSWORD` repository secrets, so each new build installs over the last one and keeps the projector's sign-in and settings. When those secrets are missing, CI falls back to a throwaway key and warns that the previous build must be uninstalled first. The key file is deleted before artifact packaging.
 
 To create the key once:
