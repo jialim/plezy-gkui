@@ -62,8 +62,9 @@ jobs:
           --dart-define=FAMILY_PROJECTOR_MODE=true
 
       # A stable key lets each new build install over the last one, keeping the
-      # projector's Plex sign-in and settings. Without the secrets, fall back to
-      # a throwaway key, which forces an uninstall between builds.
+      # projector's Plex sign-in and settings. Use the XGIMI key secrets when
+      # set, otherwise the car's GKUI key (a different app, so sharing is safe).
+      # With neither, fall back to a throwaway key, which forces an uninstall.
       - name: Configure APK signing
         shell: bash
         env:
@@ -71,14 +72,24 @@ jobs:
           XGIMI_KEYSTORE_PASSWORD: ${{ secrets.XGIMI_KEYSTORE_PASSWORD }}
           XGIMI_KEY_ALIAS: ${{ secrets.XGIMI_KEY_ALIAS }}
           XGIMI_KEY_PASSWORD: ${{ secrets.XGIMI_KEY_PASSWORD }}
+          GKUI_KEYSTORE_BASE64: ${{ secrets.GKUI_KEYSTORE_BASE64 }}
+          GKUI_KEYSTORE_PASSWORD: ${{ secrets.GKUI_KEYSTORE_PASSWORD }}
+          GKUI_KEY_ALIAS: ${{ secrets.GKUI_KEY_ALIAS }}
+          GKUI_KEY_PASSWORD: ${{ secrets.GKUI_KEY_PASSWORD }}
         run: |
+          if [ -z "$XGIMI_KEYSTORE_BASE64" ] && [ -n "$GKUI_KEYSTORE_BASE64" ]; then
+            XGIMI_KEYSTORE_BASE64="$GKUI_KEYSTORE_BASE64"
+            XGIMI_KEYSTORE_PASSWORD="$GKUI_KEYSTORE_PASSWORD"
+            XGIMI_KEY_ALIAS="$GKUI_KEY_ALIAS"
+            XGIMI_KEY_PASSWORD="$GKUI_KEY_PASSWORD"
+          fi
           if [ -n "$XGIMI_KEYSTORE_BASE64" ]; then
             printf '%s' "$XGIMI_KEYSTORE_BASE64" | base64 -d > android/app/xgimi-test-keystore.jks
             store_password="$XGIMI_KEYSTORE_PASSWORD"
             key_alias="$XGIMI_KEY_ALIAS"
             key_password="${XGIMI_KEY_PASSWORD:-$XGIMI_KEYSTORE_PASSWORD}"
           else
-            echo "::warning::XGIMI_KEYSTORE_BASE64 is not set; signing with a throwaway key. Uninstall the previous build before installing this one."
+            echo "::warning::Neither XGIMI nor GKUI signing secrets are set; signing with a throwaway key. Uninstall the previous build before installing this one."
             store_password=android
             key_alias=xgimi-test
             key_password=android
@@ -153,7 +164,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          SIGNED_WITH_STABLE_KEY: ${{ secrets.XGIMI_KEYSTORE_BASE64 != '' }}
+          SIGNED_WITH_STABLE_KEY: ${{ secrets.XGIMI_KEYSTORE_BASE64 != '' || secrets.GKUI_KEYSTORE_BASE64 != '' }}
         run: |
           set -euo pipefail
           prefix="xgimi-lite-v${XGIMI_VERSION}-test"
@@ -176,7 +187,7 @@ jobs:
             changes=$(git log -1 --format='- %s')
           fi
           if [ "$SIGNED_WITH_STABLE_KEY" = true ]; then
-            signing="Signed with the stable XGIMI Lite key, so it installs over the previous build."
+            signing="Signed with the stable key. Builds from Test 4 on install over each other; coming from Test 3 or earlier, uninstall Plezy once first."
           else
             signing="Signed with a throwaway test key. Uninstall the previous Plezy build before installing this one."
           fi
