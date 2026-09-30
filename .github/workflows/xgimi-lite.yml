@@ -45,6 +45,25 @@ jobs:
           test/services/family_projector_subtitle_test.dart
           --dart-define=FAMILY_PROJECTOR_MODE=true
 
+      - name: Configure test APK signing
+        shell: bash
+        run: |
+          keytool -genkeypair -noprompt \
+            -keystore android/app/xgimi-test-keystore.jks \
+            -storepass android \
+            -alias xgimi-test \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname 'CN=Plezy XGIMI Lite Test,O=Plezy,C=MY'
+          cat > android/key.properties <<'EOF'
+          storePassword=android
+          keyPassword=android
+          keyAlias=xgimi-test
+          storeFile=xgimi-test-keystore.jks
+          EOF
+
       - name: Build ARM APKs
         run: >-
           flutter build apk --release --split-per-abi
@@ -52,6 +71,10 @@ jobs:
           --dart-define=FAMILY_PROJECTOR_MODE=true
           '--dart-define=FAMILY_PROJECTOR_NAME=Plezy XGIMI Lite'
           --dart-define=GIT_COMMIT=${{ github.sha }}
+
+      - name: Remove test signing key
+        if: always()
+        run: rm -f android/app/xgimi-test-keystore.jks android/key.properties
 
       - name: Name sideload artifacts
         shell: bash

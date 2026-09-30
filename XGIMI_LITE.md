@@ -70,6 +70,8 @@ The existing performance overlay continues to expose live playback information. 
 
 `.github/workflows/xgimi-lite.yml` builds and uploads both `arm64-v8a` and `armeabi-v7a` APKs plus tarballs. Both variants should be retained until the projector confirms its Android userspace ABI.
 
+Test builds use an ephemeral test-only signing key so they can be sideloaded without repository secrets. The key is deleted before artifact packaging. Installations from different CI runs may require uninstalling the previous test build first; production/update-compatible builds need a stable protected signing secret.
+
 ## Known limitations
 
 - Real XGIMI measurements are still required for mpv versus ExoPlayer, dropped frames, seek latency, HEVC Main10, complex ASS rendering, and long-play memory stability.
