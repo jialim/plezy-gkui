@@ -10,7 +10,7 @@ import 'package:uuid/uuid.dart';
 import 'diagnostics.dart';
 
 const String plexProduct = 'Plezy GKUI';
-const String plexVersion = '1.2.5';
+const String plexVersion = '1.2.6';
 
 class PlexPin {
   const PlexPin({required this.id, required this.code});
@@ -310,10 +310,54 @@ class PlaybackChoice {
     this.mediaIndex,
     this.audioTrackId,
     this.subtitleTrackId,
+    this.audioLanguage,
+    this.subtitleLanguage,
   });
   final int? mediaIndex;
   final String? audioTrackId;
   final String? subtitleTrackId;
+
+  /// Languages let a show-level choice carry to the next episode, whose Plex
+  /// stream IDs differ. A subtitle language of `off` means subtitles off.
+  final String? audioLanguage;
+  final String? subtitleLanguage;
+}
+
+String? normalizeLanguageCode(String? language) {
+  if (language == null) return null;
+  final primary =
+      language.toLowerCase().trim().split(RegExp('[-_]')).first.trim();
+  if (primary.isEmpty) return null;
+  const aliases = <String, String>{
+    'eng': 'en',
+    'zho': 'zh',
+    'chi': 'zh',
+    'jpn': 'ja',
+    'kor': 'ko',
+    'msa': 'ms',
+    'may': 'ms',
+    'ind': 'id',
+    'tha': 'th',
+    'vie': 'vi',
+    'spa': 'es',
+    'fra': 'fr',
+    'fre': 'fr',
+    'deu': 'de',
+    'ger': 'de',
+  };
+  return aliases[primary] ?? primary;
+}
+
+/// The first track whose language matches [language], ignoring 2/3-letter
+/// code differences between Plex and ExoPlayer.
+PlexTrack? trackForLanguage(List<PlexTrack> tracks, String? language) {
+  final wanted = normalizeLanguageCode(language);
+  if (wanted == null || wanted == 'off') return null;
+  return tracks
+      .where((track) =>
+          normalizeLanguageCode(track.languageCode) == wanted ||
+          normalizeLanguageCode(track.language) == wanted)
+      .firstOrNull;
 }
 
 class PlexMedia {
@@ -514,6 +558,8 @@ class PlexApi {
         mediaIndex: (value['mediaIndex'] as num?)?.toInt(),
         audioTrackId: value['audioTrackId']?.toString(),
         subtitleTrackId: value['subtitleTrackId']?.toString(),
+        audioLanguage: value['audioLanguage']?.toString(),
+        subtitleLanguage: value['subtitleLanguage']?.toString(),
       );
     } catch (_) {
       return const PlaybackChoice();
@@ -535,6 +581,9 @@ class PlexApi {
       if (choice.audioTrackId != null) 'audioTrackId': choice.audioTrackId,
       if (choice.subtitleTrackId != null)
         'subtitleTrackId': choice.subtitleTrackId,
+      if (choice.audioLanguage != null) 'audioLanguage': choice.audioLanguage,
+      if (choice.subtitleLanguage != null)
+        'subtitleLanguage': choice.subtitleLanguage,
     };
     // Keep preference storage bounded on the low-memory device.
     while (all.length > 200) {

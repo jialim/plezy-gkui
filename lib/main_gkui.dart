@@ -9,7 +9,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'gkui/diagnostics.dart';
 import 'gkui/plex_api.dart';
 
-const String buildLabel = 'Plezy GKUI 1.2.5 / API 19 player hotfix';
+const String buildLabel = 'Plezy GKUI 1.2.6 / car controls and track memory';
 const String sourceLabel = 'Plezy 1.8.1 / GKUI compatibility fork';
 const String toolchainLabel = 'Flutter 3.19.6 / ExoPlayer 2.19.1 / API 19';
 const MethodChannel nativeChannel =
@@ -60,6 +60,53 @@ class PlezyGkuiApp extends StatelessWidget {
 enum AppPhase { starting, signedOut, signingIn, chooseServer, ready, error }
 
 enum PlaybackMode { direct, transcode720, transcode480 }
+
+/// Reads the audio/subtitle tracks picked inside the native player and maps
+/// them to Plex streams. Returns null when the driver changed nothing.
+PlaybackChoice? playerTrackChoice(
+  Map<String, dynamic>? raw, {
+  required List<PlexTrack> audioTracks,
+  required List<PlexTrack> subtitleTracks,
+}) {
+  if (raw == null) return null;
+  final audioChanged = raw.containsKey('audioLanguage');
+  final subtitleChanged = raw.containsKey('subtitleLanguage');
+  if (!audioChanged && !subtitleChanged) return null;
+
+  PlexTrack? byId(List<PlexTrack> tracks, Object? id) => id == null
+      ? null
+      : tracks.where((track) => track.id == id.toString()).firstOrNull;
+
+  String? audioId;
+  String? audioLanguage;
+  if (audioChanged) {
+    final track = byId(audioTracks, raw['audioTrackId']) ??
+        trackForLanguage(audioTracks, raw['audioLanguage']?.toString());
+    audioId = track?.id;
+    audioLanguage = track?.languageCode ?? raw['audioLanguage']?.toString();
+  }
+
+  String? subtitleId;
+  String? subtitleLanguage;
+  if (subtitleChanged) {
+    if (raw['subtitleTrackId'] == 'off') {
+      subtitleId = 'off';
+      subtitleLanguage = 'off';
+    } else {
+      final track = byId(subtitleTracks, raw['subtitleTrackId']) ??
+          trackForLanguage(subtitleTracks, raw['subtitleLanguage']?.toString());
+      subtitleId = track?.id;
+      subtitleLanguage =
+          track?.languageCode ?? raw['subtitleLanguage']?.toString();
+    }
+  }
+  return PlaybackChoice(
+    audioTrackId: audioId,
+    subtitleTrackId: subtitleId,
+    audioLanguage: audioLanguage,
+    subtitleLanguage: subtitleLanguage,
+  );
+}
 
 PlaybackMode? playbackFallback(PlaybackMode mode, String? failureKind) {
   if (failureKind == 'network' ||
@@ -535,6 +582,9 @@ class GkuiController extends ChangeNotifier {
     String? failureKind;
     PlaybackRequest? activeRequest;
     var preparingVisible = false;
+    // Retries and fallbacks reuse any track the driver picked inside the player.
+    var retryAudioTrackId = audioTrackId;
+    var retrySubtitleTrackId = subtitleTrackId;
     var selectedIndex = mediaIndex ?? 0;
     var item = media;
     try {
@@ -576,19 +626,26 @@ class GkuiController extends ChangeNotifier {
       PlexTrack? findTrack(List<PlexTrack> tracks, String? id) => id == null
           ? null
           : tracks.where((track) => track.id == id).firstOrNull;
-      final selectedAudio = findTrack(selectedVersion?.audioTracks ?? const [],
-              audioTrackId ?? remembered.audioTrackId) ??
-          (selectedVersion?.audioTracks ?? const <PlexTrack>[])
-              .where((track) => track.selected)
-              .firstOrNull;
-      final requestedSubtitleId = subtitleTrackId ?? remembered.subtitleTrackId;
-      final selectedSubtitle = requestedSubtitleId == 'off'
+      final versionAudio = selectedVersion?.audioTracks ?? const <PlexTrack>[];
+      final versionSubtitles =
+          selectedVersion?.subtitleTracks ?? const <PlexTrack>[];
+      // Stream IDs are per episode, so a show-level choice falls back to its
+      // remembered language on the next episode.
+      final selectedAudio =
+          findTrack(versionAudio, audioTrackId ?? remembered.audioTrackId) ??
+              trackForLanguage(versionAudio, remembered.audioLanguage) ??
+              versionAudio.where((track) => track.selected).firstOrNull;
+      final subtitlesOff = subtitleTrackId == 'off' ||
+          (subtitleTrackId == null &&
+              (remembered.subtitleTrackId == 'off' ||
+                  remembered.subtitleLanguage == 'off'));
+      final requestedSubtitleId =
+          subtitlesOff ? 'off' : subtitleTrackId ?? remembered.subtitleTrackId;
+      final selectedSubtitle = subtitlesOff
           ? null
-          : findTrack(selectedVersion?.subtitleTracks ?? const [],
-                  requestedSubtitleId) ??
-              (selectedVersion?.subtitleTracks ?? const <PlexTrack>[])
-                  .where((track) => track.selected)
-                  .firstOrNull;
+          : findTrack(versionSubtitles, requestedSubtitleId) ??
+              trackForLanguage(versionSubtitles, remembered.subtitleLanguage) ??
+              versionSubtitles.where((track) => track.selected).firstOrNull;
       final resolvedAudioTrackId = selectedAudio?.id;
       final resolvedSubtitleTrackId = requestedSubtitleId == 'off'
           ? 'off'
@@ -599,6 +656,11 @@ class GkuiController extends ChangeNotifier {
             mediaIndex: selectedIndex,
             audioTrackId: resolvedAudioTrackId,
             subtitleTrackId: resolvedSubtitleTrackId,
+            audioLanguage:
+                selectedAudio?.languageCode ?? remembered.audioLanguage,
+            subtitleLanguage: resolvedSubtitleTrackId == 'off'
+                ? 'off'
+                : selectedSubtitle?.languageCode ?? remembered.subtitleLanguage,
           ));
 
       final markers = settings.skipMode != SkipMode.off
@@ -650,6 +712,17 @@ class GkuiController extends ChangeNotifier {
         'subtitleTitle':
             selectedSubtitle?.title ?? selectedSubtitle?.displayLabel ?? '',
         'subtitleCodec': selectedSubtitle?.codec ?? '',
+        // Container-ordered Plex IDs let the player map its tracks back to
+        // Plex streams. A transcode only carries the chosen tracks.
+        'audioTrackIds': request.transcoding
+            ? const <String>[]
+            : versionAudio.map((track) => track.id).toList(),
+        'subtitleTrackIds': request.transcoding
+            ? const <String>[]
+            : versionSubtitles
+                .where((track) => track.key == null || track.key!.isEmpty)
+                .map((track) => track.id)
+                .toList(),
         'seekBackMs': settings.seekBackSeconds * 1000,
         'seekForwardMs': settings.seekForwardSeconds * 1000,
         'skipMode': settings.skipMode.name,
@@ -677,6 +750,33 @@ class GkuiController extends ChangeNotifier {
       lastVideoFormat = raw?['videoFormat']?.toString();
       lastStartupNetworkBytes = (raw?['networkBytes'] as num?)?.toInt();
       lastPlaybackFailure = failureKind;
+      final inPlayerChoice = playerTrackChoice(
+        raw,
+        audioTracks: versionAudio,
+        subtitleTracks: versionSubtitles,
+      );
+      if (inPlayerChoice != null) {
+        final current = api!.loadPlaybackChoice(item);
+        await api!.savePlaybackChoice(
+            item,
+            PlaybackChoice(
+              mediaIndex: selectedIndex,
+              audioTrackId: inPlayerChoice.audioTrackId ?? current.audioTrackId,
+              subtitleTrackId:
+                  inPlayerChoice.subtitleTrackId ?? current.subtitleTrackId,
+              audioLanguage:
+                  inPlayerChoice.audioLanguage ?? current.audioLanguage,
+              subtitleLanguage:
+                  inPlayerChoice.subtitleLanguage ?? current.subtitleLanguage,
+            ));
+        if (inPlayerChoice.audioTrackId != null) {
+          retryAudioTrackId = inPlayerChoice.audioTrackId;
+        }
+        if (inPlayerChoice.subtitleTrackId != null) {
+          retrySubtitleTrackId = inPlayerChoice.subtitleTrackId;
+        }
+        logs.add('Remembered in-player track choice.');
+      }
       _updateLocalProgress(item.ratingKey, position);
       notifySafely();
       if (raw?['renderedFrame'] == true) {
@@ -724,8 +824,8 @@ class GkuiController extends ChangeNotifier {
           if (context.mounted) {
             await play(context, item, fallback,
                 mediaIndex: selectedIndex,
-                audioTrackId: audioTrackId,
-                subtitleTrackId: subtitleTrackId);
+                audioTrackId: retryAudioTrackId,
+                subtitleTrackId: retrySubtitleTrackId);
           }
           return;
         }
@@ -753,8 +853,8 @@ class GkuiController extends ChangeNotifier {
         if (retry == true && context.mounted) {
           await play(context, item, mode,
               mediaIndex: selectedIndex,
-              audioTrackId: audioTrackId,
-              subtitleTrackId: subtitleTrackId);
+              audioTrackId: retryAudioTrackId,
+              subtitleTrackId: retrySubtitleTrackId);
         }
       }
     } finally {

@@ -1,6 +1,17 @@
-# Plezy GKUI 1.2.5 — API 19 Player Compatibility Hotfix
+# Plezy GKUI 1.2.6 — Car Controls and Track Memory
 
 This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit. Phone remote and mirroring are intentionally excluded.
+
+## 1.2.6 car controls and track memory (unreleased)
+
+- Fixes the large GKUI player controls falling back to the stock controller on API 19: the seek bar set `ProgressBar.setMinHeight`, which only exists from API 29. This call, not `setAllCaps` or start/end margins, is the likely cause of the 1.2.4 `NoSuchMethodError`.
+- Release builds now fail on any framework call newer than API 19 (Android Lint `NewApi` is fatal), and a GKUI CI workflow builds the API 19 APK, runs lint, and runs the Flutter and Android tests on every push and pull request.
+- Audio and subtitle choices made inside the player are now remembered, and are reused by the 720p/480p fallback, Retry, and the next episode.
+- A show-level audio or subtitle choice now carries to other episodes by language, since Plex stream IDs differ per episode.
+- The CC and Audio buttons show what ExoPlayer actually selected, so CC no longer reads Off while subtitles are showing.
+- Network reconnects reset after 30 seconds of steady playback, so each mobile-data dropout gets two fresh retries instead of two per video.
+- Same-language audio or subtitle tracks are matched by container order when labels are missing.
+- The Audio and CC pickers no longer crash the player if the track list changes while they are open.
 
 ## 1.2.5 API 19 player hotfix
 

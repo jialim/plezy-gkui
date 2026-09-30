@@ -62,6 +62,8 @@ class MainActivity : FlutterActivity() {
                         putExtra(PlayerActivity.EXTRA_SUBTITLE_URL, arguments["subtitleUrl"] as? String ?: "")
                         putExtra(PlayerActivity.EXTRA_SUBTITLE_TITLE, arguments["subtitleTitle"] as? String ?: "")
                         putExtra(PlayerActivity.EXTRA_SUBTITLE_CODEC, arguments["subtitleCodec"] as? String ?: "")
+                        putExtra(PlayerActivity.EXTRA_AUDIO_TRACK_IDS, stringList(arguments["audioTrackIds"]))
+                        putExtra(PlayerActivity.EXTRA_SUBTITLE_TRACK_IDS, stringList(arguments["subtitleTrackIds"]))
                         putExtra(PlayerActivity.EXTRA_SKIP_MODE, arguments["skipMode"] as? String ?: "button")
                         putExtra(PlayerActivity.EXTRA_STARTUP_HARD_TIMEOUT_MS, (arguments["startupHardTimeoutMs"] as? Number)?.toLong() ?: 120_000L)
                         putExtra(PlayerActivity.EXTRA_SEEK_BACK_MS, (arguments["seekBackMs"] as? Number)?.toLong() ?: 10_000L)
@@ -95,9 +97,20 @@ class MainActivity : FlutterActivity() {
             "networkBytes" to (data?.getLongExtra(PlayerActivity.RESULT_NETWORK_BYTES, 0L) ?: 0L),
             "diagnostics" to (data?.getStringArrayListExtra(PlayerActivity.RESULT_DIAGNOSTICS) ?: arrayListOf<String>()),
         )
+        if (data != null && data.hasExtra(PlayerActivity.RESULT_AUDIO_LANGUAGE)) {
+            payload["audioTrackId"] = data.getStringExtra(PlayerActivity.RESULT_AUDIO_TRACK_ID)
+            payload["audioLanguage"] = data.getStringExtra(PlayerActivity.RESULT_AUDIO_LANGUAGE)
+        }
+        if (data != null && data.hasExtra(PlayerActivity.RESULT_SUBTITLE_LANGUAGE)) {
+            payload["subtitleTrackId"] = data.getStringExtra(PlayerActivity.RESULT_SUBTITLE_TRACK_ID)
+            payload["subtitleLanguage"] = data.getStringExtra(PlayerActivity.RESULT_SUBTITLE_LANGUAGE)
+        }
         pendingPlaybackResult?.success(payload)
         pendingPlaybackResult = null
     }
+
+    private fun stringList(value: Any?): Array<String> =
+        (value as? List<*>)?.mapNotNull { it as? String }?.toTypedArray() ?: emptyArray()
 
     @Suppress("DEPRECATION")
     private fun readDiagnostics(): Map<String, Any> {
