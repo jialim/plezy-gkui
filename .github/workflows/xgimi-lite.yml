@@ -50,7 +50,7 @@ jobs:
           flutter build apk --release --split-per-abi
           --target-platform android-arm,android-arm64
           --dart-define=FAMILY_PROJECTOR_MODE=true
-          --dart-define=FAMILY_PROJECTOR_NAME=Plezy XGIMI Lite
+          '--dart-define=FAMILY_PROJECTOR_NAME=Plezy XGIMI Lite'
           --dart-define=GIT_COMMIT=${{ github.sha }}
 
       - name: Name sideload artifacts
