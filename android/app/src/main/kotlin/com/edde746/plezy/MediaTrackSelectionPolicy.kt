@@ -5,6 +5,8 @@ internal data class MediaTrackCandidate(
     val language: String?,
     val label: String?,
     val codec: String?,
+    // Position among the embedded tracks of the same type, in container order.
+    val ordinal: Int? = null,
 )
 
 internal object MediaTrackSelectionPolicy {
@@ -14,6 +16,7 @@ internal object MediaTrackSelectionPolicy {
         requestedLanguage: String?,
         requestedTitle: String?,
         requestedCodec: String?,
+        requestedOrdinal: Int? = null,
     ): Int? {
         if (candidates.isEmpty()) return null
         return candidates.indices.maxByOrNull { index ->
@@ -23,8 +26,28 @@ internal object MediaTrackSelectionPolicy {
             if (languageMatches(candidate.language, requestedLanguage)) score += 300
             score += textScore(candidate.label, requestedTitle, exact = 150, partial = 80)
             score += textScore(candidate.codec, requestedCodec, exact = 30, partial = 15)
+            // Plex stream IDs rarely equal ExoPlayer's embedded track IDs, so the
+            // container position breaks ties between same-language tracks.
+            if (requestedOrdinal != null && candidate.ordinal == requestedOrdinal) score += 100
             score
         }
+    }
+
+    /**
+     * Maps an ExoPlayer track back to the Plex stream ID that the app stores.
+     * [plexIds] lists the Plex streams of one type in container order; the
+     * ordinal is trusted only when ExoPlayer exposes the same number of tracks.
+     */
+    fun plexTrackId(
+        candidate: MediaTrackCandidate,
+        plexIds: List<String>,
+        embeddedTrackCount: Int,
+    ): String? {
+        val id = candidate.id
+        if (!id.isNullOrBlank() && id in plexIds) return id
+        val ordinal = candidate.ordinal ?: return null
+        if (plexIds.size != embeddedTrackCount) return null
+        return plexIds.getOrNull(ordinal)
     }
 
     fun subtitleMimeType(codec: String?, path: String?): String? {

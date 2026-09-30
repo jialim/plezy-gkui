@@ -81,6 +81,10 @@ android {
         // Plezy never instantiates ExoPlayer's offline DownloadService.
         // Do not request Android 13 notification access for unreachable library code.
         disable 'NotificationPermission'
+        // GKUI runs Android 4.4 (API 19). A framework call newer than minSdk
+        // compiles fine but throws NoSuchMethodError on the head unit, so make
+        // it fail every release build (lintVitalRelease) instead.
+        fatal 'NewApi'
     }
 }
 

@@ -1,0 +1,59 @@
+name: GKUI checks
+
+on:
+  push:
+    branches:
+      - gkui/**
+      - claude/**
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  gkui:
+    name: API 19 build, lint and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.19.6"
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed lib/main_gkui.dart lib/gkui test/gkui
+
+      - name: Analyze GKUI code
+        run: flutter analyze lib/main_gkui.dart lib/gkui test/gkui
+
+      - name: Flutter tests
+        run: flutter test test/gkui
+
+      # The release build runs lintVitalRelease, where NewApi is fatal, so an
+      # API 20+ framework call fails here instead of on the head unit.
+      - name: Build API 19 ARMv7 APK
+        run: flutter build apk --release --target-platform android-arm --target lib/main_gkui.dart
+
+      - name: Android unit tests
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: plezy-gkui-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14

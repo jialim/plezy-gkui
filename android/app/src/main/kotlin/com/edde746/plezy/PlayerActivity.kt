@@ -98,6 +98,13 @@ class PlayerActivity : Activity() {
     private var requestedSubtitleTitle = ""
     private var requestedSubtitleCodec = ""
     private var requestedSubtitleUrl = ""
+    private var plexAudioIds: List<String> = emptyList()
+    private var plexSubtitleIds: List<String> = emptyList()
+    private var sideloadedSubtitleId: String? = null
+    private var userAudioChoice: NativeAudioTrack? = null
+    private var userSubtitleChoice: NativeSubtitleTrack? = null
+    private var userChangedSubtitle = false
+    private var recoveredAtMs = 0L
     private var markers: List<Marker> = emptyList()
     private var skipMode = "button"
     private val skippedMarkerIndexes = mutableSetOf<Int>()
@@ -154,6 +161,7 @@ class PlayerActivity : Activity() {
                 reportTimeline(exo.currentPosition, "playing")
             }
             updateCarControls(exo)
+            resetReconnectBudgetIfStable(exo, now)
             checkStartupProgress(exo, now)
             if (completed) return
             updateSkipButton(exo.currentPosition)
@@ -235,6 +243,8 @@ class PlayerActivity : Activity() {
         requestedSubtitleTitle = intent.getStringExtra(EXTRA_SUBTITLE_TITLE).orEmpty()
         requestedSubtitleCodec = intent.getStringExtra(EXTRA_SUBTITLE_CODEC).orEmpty()
         requestedSubtitleUrl = intent.getStringExtra(EXTRA_SUBTITLE_URL).orEmpty()
+        plexAudioIds = intent.getStringArrayExtra(EXTRA_AUDIO_TRACK_IDS)?.toList().orEmpty()
+        plexSubtitleIds = intent.getStringArrayExtra(EXTRA_SUBTITLE_TRACK_IDS)?.toList().orEmpty()
         if (requestedAudioLanguage.isNotBlank()) {
             trackParameters.setPreferredAudioLanguage(requestedAudioLanguage)
         }
@@ -342,6 +352,11 @@ class PlayerActivity : Activity() {
                     Player.STATE_ENDED -> "ended"
                     else -> "unknown"
                 })
+                if (state == Player.STATE_READY && automaticRetries > 0 && recoveredAtMs == 0L) {
+                    recoveredAtMs = SystemClock.elapsedRealtime()
+                } else if (state != Player.STATE_READY) {
+                    recoveredAtMs = 0L
+                }
                 updateCarControls(exo)
                 if (state == Player.STATE_ENDED) {
                     ended = true
@@ -358,6 +373,8 @@ class PlayerActivity : Activity() {
                         applyRequestedAudio()
                     } catch (error: LinkageError) {
                         diagnostics.add("Audio selection fallback: ${describeLinkage(error)}")
+                    } catch (error: RuntimeException) {
+                        diagnostics.add("Audio selection fallback: ${PlaybackDiagnostics.describe(error)}")
                     }
                 }
                 val subtitleRequested = requestedSubtitleId.isNotBlank() ||
@@ -370,10 +387,11 @@ class PlayerActivity : Activity() {
                         applyRequestedSubtitle()
                     } catch (error: LinkageError) {
                         diagnostics.add("Subtitle selection fallback: ${describeLinkage(error)}")
+                    } catch (error: RuntimeException) {
+                        diagnostics.add("Subtitle selection fallback: ${PlaybackDiagnostics.describe(error)}")
                     }
                 }
-                updateAudioButton()
-                updateCaptionsButton()
+                syncActiveTracks(tracks)
             }
 
             override fun onRenderedFirstFrame() {
@@ -408,6 +426,7 @@ class PlayerActivity : Activity() {
                             lastStartupProgressAtMs = retryStartedAt
                             lastBufferedPositionMs = exo.bufferedPosition
                             readyWithoutFrameAtMs = 0L
+                            recoveredAtMs = 0L
                             exo.prepare()
                             exo.playWhenReady = true
                         }
@@ -425,8 +444,10 @@ class PlayerActivity : Activity() {
                 requestedSubtitleUrl,
             )
             if (subtitleUri.scheme == "https" && mimeType != null) {
+                val sideloadedId = requestedSubtitleId.ifBlank { "plex-external" }
+                sideloadedSubtitleId = sideloadedId
                 val subtitleBuilder = MediaItem.SubtitleConfiguration.Builder(subtitleUri)
-                    .setId(requestedSubtitleId.ifBlank { "plex-external" })
+                    .setId(sideloadedId)
                     .setMimeType(mimeType)
                     .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
                 if (requestedSubtitleLanguage.isNotBlank()) {
@@ -477,7 +498,9 @@ class PlayerActivity : Activity() {
 
         val progress = SeekBar(this).apply {
             max = 1_000
-            minHeight = dp(48)
+            // Do not set minHeight here: on a SeekBar it resolves to
+            // ProgressBar.setMinHeight, which only exists from API 29. The
+            // 48dp LayoutParams below already give the bar its touch height.
             contentDescription = "Playback position"
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onStartTrackingTouch(seekBar: SeekBar) {
@@ -656,6 +679,7 @@ class PlayerActivity : Activity() {
                             language = format.language,
                             label = format.label,
                             codec = format.sampleMimeType ?: format.codecs,
+                            ordinal = result.size,
                         ),
                     )
                 }
@@ -672,6 +696,7 @@ class PlayerActivity : Activity() {
             requestedAudioLanguage,
             requestedAudioTitle,
             requestedAudioCodec,
+            requestedOrdinal = plexAudioIds.indexOf(requestedAudioId).takeIf { it >= 0 },
         ) ?: return
         applyAudio(tracks[index])
     }
@@ -680,6 +705,9 @@ class PlayerActivity : Activity() {
     private fun applyAudio(track: NativeAudioTrack) {
         val selector = trackSelector ?: return
         val mapped = selector.currentMappedTrackInfo ?: return
+        require(isCurrent(mapped, track.rendererIndex, track.groupIndex, track.trackIndex)) {
+            "Audio track list changed"
+        }
         val builder = selector.buildUponParameters()
             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
         for (rendererIndex in 0 until mapped.rendererCount) {
@@ -696,6 +724,44 @@ class PlayerActivity : Activity() {
         activeAudio = track
         diagnostics.add("Audio active: ${track.label}")
         updateAudioButton()
+    }
+
+    private fun isCurrent(
+        mapped: com.google.android.exoplayer2.trackselection.MappingTrackSelector.MappedTrackInfo,
+        rendererIndex: Int,
+        groupIndex: Int,
+        trackIndex: Int,
+    ): Boolean {
+        if (rendererIndex >= mapped.rendererCount) return false
+        val groups = mapped.getTrackGroups(rendererIndex)
+        return groupIndex < groups.length && trackIndex < groups[groupIndex].length
+    }
+
+    /**
+     * Reads what ExoPlayer actually selected, so the Audio and CC buttons stay
+     * truthful when a track was chosen by language preference or a default flag
+     * rather than by an exact match.
+     */
+    private fun syncActiveTracks(tracks: Tracks) {
+        val mapped = trackSelector?.currentMappedTrackInfo
+        if (mapped != null) {
+            fun isSelected(type: Int, rendererIndex: Int, groupIndex: Int, trackIndex: Int): Boolean {
+                if (!isCurrent(mapped, rendererIndex, groupIndex, trackIndex)) return false
+                val trackGroup = mapped.getTrackGroups(rendererIndex)[groupIndex]
+                return tracks.groups.any { group ->
+                    group.type == type && group.mediaTrackGroup == trackGroup &&
+                        group.isTrackSelected(trackIndex)
+                }
+            }
+            activeAudio = audioTracks().firstOrNull {
+                isSelected(C.TRACK_TYPE_AUDIO, it.rendererIndex, it.groupIndex, it.trackIndex)
+            } ?: activeAudio
+            activeSubtitle = subtitleTracks().firstOrNull {
+                isSelected(C.TRACK_TYPE_TEXT, it.rendererIndex, it.groupIndex, it.trackIndex)
+            }
+        }
+        updateAudioButton()
+        updateCaptionsButton()
     }
 
     private fun updateAudioButton() {
@@ -721,10 +787,15 @@ class PlayerActivity : Activity() {
             .setTitle("Audio language")
             .setSingleChoiceItems(adapter, selected) { dialog, choice ->
                 try {
-                    applyAudio(tracks[choice])
+                    val track = tracks[choice]
+                    applyAudio(track)
+                    userAudioChoice = track
                 } catch (error: LinkageError) {
                     diagnostics.add("Audio switch unavailable: ${describeLinkage(error)}")
                     Toast.makeText(this, "Audio switch is unavailable on this firmware", Toast.LENGTH_LONG).show()
+                } catch (error: RuntimeException) {
+                    diagnostics.add("Audio switch failed: ${PlaybackDiagnostics.describe(error)}")
+                    Toast.makeText(this, "Audio tracks changed; open Audio again", Toast.LENGTH_LONG).show()
                 }
                 dialog.dismiss()
                 showControls()
@@ -733,10 +804,14 @@ class PlayerActivity : Activity() {
             .show()
     }
 
+    private fun isSideloadedSubtitle(candidate: MediaTrackCandidate): Boolean =
+        sideloadedSubtitleId != null && candidate.id == sideloadedSubtitleId
+
     private fun subtitleTracks(): List<NativeSubtitleTrack> {
         val selector = trackSelector ?: return emptyList()
         val mapped = selector.currentMappedTrackInfo ?: return emptyList()
         val result = mutableListOf<NativeSubtitleTrack>()
+        var embeddedCount = 0
         for (rendererIndex in 0 until mapped.rendererCount) {
             if (mapped.getRendererType(rendererIndex) != C.TRACK_TYPE_TEXT) continue
             val groups = mapped.getTrackGroups(rendererIndex)
@@ -747,6 +822,7 @@ class PlayerActivity : Activity() {
                     val label = format.label?.takeIf { it.isNotBlank() }
                         ?: format.language?.takeIf { it.isNotBlank() }
                         ?: "Subtitle ${result.size + 1}"
+                    val sideloaded = sideloadedSubtitleId != null && format.id == sideloadedSubtitleId
                     result += NativeSubtitleTrack(
                         rendererIndex = rendererIndex,
                         groupIndex = groupIndex,
@@ -757,6 +833,7 @@ class PlayerActivity : Activity() {
                             language = format.language,
                             label = format.label,
                             codec = format.sampleMimeType ?: format.codecs,
+                            ordinal = if (sideloaded) null else embeddedCount++,
                         ),
                     )
                 }
@@ -773,6 +850,7 @@ class PlayerActivity : Activity() {
             requestedSubtitleLanguage,
             requestedSubtitleTitle,
             requestedSubtitleCodec,
+            requestedOrdinal = plexSubtitleIds.indexOf(requestedSubtitleId).takeIf { it >= 0 },
         ) ?: return
         applySubtitle(tracks[index])
     }
@@ -781,6 +859,9 @@ class PlayerActivity : Activity() {
     private fun applySubtitle(track: NativeSubtitleTrack) {
         val selector = trackSelector ?: return
         val mapped = selector.currentMappedTrackInfo ?: return
+        require(isCurrent(mapped, track.rendererIndex, track.groupIndex, track.trackIndex)) {
+            "Subtitle track list changed"
+        }
         val builder = selector.buildUponParameters()
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
             .setSelectUndeterminedTextLanguage(true)
@@ -858,16 +939,48 @@ class PlayerActivity : Activity() {
             .setTitle("Subtitles")
             .setSingleChoiceItems(adapter, selected) { dialog, choice ->
                 try {
-                    if (choice == 0) disableSubtitles() else applySubtitle(tracks[choice - 1])
+                    if (choice == 0) {
+                        disableSubtitles()
+                        userSubtitleChoice = null
+                    } else {
+                        val track = tracks[choice - 1]
+                        applySubtitle(track)
+                        userSubtitleChoice = track
+                    }
+                    userChangedSubtitle = true
                 } catch (error: LinkageError) {
                     diagnostics.add("Subtitle switch unavailable: ${describeLinkage(error)}")
                     Toast.makeText(this, "Subtitle switch is unavailable on this firmware", Toast.LENGTH_LONG).show()
+                } catch (error: RuntimeException) {
+                    diagnostics.add("Subtitle switch failed: ${PlaybackDiagnostics.describe(error)}")
+                    Toast.makeText(this, "Subtitle tracks changed; open CC again", Toast.LENGTH_LONG).show()
                 }
                 dialog.dismiss()
                 showControls()
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    private fun resetReconnectBudgetIfStable(exo: ExoPlayer, now: Long) {
+        // Reconnect retries are for each dropout, not for the whole video: after
+        // 30 seconds of steady playback a later mobile-data drop gets 2 fresh tries.
+        if (automaticRetries == 0 || recoveredAtMs == 0L) return
+        if (exo.playbackState != Player.STATE_READY) return
+        if (now - recoveredAtMs < 30_000L) return
+        diagnostics.add("Player: connection stable again; reconnect retries reset")
+        automaticRetries = 0
+        recoveredAtMs = 0L
+    }
+
+    /** Returns the Plex stream ID for a track chosen inside the player, if known. */
+    private fun plexIdForAudio(track: NativeAudioTrack): String? =
+        MediaTrackSelectionPolicy.plexTrackId(track.candidate, plexAudioIds, audioTracks().size)
+
+    private fun plexIdForSubtitle(track: NativeSubtitleTrack): String? {
+        if (isSideloadedSubtitle(track.candidate)) return requestedSubtitleId.takeIf { it.isNotBlank() }
+        val embedded = subtitleTracks().count { !isSideloadedSubtitle(it.candidate) }
+        return MediaTrackSelectionPolicy.plexTrackId(track.candidate, plexSubtitleIds, embedded)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -1042,6 +1155,14 @@ class PlayerActivity : Activity() {
         timelineHandler.removeCallbacks(seekRunnable)
         timelineHandler.removeCallbacks(hideControlsRunnable)
         if (renderedFirstFrame) reportTimeline(position, if (ended) "stopped" else "paused")
+        val audioChoice = userAudioChoice
+        val audioChoiceId = audioChoice?.let(::plexIdForAudio)
+        val subtitleChoice = userSubtitleChoice
+        val subtitleChoiceId = when {
+            !userChangedSubtitle -> null
+            subtitleChoice == null -> "off"
+            else -> plexIdForSubtitle(subtitleChoice)
+        }
         playerView?.player = null
         player?.release()
         player = null
@@ -1058,6 +1179,15 @@ class PlayerActivity : Activity() {
             putExtra(RESULT_VIDEO_FORMAT, videoFormat)
             putExtra(RESULT_NETWORK_BYTES, startupNetworkBytes.get())
             putStringArrayListExtra(RESULT_DIAGNOSTICS, diagnostics.snapshot())
+            // Tracks the driver picked inside the player, so the app remembers them.
+            if (audioChoice != null) {
+                putExtra(RESULT_AUDIO_TRACK_ID, audioChoiceId)
+                putExtra(RESULT_AUDIO_LANGUAGE, audioChoice.candidate.language)
+            }
+            if (userChangedSubtitle) {
+                putExtra(RESULT_SUBTITLE_TRACK_ID, subtitleChoiceId)
+                putExtra(RESULT_SUBTITLE_LANGUAGE, subtitleChoice?.candidate?.language ?: "off")
+            }
         })
         finish()
     }
@@ -1122,6 +1252,8 @@ class PlayerActivity : Activity() {
         const val EXTRA_SUBTITLE_URL = "subtitleUrl"
         const val EXTRA_SUBTITLE_TITLE = "subtitleTitle"
         const val EXTRA_SUBTITLE_CODEC = "subtitleCodec"
+        const val EXTRA_AUDIO_TRACK_IDS = "audioTrackIds"
+        const val EXTRA_SUBTITLE_TRACK_IDS = "subtitleTrackIds"
         const val EXTRA_SKIP_MODE = "skipMode"
         const val EXTRA_STARTUP_HARD_TIMEOUT_MS = "startupHardTimeoutMs"
         const val EXTRA_SEEK_BACK_MS = "seekBackMs"
@@ -1140,5 +1272,9 @@ class PlayerActivity : Activity() {
         const val RESULT_VIDEO_FORMAT = "videoFormat"
         const val RESULT_NETWORK_BYTES = "networkBytes"
         const val RESULT_DIAGNOSTICS = "diagnostics"
+        const val RESULT_AUDIO_TRACK_ID = "audioTrackId"
+        const val RESULT_AUDIO_LANGUAGE = "audioLanguage"
+        const val RESULT_SUBTITLE_TRACK_ID = "subtitleTrackId"
+        const val RESULT_SUBTITLE_LANGUAGE = "subtitleLanguage"
     }
 }
