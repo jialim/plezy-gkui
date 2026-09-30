@@ -312,15 +312,23 @@ class PlaybackChoice {
     this.subtitleTrackId,
     this.audioLanguage,
     this.subtitleLanguage,
+    this.audioTitle,
+    this.subtitleTitle,
+    this.audioOrdinal,
+    this.subtitleOrdinal,
   });
   final int? mediaIndex;
   final String? audioTrackId;
   final String? subtitleTrackId;
 
-  /// Languages let a show-level choice carry to the next episode, whose Plex
-  /// stream IDs differ. A subtitle language of `off` means subtitles off.
+  /// These identity hints let a show-level choice carry to the next episode,
+  /// whose Plex stream IDs differ. A subtitle language of `off` means off.
   final String? audioLanguage;
   final String? subtitleLanguage;
+  final String? audioTitle;
+  final String? subtitleTitle;
+  final int? audioOrdinal;
+  final int? subtitleOrdinal;
 }
 
 String? normalizeLanguageCode(String? language) {
@@ -358,6 +366,44 @@ PlexTrack? trackForLanguage(List<PlexTrack> tracks, String? language) {
           normalizeLanguageCode(track.languageCode) == wanted ||
           normalizeLanguageCode(track.language) == wanted)
       .firstOrNull;
+}
+
+/// Resolves a remembered track on the current episode. Plex stream IDs are
+/// episode-specific, so title and container position disambiguate tracks that
+/// share a language (for example commentary or Simplified/Traditional Chinese).
+PlexTrack? trackForPreference(
+  List<PlexTrack> tracks, {
+  String? id,
+  String? language,
+  String? title,
+  int? ordinal,
+}) {
+  if (id != null) {
+    final exact = tracks.where((track) => track.id == id).firstOrNull;
+    if (exact != null) return exact;
+  }
+  final wantedLanguage = normalizeLanguageCode(language);
+  final languageMatches = wantedLanguage == null
+      ? tracks
+      : tracks
+          .where((track) =>
+              normalizeLanguageCode(track.languageCode) == wantedLanguage ||
+              normalizeLanguageCode(track.language) == wantedLanguage)
+          .toList();
+  final wantedTitle = title?.trim().toLowerCase();
+  if (wantedTitle != null && wantedTitle.isNotEmpty) {
+    final titled = languageMatches
+        .where((track) => track.title?.trim().toLowerCase() == wantedTitle)
+        .firstOrNull;
+    if (titled != null) return titled;
+  }
+  if (ordinal != null && ordinal >= 0 && ordinal < tracks.length) {
+    final positioned = tracks[ordinal];
+    if (wantedLanguage == null || languageMatches.contains(positioned)) {
+      return positioned;
+    }
+  }
+  return languageMatches.firstOrNull;
 }
 
 class PlexMedia {
@@ -560,6 +606,10 @@ class PlexApi {
         subtitleTrackId: value['subtitleTrackId']?.toString(),
         audioLanguage: value['audioLanguage']?.toString(),
         subtitleLanguage: value['subtitleLanguage']?.toString(),
+        audioTitle: value['audioTitle']?.toString(),
+        subtitleTitle: value['subtitleTitle']?.toString(),
+        audioOrdinal: (value['audioOrdinal'] as num?)?.toInt(),
+        subtitleOrdinal: (value['subtitleOrdinal'] as num?)?.toInt(),
       );
     } catch (_) {
       return const PlaybackChoice();
@@ -584,6 +634,11 @@ class PlexApi {
       if (choice.audioLanguage != null) 'audioLanguage': choice.audioLanguage,
       if (choice.subtitleLanguage != null)
         'subtitleLanguage': choice.subtitleLanguage,
+      if (choice.audioTitle != null) 'audioTitle': choice.audioTitle,
+      if (choice.subtitleTitle != null) 'subtitleTitle': choice.subtitleTitle,
+      if (choice.audioOrdinal != null) 'audioOrdinal': choice.audioOrdinal,
+      if (choice.subtitleOrdinal != null)
+        'subtitleOrdinal': choice.subtitleOrdinal,
     };
     // Keep preference storage bounded on the low-memory device.
     while (all.length > 200) {

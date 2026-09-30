@@ -73,31 +73,49 @@ PlaybackChoice? playerTrackChoice(
   final subtitleChanged = raw.containsKey('subtitleLanguage');
   if (!audioChanged && !subtitleChanged) return null;
 
-  PlexTrack? byId(List<PlexTrack> tracks, Object? id) => id == null
-      ? null
-      : tracks.where((track) => track.id == id.toString()).firstOrNull;
-
   String? audioId;
   String? audioLanguage;
+  String? audioTitle;
+  int? audioOrdinal;
   if (audioChanged) {
-    final track = byId(audioTracks, raw['audioTrackId']) ??
-        trackForLanguage(audioTracks, raw['audioLanguage']?.toString());
+    final track = trackForPreference(
+      audioTracks,
+      id: raw['audioTrackId']?.toString(),
+      language: raw['audioLanguage']?.toString(),
+      title: raw['audioTitle']?.toString(),
+      ordinal: (raw['audioOrdinal'] as num?)?.toInt(),
+    );
     audioId = track?.id;
     audioLanguage = track?.languageCode ?? raw['audioLanguage']?.toString();
+    audioTitle = track?.title ?? raw['audioTitle']?.toString();
+    audioOrdinal = track == null
+        ? (raw['audioOrdinal'] as num?)?.toInt()
+        : audioTracks.indexOf(track);
   }
 
   String? subtitleId;
   String? subtitleLanguage;
+  String? subtitleTitle;
+  int? subtitleOrdinal;
   if (subtitleChanged) {
     if (raw['subtitleTrackId'] == 'off') {
       subtitleId = 'off';
       subtitleLanguage = 'off';
     } else {
-      final track = byId(subtitleTracks, raw['subtitleTrackId']) ??
-          trackForLanguage(subtitleTracks, raw['subtitleLanguage']?.toString());
+      final track = trackForPreference(
+        subtitleTracks,
+        id: raw['subtitleTrackId']?.toString(),
+        language: raw['subtitleLanguage']?.toString(),
+        title: raw['subtitleTitle']?.toString(),
+        ordinal: (raw['subtitleOrdinal'] as num?)?.toInt(),
+      );
       subtitleId = track?.id;
       subtitleLanguage =
           track?.languageCode ?? raw['subtitleLanguage']?.toString();
+      subtitleTitle = track?.title ?? raw['subtitleTitle']?.toString();
+      subtitleOrdinal = track == null
+          ? (raw['subtitleOrdinal'] as num?)?.toInt()
+          : subtitleTracks.indexOf(track);
     }
   }
   return PlaybackChoice(
@@ -105,6 +123,10 @@ PlaybackChoice? playerTrackChoice(
     subtitleTrackId: subtitleId,
     audioLanguage: audioLanguage,
     subtitleLanguage: subtitleLanguage,
+    audioTitle: audioTitle,
+    subtitleTitle: subtitleTitle,
+    audioOrdinal: audioOrdinal,
+    subtitleOrdinal: subtitleOrdinal,
   );
 }
 
@@ -623,18 +645,19 @@ class GkuiController extends ChangeNotifier {
           .firstOrNull;
       lastSelectedVersion = selectedVersion?.displayLabel ?? 'Original';
 
-      PlexTrack? findTrack(List<PlexTrack> tracks, String? id) => id == null
-          ? null
-          : tracks.where((track) => track.id == id).firstOrNull;
       final versionAudio = selectedVersion?.audioTracks ?? const <PlexTrack>[];
       final versionSubtitles =
           selectedVersion?.subtitleTracks ?? const <PlexTrack>[];
       // Stream IDs are per episode, so a show-level choice falls back to its
       // remembered language on the next episode.
-      final selectedAudio =
-          findTrack(versionAudio, audioTrackId ?? remembered.audioTrackId) ??
-              trackForLanguage(versionAudio, remembered.audioLanguage) ??
-              versionAudio.where((track) => track.selected).firstOrNull;
+      final selectedAudio = trackForPreference(
+            versionAudio,
+            id: audioTrackId ?? remembered.audioTrackId,
+            language: audioTrackId == null ? remembered.audioLanguage : null,
+            title: audioTrackId == null ? remembered.audioTitle : null,
+            ordinal: audioTrackId == null ? remembered.audioOrdinal : null,
+          ) ??
+          versionAudio.where((track) => track.selected).firstOrNull;
       final subtitlesOff = subtitleTrackId == 'off' ||
           (subtitleTrackId == null &&
               (remembered.subtitleTrackId == 'off' ||
@@ -643,8 +666,17 @@ class GkuiController extends ChangeNotifier {
           subtitlesOff ? 'off' : subtitleTrackId ?? remembered.subtitleTrackId;
       final selectedSubtitle = subtitlesOff
           ? null
-          : findTrack(versionSubtitles, requestedSubtitleId) ??
-              trackForLanguage(versionSubtitles, remembered.subtitleLanguage) ??
+          : trackForPreference(
+                versionSubtitles,
+                id: requestedSubtitleId,
+                language: subtitleTrackId == null
+                    ? remembered.subtitleLanguage
+                    : null,
+                title:
+                    subtitleTrackId == null ? remembered.subtitleTitle : null,
+                ordinal:
+                    subtitleTrackId == null ? remembered.subtitleOrdinal : null,
+              ) ??
               versionSubtitles.where((track) => track.selected).firstOrNull;
       final resolvedAudioTrackId = selectedAudio?.id;
       final resolvedSubtitleTrackId = requestedSubtitleId == 'off'
@@ -661,6 +693,14 @@ class GkuiController extends ChangeNotifier {
             subtitleLanguage: resolvedSubtitleTrackId == 'off'
                 ? 'off'
                 : selectedSubtitle?.languageCode ?? remembered.subtitleLanguage,
+            audioTitle: selectedAudio?.title,
+            subtitleTitle: selectedSubtitle?.title,
+            audioOrdinal: selectedAudio == null
+                ? null
+                : versionAudio.indexOf(selectedAudio),
+            subtitleOrdinal: selectedSubtitle == null
+                ? null
+                : versionSubtitles.indexOf(selectedSubtitle),
           ));
 
       final markers = settings.skipMode != SkipMode.off
@@ -757,17 +797,35 @@ class GkuiController extends ChangeNotifier {
       );
       if (inPlayerChoice != null) {
         final current = api!.loadPlaybackChoice(item);
+        final audioChanged = raw?.containsKey('audioLanguage') == true;
+        final subtitleChanged = raw?.containsKey('subtitleLanguage') == true;
         await api!.savePlaybackChoice(
             item,
             PlaybackChoice(
               mediaIndex: selectedIndex,
-              audioTrackId: inPlayerChoice.audioTrackId ?? current.audioTrackId,
-              subtitleTrackId:
-                  inPlayerChoice.subtitleTrackId ?? current.subtitleTrackId,
-              audioLanguage:
-                  inPlayerChoice.audioLanguage ?? current.audioLanguage,
-              subtitleLanguage:
-                  inPlayerChoice.subtitleLanguage ?? current.subtitleLanguage,
+              audioTrackId: audioChanged
+                  ? inPlayerChoice.audioTrackId
+                  : current.audioTrackId,
+              subtitleTrackId: subtitleChanged
+                  ? inPlayerChoice.subtitleTrackId
+                  : current.subtitleTrackId,
+              audioLanguage: audioChanged
+                  ? inPlayerChoice.audioLanguage
+                  : current.audioLanguage,
+              subtitleLanguage: subtitleChanged
+                  ? inPlayerChoice.subtitleLanguage
+                  : current.subtitleLanguage,
+              audioTitle:
+                  audioChanged ? inPlayerChoice.audioTitle : current.audioTitle,
+              subtitleTitle: subtitleChanged
+                  ? inPlayerChoice.subtitleTitle
+                  : current.subtitleTitle,
+              audioOrdinal: audioChanged
+                  ? inPlayerChoice.audioOrdinal
+                  : current.audioOrdinal,
+              subtitleOrdinal: subtitleChanged
+                  ? inPlayerChoice.subtitleOrdinal
+                  : current.subtitleOrdinal,
             ));
         if (inPlayerChoice.audioTrackId != null) {
           retryAudioTrackId = inPlayerChoice.audioTrackId;

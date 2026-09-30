@@ -2,7 +2,7 @@
 
 This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit. Phone remote and mirroring are intentionally excluded.
 
-## 1.2.6 car controls and track memory (unreleased)
+## 1.2.6 car controls and track memory
 
 - Fixes the large GKUI player controls falling back to the stock controller on API 19: the seek bar set `ProgressBar.setMinHeight`, which only exists from API 29. This call, not `setAllCaps` or start/end margins, is the likely cause of the 1.2.4 `NoSuchMethodError`.
 - Release builds now fail on any framework call newer than API 19 (Android Lint `NewApi` is fatal), and a GKUI CI workflow builds the API 19 APK, runs lint, and runs the Flutter and Android tests on every push and pull request.
@@ -11,7 +11,9 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 - The CC and Audio buttons show what ExoPlayer actually selected, so CC no longer reads Off while subtitles are showing.
 - Network reconnects reset after 30 seconds of steady playback, so each mobile-data dropout gets two fresh retries instead of two per video.
 - Same-language audio or subtitle tracks are matched by container order when labels are missing.
+- Track titles and container positions are retained across episodes, keeping commentary and Simplified/Traditional Chinese choices distinct when they share a language code.
 - The Audio and CC pickers no longer crash the player if the track list changes while they are open.
+- Reconnect retries reset only after 30 seconds of actual continuous playback, not while paused.
 
 ## 1.2.5 API 19 player hotfix
 
@@ -62,14 +64,10 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 
 ## Verified off-car
 
-- Flutter static analysis: clean.
-- Flutter tests: 19 passed, including 800×480 and 1280×720 coverage.
-- Android unit tests: passed.
-- Native Kotlin/ExoPlayer compilation: passed.
-- APK manifest: version 1.2.5 (11), minimum API 19, target API 34.
-- APK native ABI: armeabi-v7a only.
-- APK signatures: v1 and v2 verified.
-- APK SHA-256: `f76d12bc0bff39eb81e46ed7a5386bcb5b15c9928d3cf8f256483af6a7c330a6`.
+- Flutter static analysis and the GKUI Flutter test suite pass.
+- Android unit tests, Kotlin/ExoPlayer compilation, and fatal API-19 `NewApi` lint pass.
+- The release APK is version 1.2.6 (12), minimum API 19, target API 34, and ARMv7 only.
+- APK v1/v2 signatures, certificate continuity, manifest, ABI, and SHA-256 are verified before publishing; the checksum is recorded on the GitHub release.
 
 ## One-pass M5 check
 

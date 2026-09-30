@@ -352,9 +352,7 @@ class PlayerActivity : Activity() {
                     Player.STATE_ENDED -> "ended"
                     else -> "unknown"
                 })
-                if (state == Player.STATE_READY && automaticRetries > 0 && recoveredAtMs == 0L) {
-                    recoveredAtMs = SystemClock.elapsedRealtime()
-                } else if (state != Player.STATE_READY) {
+                if (state != Player.STATE_READY) {
                     recoveredAtMs = 0L
                 }
                 updateCarControls(exo)
@@ -965,8 +963,15 @@ class PlayerActivity : Activity() {
     private fun resetReconnectBudgetIfStable(exo: ExoPlayer, now: Long) {
         // Reconnect retries are for each dropout, not for the whole video: after
         // 30 seconds of steady playback a later mobile-data drop gets 2 fresh tries.
-        if (automaticRetries == 0 || recoveredAtMs == 0L) return
-        if (exo.playbackState != Player.STATE_READY) return
+        if (automaticRetries == 0) return
+        if (!exo.isPlaying) {
+            recoveredAtMs = 0L
+            return
+        }
+        if (recoveredAtMs == 0L) {
+            recoveredAtMs = now
+            return
+        }
         if (now - recoveredAtMs < 30_000L) return
         diagnostics.add("Player: connection stable again; reconnect retries reset")
         automaticRetries = 0
@@ -1183,10 +1188,14 @@ class PlayerActivity : Activity() {
             if (audioChoice != null) {
                 putExtra(RESULT_AUDIO_TRACK_ID, audioChoiceId)
                 putExtra(RESULT_AUDIO_LANGUAGE, audioChoice.candidate.language)
+                putExtra(RESULT_AUDIO_TITLE, audioChoice.candidate.label)
+                audioChoice.candidate.ordinal?.let { putExtra(RESULT_AUDIO_ORDINAL, it) }
             }
             if (userChangedSubtitle) {
                 putExtra(RESULT_SUBTITLE_TRACK_ID, subtitleChoiceId)
                 putExtra(RESULT_SUBTITLE_LANGUAGE, subtitleChoice?.candidate?.language ?: "off")
+                putExtra(RESULT_SUBTITLE_TITLE, subtitleChoice?.candidate?.label)
+                subtitleChoice?.candidate?.ordinal?.let { putExtra(RESULT_SUBTITLE_ORDINAL, it) }
             }
         })
         finish()
@@ -1274,7 +1283,11 @@ class PlayerActivity : Activity() {
         const val RESULT_DIAGNOSTICS = "diagnostics"
         const val RESULT_AUDIO_TRACK_ID = "audioTrackId"
         const val RESULT_AUDIO_LANGUAGE = "audioLanguage"
+        const val RESULT_AUDIO_TITLE = "audioTitle"
+        const val RESULT_AUDIO_ORDINAL = "audioOrdinal"
         const val RESULT_SUBTITLE_TRACK_ID = "subtitleTrackId"
         const val RESULT_SUBTITLE_LANGUAGE = "subtitleLanguage"
+        const val RESULT_SUBTITLE_TITLE = "subtitleTitle"
+        const val RESULT_SUBTITLE_ORDINAL = "subtitleOrdinal"
     }
 }

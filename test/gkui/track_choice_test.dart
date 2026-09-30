@@ -49,4 +49,53 @@ void main() {
     expect(trackForLanguage(subtitles, 'off'), isNull);
     expect(trackForLanguage(subtitles, null), isNull);
   });
+
+  test('remembered title distinguishes tracks sharing a language', () {
+    const variants = <PlexTrack>[
+      PlexTrack(
+          id: '1', type: 'subtitle', languageCode: 'zho', title: 'Traditional'),
+      PlexTrack(
+          id: '2', type: 'subtitle', languageCode: 'zho', title: 'Simplified'),
+    ];
+    expect(
+        trackForPreference(variants,
+                language: 'zh', title: 'Simplified', ordinal: 0)
+            ?.id,
+        '2');
+  });
+
+  test('container position distinguishes unlabeled same-language audio', () {
+    const variants = <PlexTrack>[
+      PlexTrack(id: '1', type: 'audio', languageCode: 'eng'),
+      PlexTrack(id: '2', type: 'audio', languageCode: 'eng'),
+    ];
+    expect(trackForPreference(variants, language: 'en', ordinal: 1)?.id, '2');
+  });
+
+  test('native title and ordinal are retained for the next episode', () {
+    final choice = playerTrackChoice(
+      <String, dynamic>{
+        'subtitleTrackId': null,
+        'subtitleLanguage': 'zh',
+        'subtitleTitle': 'Simplified',
+        'subtitleOrdinal': 1,
+      },
+      audioTracks: audio,
+      subtitleTracks: const <PlexTrack>[
+        PlexTrack(
+            id: '1',
+            type: 'subtitle',
+            languageCode: 'zho',
+            title: 'Traditional'),
+        PlexTrack(
+            id: '2',
+            type: 'subtitle',
+            languageCode: 'zho',
+            title: 'Simplified'),
+      ],
+    );
+    expect(choice?.subtitleTrackId, '2');
+    expect(choice?.subtitleTitle, 'Simplified');
+    expect(choice?.subtitleOrdinal, 1);
+  });
 }

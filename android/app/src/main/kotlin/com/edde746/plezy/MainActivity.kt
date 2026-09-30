@@ -100,10 +100,14 @@ class MainActivity : FlutterActivity() {
         if (data != null && data.hasExtra(PlayerActivity.RESULT_AUDIO_LANGUAGE)) {
             payload["audioTrackId"] = data.getStringExtra(PlayerActivity.RESULT_AUDIO_TRACK_ID)
             payload["audioLanguage"] = data.getStringExtra(PlayerActivity.RESULT_AUDIO_LANGUAGE)
+            payload["audioTitle"] = data.getStringExtra(PlayerActivity.RESULT_AUDIO_TITLE)
+            payload["audioOrdinal"] = data.getIntExtra(PlayerActivity.RESULT_AUDIO_ORDINAL, -1).takeIf { it >= 0 }
         }
         if (data != null && data.hasExtra(PlayerActivity.RESULT_SUBTITLE_LANGUAGE)) {
             payload["subtitleTrackId"] = data.getStringExtra(PlayerActivity.RESULT_SUBTITLE_TRACK_ID)
             payload["subtitleLanguage"] = data.getStringExtra(PlayerActivity.RESULT_SUBTITLE_LANGUAGE)
+            payload["subtitleTitle"] = data.getStringExtra(PlayerActivity.RESULT_SUBTITLE_TITLE)
+            payload["subtitleOrdinal"] = data.getIntExtra(PlayerActivity.RESULT_SUBTITLE_ORDINAL, -1).takeIf { it >= 0 }
         }
         pendingPlaybackResult?.success(payload)
         pendingPlaybackResult = null
