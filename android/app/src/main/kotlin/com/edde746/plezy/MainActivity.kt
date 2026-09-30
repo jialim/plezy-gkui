@@ -330,6 +330,29 @@ class MainActivity : FlutterActivity() {
     )
   }
 
+  private fun getDeviceDiagnostics(): Map<String, Any?> {
+    val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+    val memoryInfo = ActivityManager.MemoryInfo().also(activityManager::getMemoryInfo)
+    val metrics = resources.displayMetrics
+    val processAbi = Build.SUPPORTED_ABIS.firstOrNull { abi ->
+      Process.is64Bit() == abi.contains("64")
+    } ?: Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"
+    return mapOf(
+      "supportedAbis" to Build.SUPPORTED_ABIS.toList(),
+      "processAbi" to processAbi,
+      "totalMemBytes" to memoryInfo.totalMem,
+      "availableMemBytes" to memoryInfo.availMem,
+      "lowMemoryThresholdBytes" to memoryInfo.threshold,
+      "lowMemory" to memoryInfo.lowMemory,
+      "memoryClassMb" to activityManager.memoryClass,
+      "largeMemoryClassMb" to activityManager.largeMemoryClass,
+      "screenWidthPx" to metrics.widthPixels,
+      "screenHeightPx" to metrics.heightPixels,
+      "refreshRateHz" to (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.refreshRate,
+      "decoders" to MediaCodecQuery.videoDecoderDiagnostics()
+    )
+  }
+
   private fun initializeStartupPhaseStore() {
     var shouldMarkNativeOnCreate = false
     synchronized(startupPhaseLock) {
@@ -854,6 +877,7 @@ class MainActivity : FlutterActivity() {
         "getDeviceName" -> result.success(getDeviceName())
         "getPerformanceSignals" -> result.success(getPerformanceSignals())
         "getVideoDecodeCapabilities" -> result.success(MediaCodecQuery.hardwareVideoDecodeSupport())
+        "getDeviceDiagnostics" -> result.success(getDeviceDiagnostics())
         "getBackgroundWorkSignals" -> result.success(
           BackgroundWorkClassifier.toMap(BackgroundWorkDiagnostics.read(this))
         )

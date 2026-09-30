@@ -7,6 +7,12 @@ import java.util.Locale
 
 /** Canonical decoder lookup and hardware classification for native playback. */
 internal object MediaCodecQuery {
+  private val DIAGNOSTIC_VIDEO_MIME_TYPES = setOf(
+    "video/avc",
+    "video/hevc",
+    "video/x-vnd.on2.vp9",
+    "video/av01"
+  )
   /**
    * Codecs whose advertised support is decided by hardware: both have a
    * software decoder behind them, but a software HEVC or AV1 decode on
@@ -21,6 +27,62 @@ internal object MediaCodecQuery {
   fun hardwareVideoDecodeSupport(
     hardwareMimeTypes: Set<String> = hardwareDecoderMimeTypes()
   ): Map<String, Boolean> = HARDWARE_GATED_VIDEO_MIME_TYPES.mapValues { (_, mimeType) -> mimeType in hardwareMimeTypes }
+
+  /** Bounded, token-free decoder inventory shown on the advanced logs page. */
+  fun videoDecoderDiagnostics(): List<Map<String, Any?>> {
+    val rows = ArrayList<Map<String, Any?>>()
+    for (info in MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos) {
+      if (info.isEncoder) continue
+      for (type in info.supportedTypes) {
+        val mime = type.lowercase(Locale.ROOT)
+        if (mime !in DIAGNOSTIC_VIDEO_MIME_TYPES) continue
+        val capabilities = try {
+          info.getCapabilitiesForType(type)
+        } catch (_: IllegalArgumentException) {
+          null
+        }
+        val video = capabilities?.videoCapabilities
+        rows.add(
+          mapOf(
+            "name" to info.name,
+            "mime" to mime,
+            "hardware" to isHardwareAccelerated(info),
+            "secure" to (capabilities?.isFeatureSupported(MediaCodecInfo.CodecCapabilities.FEATURE_SecurePlayback) == true),
+            "maxWidth" to video?.supportedWidths?.upper,
+            "maxHeight" to video?.supportedHeights?.upper,
+            "profiles" to (capabilities?.profileLevels?.map { profileName(mime, it.profile) }?.distinct() ?: emptyList<String>())
+          )
+        )
+      }
+    }
+    return rows
+  }
+
+  private fun profileName(mime: String, profile: Int): String = when (mime) {
+    "video/avc" -> when (profile) {
+      MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline -> "Baseline"
+      MediaCodecInfo.CodecProfileLevel.AVCProfileMain -> "Main"
+      MediaCodecInfo.CodecProfileLevel.AVCProfileHigh -> "High"
+      MediaCodecInfo.CodecProfileLevel.AVCProfileHigh10 -> "High10"
+      else -> profile.toString()
+    }
+    "video/hevc" -> when (profile) {
+      MediaCodecInfo.CodecProfileLevel.HEVCProfileMain -> "Main"
+      MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10 -> "Main10"
+      else -> profile.toString()
+    }
+    "video/x-vnd.on2.vp9" -> when (profile) {
+      MediaCodecInfo.CodecProfileLevel.VP9Profile0 -> "Profile0"
+      MediaCodecInfo.CodecProfileLevel.VP9Profile2 -> "Profile2"
+      else -> profile.toString()
+    }
+    "video/av01" -> when (profile) {
+      MediaCodecInfo.CodecProfileLevel.AV1ProfileMain8 -> "Main8"
+      MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10 -> "Main10"
+      else -> profile.toString()
+    }
+    else -> profile.toString()
+  }
 
   /**
    * Every MIME type served by a hardware decoder, lowercased. One walk answers
