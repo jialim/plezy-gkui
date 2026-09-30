@@ -98,4 +98,15 @@ void main() {
     expect(choice?.subtitleTitle, 'Simplified');
     expect(choice?.subtitleOrdinal, 1);
   });
+
+  test('nothing remembered leaves the choice to Plex', () {
+    const subtitles = <PlexTrack>[
+      PlexTrack(id: '1', type: 'subtitle', languageCode: 'eng'),
+      PlexTrack(id: '2', type: 'subtitle', languageCode: 'zho'),
+    ];
+    // Null means "use Plex's selected track", which for subtitles may be none.
+    expect(trackForPreference(subtitles), isNull);
+    expect(trackForPreference(subtitles, id: 'gone'), isNull);
+    expect(trackForPreference(subtitles, id: 'gone', language: 'zh')?.id, '2');
+  });
 }

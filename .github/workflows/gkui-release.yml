@@ -1,0 +1,134 @@
+name: GKUI release
+
+# Publishes gkui-v<version> for every version merged to the GKUI branch. A
+# version that already has a release is skipped, so only version bumps ship.
+on:
+  push:
+    branches: [gkui/api19-implementation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # SHA-256 of the certificate 1.2.5 and 1.2.6 were signed with. A release is
+  # refused if the APK is signed with anything else.
+  GKUI_CERT_SHA256: b55f4d2caa2ac2953a75a58ab9ab6ae731434734bf1a775a6e7c73558c58fab4
+
+concurrency:
+  group: gkui-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Read version
+        id: version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          full=$(sed -n 's/^version: *//p' pubspec.yaml)
+          version="${full%%+*}"
+          tag="gkui-v${version}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=${full#*+}" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "$tag is already published; nothing to release."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The car only accepts updates signed with the key 1.2.5 used; a new key
+      # forces an uninstall, which signs the head unit out of Plex.
+      - name: Restore signing key
+        if: steps.version.outputs.publish == 'true'
+        shell: bash
+        env:
+          GKUI_KEYSTORE_BASE64: ${{ secrets.GKUI_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$GKUI_KEYSTORE_BASE64" ]; then
+            echo "::error::GKUI_KEYSTORE_BASE64 is not set. Add the GKUI signing-key secrets before a release can be published."
+            exit 1
+          fi
+          printf '%s' "$GKUI_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/gkui.jks"
+
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
+        if: steps.version.outputs.publish == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        if: steps.version.outputs.publish == 'true'
+        with:
+          flutter-version: '3.19.6'
+          channel: stable
+          cache: true
+
+      - name: Test
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          flutter pub get
+          flutter analyze lib/main_gkui.dart lib/gkui test/gkui
+          flutter test test/gkui
+
+      - name: Build signed APK
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GKUI_KEYSTORE_PATH: ${{ runner.temp }}/gkui.jks
+          GKUI_KEYSTORE_PASSWORD: ${{ secrets.GKUI_KEYSTORE_PASSWORD }}
+          GKUI_KEY_ALIAS: ${{ secrets.GKUI_KEY_ALIAS }}
+          GKUI_KEY_PASSWORD: ${{ secrets.GKUI_KEY_PASSWORD }}
+        run: flutter build apk --release --target-platform android-arm --target lib/main_gkui.dart
+
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gkui.jks"
+
+      - name: Verify and publish
+        if: steps.version.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ steps.version.outputs.build }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          apk="plezy-gkui-${VERSION}-armeabi-v7a.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "$apk"
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --min-sdk-version 19 --print-certs "$apk" | tee signing.txt
+          if ! grep -qi "certificate SHA-256 digest: ${GKUI_CERT_SHA256}" signing.txt; then
+            echo "::error::The APK is not signed with the car's existing certificate; refusing to publish."
+            exit 1
+          fi
+          sha=$(sha256sum "$apk" | cut -d' ' -f1)
+
+          # The notes file lists the newest version first; drop the
+          # "(unreleased)" marker for the published copy.
+          sed 's/ (unreleased)//' GKUI_1_2_RELEASE_NOTES.md > notes.md
+          cat >> notes.md <<NOTES
+
+          ## Build
+
+          - APK: version ${VERSION} (${BUILD}), minimum API 19, armeabi-v7a only.
+          - Signed with the same certificate as 1.2.5 (SHA-256 \`${GKUI_CERT_SHA256}\`), so it installs as an update.
+          - APK SHA-256: \`${sha}\`
+          - GitHub Actions run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          - Source commit: ${GITHUB_SHA}
+          NOTES
+
+          gh release create "$TAG" "$apk" \
+            --target "$GITHUB_SHA" \
+            --title "Plezy GKUI ${VERSION}" \
+            --notes-file notes.md
