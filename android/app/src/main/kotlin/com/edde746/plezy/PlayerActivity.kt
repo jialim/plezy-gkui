@@ -26,9 +26,13 @@ import com.google.android.exoplayer2.ui.StyledPlayerView
 import com.google.android.exoplayer2.upstream.DefaultAllocator
 import com.google.android.exoplayer2.DefaultLoadControl
 import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSource
+import com.google.android.exoplayer2.upstream.DataSource
+import com.google.android.exoplayer2.upstream.DataSpec
 import com.google.android.exoplayer2.upstream.HttpDataSource
+import com.google.android.exoplayer2.upstream.TransferListener
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.concurrent.atomic.AtomicLong
 
 class PlayerActivity : Activity() {
     private data class Marker(val type: String, val startMs: Long, val endMs: Long)
@@ -38,8 +42,8 @@ class PlayerActivity : Activity() {
     private var playbackError: String? = null
     private val diagnostics = PlaybackDiagnostics()
     private var failureKind: String? = null
-    private var completed = false
-    private var renderedFirstFrame = false
+    @Volatile private var completed = false
+    @Volatile private var renderedFirstFrame = false
     private var firstFrameMs = -1L
     private var decoderName: String? = null
     private var videoFormat: String? = null
@@ -56,21 +60,34 @@ class PlayerActivity : Activity() {
     private var seekForwardMs = 30_000L
     private var pendingSeekPositionMs: Long? = null
     private var startupHardTimeoutMs = 120_000L
-    private var lastStartupProgressAtMs = 0L
+    @Volatile private var startupAttemptStartedAtMs = 0L
+    @Volatile private var lastStartupProgressAtMs = 0L
     private var lastBufferedPositionMs = -1L
     private var readyWithoutFrameAtMs = 0L
+    private val startupNetworkBytes = AtomicLong(0L)
     private val seekRunnable = Runnable {
         val target = pendingSeekPositionMs
         pendingSeekPositionMs = null
         if (target != null && !completed) player?.seekTo(target)
     }
-    private val startupHardTimeout = Runnable {
-        if (!renderedFirstFrame && !completed) {
-            failureKind = "startup_timeout"
-            val seconds = startupHardTimeoutMs / 1_000L
-            diagnostics.add("Player: startup reached the $seconds-second safety limit")
-            finishWithResult("STARTUP_TIMEOUT: no video frame within $seconds seconds")
+    private val startupTransferListener = object : TransferListener {
+        override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+
+        override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
+
+        override fun onBytesTransferred(
+            source: DataSource,
+            dataSpec: DataSpec,
+            isNetwork: Boolean,
+            bytesTransferred: Int,
+        ) {
+            if (isNetwork && bytesTransferred > 0 && !renderedFirstFrame && !completed) {
+                startupNetworkBytes.addAndGet(bytesTransferred.toLong())
+                lastStartupProgressAtMs = SystemClock.elapsedRealtime()
+            }
         }
+
+        override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
     }
     private val timelineHandler = Handler(Looper.getMainLooper())
     private var requestHeaders: Map<String, String> = emptyMap()
@@ -144,6 +161,7 @@ class PlayerActivity : Activity() {
         playbackHttpClient = okHttpClient
         val httpFactory = OkHttpDataSource.Factory(okHttpClient)
             .setDefaultRequestProperties(headers)
+            .setTransferListener(startupTransferListener)
 
         // Small buffers are intentional: this head unit reports a 64 MiB app heap.
         val loadControl = DefaultLoadControl.Builder()
@@ -250,9 +268,9 @@ class PlayerActivity : Activity() {
             override fun onRenderedFirstFrame() {
                 renderedFirstFrame = true
                 firstFrameMs = SystemClock.elapsedRealtime() - playerStartedAtMs
-                timelineHandler.removeCallbacks(startupHardTimeout)
                 videoFormat = describeVideoFormat(exo.videoFormat)
                 diagnostics.add("Player: first video frame in ${firstFrameMs}ms")
+                diagnostics.add("Startup network: ${formatNetworkBytes(startupNetworkBytes.get())}")
                 if (videoFormat != null) diagnostics.add("Video format: $videoFormat")
             }
 
@@ -274,7 +292,9 @@ class PlayerActivity : Activity() {
                     window.decorView.postDelayed({
                         if (!completed) {
                             playbackError = null
-                            lastStartupProgressAtMs = SystemClock.elapsedRealtime()
+                            val retryStartedAt = SystemClock.elapsedRealtime()
+                            startupAttemptStartedAtMs = retryStartedAt
+                            lastStartupProgressAtMs = retryStartedAt
                             lastBufferedPositionMs = exo.bufferedPosition
                             readyWithoutFrameAtMs = 0L
                             exo.prepare()
@@ -290,13 +310,13 @@ class PlayerActivity : Activity() {
         val startMs = intent.getLongExtra(EXTRA_START_MS, 0L)
         if (startMs > 0L) exo.seekTo(startMs)
         playerStartedAtMs = SystemClock.elapsedRealtime()
+        startupAttemptStartedAtMs = playerStartedAtMs
         lastStartupProgressAtMs = playerStartedAtMs
         lastBufferedPositionMs = exo.bufferedPosition
-        diagnostics.add("Startup watchdog: 30s without buffer progress / ${startupHardTimeoutMs / 1_000L}s maximum")
+        diagnostics.add("Startup watchdog: 30s without buffer or network progress / ${startupHardTimeoutMs / 1_000L}s maximum")
         exo.prepare()
         exo.playWhenReady = true
         timelineHandler.post(timelineRunnable)
-        timelineHandler.postDelayed(startupHardTimeout, startupHardTimeoutMs)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -323,7 +343,6 @@ class PlayerActivity : Activity() {
     override fun onPause() {
         val exo = player
         activityPaused = true
-        timelineHandler.removeCallbacks(startupHardTimeout)
         wasPlayingBeforePause = exo?.isPlaying == true
         if (!completed && wasPlayingBeforePause) exo?.pause()
         super.onPause()
@@ -333,10 +352,10 @@ class PlayerActivity : Activity() {
         super.onResume()
         activityPaused = false
         if (!completed && !renderedFirstFrame) {
-            lastStartupProgressAtMs = SystemClock.elapsedRealtime()
+            val now = SystemClock.elapsedRealtime()
+            startupAttemptStartedAtMs = now
+            lastStartupProgressAtMs = now
             readyWithoutFrameAtMs = 0L
-            timelineHandler.removeCallbacks(startupHardTimeout)
-            timelineHandler.postDelayed(startupHardTimeout, startupHardTimeoutMs)
         }
         if (!completed && wasPlayingBeforePause) player?.play()
         wasPlayingBeforePause = false
@@ -387,21 +406,42 @@ class PlayerActivity : Activity() {
             lastStartupProgressAtMs = now
         }
 
-        if (exo.playbackState == Player.STATE_READY) {
+        val playerReady = exo.playbackState == Player.STATE_READY
+        val hasVideoFormat = exo.videoFormat != null
+        if (playerReady && hasVideoFormat) {
             if (readyWithoutFrameAtMs == 0L) readyWithoutFrameAtMs = now
-            if (now - readyWithoutFrameAtMs >= READY_WITHOUT_FRAME_TIMEOUT_MS) {
+        } else {
+            readyWithoutFrameAtMs = 0L
+        }
+
+        when (PlaybackStartupWatchdog.evaluate(
+            nowMs = now,
+            attemptStartedAtMs = startupAttemptStartedAtMs,
+            lastProgressAtMs = lastStartupProgressAtMs,
+            readyWithoutFrameAtMs = readyWithoutFrameAtMs,
+            hardTimeoutMs = startupHardTimeoutMs,
+            playerReady = playerReady,
+            hasVideoFormat = hasVideoFormat,
+        )) {
+            PlaybackStartupWatchdog.Reason.READY_WITHOUT_FRAME -> {
                 failureKind = "startup_timeout"
                 diagnostics.add("Player: ready for 10 seconds but rendered no video frame")
                 finishWithResult("RENDER_TIMEOUT: player ready but no video frame within 10 seconds")
             }
-            return
-        }
-
-        readyWithoutFrameAtMs = 0L
-        if (now - lastStartupProgressAtMs >= STARTUP_STALL_TIMEOUT_MS) {
-            failureKind = "startup_timeout"
-            diagnostics.add("Player: no buffer progress for 30 seconds")
-            finishWithResult("STARTUP_STALLED: no loading progress for 30 seconds")
+            PlaybackStartupWatchdog.Reason.STALLED -> {
+                failureKind = "startup_timeout"
+                diagnostics.add("Player: no buffer or network progress for 30 seconds")
+                diagnostics.add("Startup network: ${formatNetworkBytes(startupNetworkBytes.get())}")
+                finishWithResult("STARTUP_STALLED: no loading progress for 30 seconds")
+            }
+            PlaybackStartupWatchdog.Reason.HARD_LIMIT -> {
+                failureKind = "startup_timeout"
+                val seconds = startupHardTimeoutMs / 1_000L
+                diagnostics.add("Player: startup reached the $seconds-second safety limit")
+                diagnostics.add("Startup network: ${formatNetworkBytes(startupNetworkBytes.get())}")
+                finishWithResult("STARTUP_TIMEOUT: no video frame within $seconds seconds")
+            }
+            null -> Unit
         }
     }
 
@@ -431,6 +471,12 @@ class PlayerActivity : Activity() {
         return "$size / $codec"
     }
 
+    private fun formatNetworkBytes(bytes: Long): String = when {
+        bytes >= 1024L * 1024L -> "${bytes / (1024L * 1024L)} MiB"
+        bytes >= 1024L -> "${bytes / 1024L} KiB"
+        else -> "$bytes B"
+    }
+
     private fun finishWithResult(error: String?) {
         if (completed) return
         completed = true
@@ -438,7 +484,6 @@ class PlayerActivity : Activity() {
         val position = exo?.currentPosition ?: intent.getLongExtra(EXTRA_START_MS, 0L)
         val duration = exo?.duration?.takeIf { it > 0L } ?: 0L
         timelineHandler.removeCallbacks(timelineRunnable)
-        timelineHandler.removeCallbacks(startupHardTimeout)
         timelineHandler.removeCallbacks(seekRunnable)
         if (renderedFirstFrame) reportTimeline(position, if (ended) "stopped" else "paused")
         playerView?.player = null
@@ -455,6 +500,7 @@ class PlayerActivity : Activity() {
             putExtra(RESULT_FIRST_FRAME_MS, firstFrameMs)
             putExtra(RESULT_DECODER, decoderName)
             putExtra(RESULT_VIDEO_FORMAT, videoFormat)
+            putExtra(RESULT_NETWORK_BYTES, startupNetworkBytes.get())
             putStringArrayListExtra(RESULT_DIAGNOSTICS, diagnostics.snapshot())
         })
         finish()
@@ -462,7 +508,6 @@ class PlayerActivity : Activity() {
 
     override fun onDestroy() {
         timelineHandler.removeCallbacks(timelineRunnable)
-        timelineHandler.removeCallbacks(startupHardTimeout)
         timelineHandler.removeCallbacks(seekRunnable)
         playerView?.player = null
         player?.release()
@@ -531,8 +576,7 @@ class PlayerActivity : Activity() {
         const val RESULT_FIRST_FRAME_MS = "firstFrameMs"
         const val RESULT_DECODER = "decoder"
         const val RESULT_VIDEO_FORMAT = "videoFormat"
+        const val RESULT_NETWORK_BYTES = "networkBytes"
         const val RESULT_DIAGNOSTICS = "diagnostics"
-        private const val STARTUP_STALL_TIMEOUT_MS = 30_000L
-        private const val READY_WITHOUT_FRAME_TIMEOUT_MS = 10_000L
     }
 }

@@ -29,4 +29,10 @@ void main() {
     expect(playbackStartupHardTimeoutMs(PlaybackMode.transcode720), 120000);
     expect(playbackStartupHardTimeoutMs(PlaybackMode.transcode480), 120000);
   });
+
+  test('startup network diagnostics use compact units', () {
+    expect(formatDiagnosticBytes(512), '512 B');
+    expect(formatDiagnosticBytes(1536), '1.5 KiB');
+    expect(formatDiagnosticBytes(3 * 1024 * 1024), '3.0 MiB');
+  });
 }

@@ -18,13 +18,13 @@ not the App Store, Google Play, desktop, or current upstream Plezy build.
 
 ## Download
 
-The current tested build is **Plezy GKUI 1.2.2**:
+The current tested build is **Plezy GKUI 1.2.3**:
 
-- [Download the API 19 ARMv7 APK](https://github.com/jialim/plezy-gkui/releases/download/gkui-v1.2.2/Plezy-GKUI-1.2.2-api19-armeabi-v7a.apk)
-- [Release notes and checksum](https://github.com/jialim/plezy-gkui/releases/tag/gkui-v1.2.2)
+- [Download the API 19 ARMv7 APK](https://github.com/jialim/plezy-gkui/releases/download/gkui-v1.2.3/Plezy-GKUI-1.2.3-api19-armeabi-v7a.apk)
+- [Release notes and checksum](https://github.com/jialim/plezy-gkui/releases/tag/gkui-v1.2.3)
 - [All releases](https://github.com/jialim/plezy-gkui/releases)
 
-SHA-256: `0defa6cb5fa7c803bb6459433fdeb0858ac670967c3dbf513bff0839a759482f`
+SHA-256: `0d946809110a9de2d737686ac761dddc58b9a8938d09466c6cc28d94cca4ad3c`
 
 The APK uses package ID `com.jialim.plezygkui`, requires Android API 19 or
 newer, and contains only the `armeabi-v7a` native ABI. Releases are signed with
@@ -65,8 +65,9 @@ GKUI builds.
 
 - Direct Play automatically falls back to 720p and then 480p when the head
   unit cannot produce a video frame
-- Playback keeps waiting while its buffer advances
-- A fallback occurs after 30 seconds with no buffer progress
+- Playback keeps waiting while either its decoded buffer or actual network
+  transfer advances
+- A fallback occurs after 30 seconds with neither buffer nor network progress
 - Safety ceilings are 90 seconds for Direct Play and 120 seconds for Plex
   transcodes
 - Wi-Fi/mobile reconnection retries, sleep/wake recovery, and audio focus
@@ -80,7 +81,8 @@ The Status screen provides copyable, redacted diagnostics including:
 - Sanitized Plex endpoint and active Home profile
 - Selected media version and playback mode
 - Content startup and first-frame timings
-- Video format, decoder name, player state, and bounded logs
+- Video format, decoder name, player state, startup network bytes, last failure,
+  and bounded logs
 
 Authentication tokens and URL credentials are redacted.
 
@@ -141,7 +143,7 @@ cd android
 ./gradlew :app:testDebugUnitTest :app:compileDebugKotlin -x compileFlutterBuildDebug
 ```
 
-The 1.2.2 release passed Flutter analysis, 17 Flutter tests, Android unit tests,
+The 1.2.3 release passed Flutter analysis, 18 Flutter tests, Android unit tests,
 native Kotlin compilation, APK signature verification, and manifest/ABI
 inspection. Physical in-car playback remains the final hardware gate.
 

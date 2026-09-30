@@ -9,7 +9,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'gkui/diagnostics.dart';
 import 'gkui/plex_api.dart';
 
-const String buildLabel = 'Plezy GKUI 1.2.2 / adaptive mobile-data startup';
+const String buildLabel = 'Plezy GKUI 1.2.3 / Zurg stream recovery';
 const String sourceLabel = 'Plezy 1.8.1 / GKUI compatibility fork';
 const String toolchainLabel = 'Flutter 3.19.6 / ExoPlayer 2.19.1 / API 19';
 const MethodChannel nativeChannel =
@@ -77,6 +77,14 @@ PlaybackMode? playbackFallback(PlaybackMode mode, String? failureKind) {
 int playbackStartupHardTimeoutMs(PlaybackMode mode) =>
     mode == PlaybackMode.direct ? 90000 : 120000;
 
+String formatDiagnosticBytes(int bytes) {
+  if (bytes >= 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MiB';
+  }
+  if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KiB';
+  return '$bytes B';
+}
+
 enum LibraryView { all, unwatched, collections }
 
 class GkuiController extends ChangeNotifier {
@@ -103,6 +111,8 @@ class GkuiController extends ChangeNotifier {
   int? lastContentLoadMs;
   String? lastDecoder;
   String? lastVideoFormat;
+  int? lastStartupNetworkBytes;
+  String? lastPlaybackFailure;
   bool loadingContent = false;
   bool searching = false;
   bool loadingMoreLibrary = false;
@@ -657,6 +667,8 @@ class GkuiController extends ChangeNotifier {
       lastFirstFrameMs = (raw?['firstFrameMs'] as num?)?.toInt();
       lastDecoder = raw?['decoder']?.toString();
       lastVideoFormat = raw?['videoFormat']?.toString();
+      lastStartupNetworkBytes = (raw?['networkBytes'] as num?)?.toInt();
+      lastPlaybackFailure = failureKind;
       _updateLocalProgress(item.ratingKey, position);
       notifySafely();
       if (raw?['renderedFrame'] == true) {
@@ -2218,6 +2230,14 @@ class _DiagnosticsPaneState extends State<DiagnosticsPane> {
                           widget.controller.lastDecoder ?? 'not reported'),
                       MapEntry<String, String>('video format',
                           widget.controller.lastVideoFormat ?? 'not reported'),
+                      MapEntry<String, String>(
+                          'startup network',
+                          widget.controller.lastStartupNetworkBytes == null
+                              ? 'not measured'
+                              : formatDiagnosticBytes(
+                                  widget.controller.lastStartupNetworkBytes!)),
+                      MapEntry<String, String>('last failure',
+                          widget.controller.lastPlaybackFailure ?? 'none'),
                     ];
                     return ListView.separated(
                       padding: const EdgeInsets.all(14),

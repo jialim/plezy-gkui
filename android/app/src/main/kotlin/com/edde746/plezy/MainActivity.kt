@@ -87,6 +87,7 @@ class MainActivity : FlutterActivity() {
             "firstFrameMs" to (data?.getLongExtra(PlayerActivity.RESULT_FIRST_FRAME_MS, -1L)?.takeIf { it >= 0L }),
             "decoder" to data?.getStringExtra(PlayerActivity.RESULT_DECODER),
             "videoFormat" to data?.getStringExtra(PlayerActivity.RESULT_VIDEO_FORMAT),
+            "networkBytes" to (data?.getLongExtra(PlayerActivity.RESULT_NETWORK_BYTES, 0L) ?: 0L),
             "diagnostics" to (data?.getStringArrayListExtra(PlayerActivity.RESULT_DIAGNOSTICS) ?: arrayListOf<String>()),
         )
         pendingPlaybackResult?.success(payload)
