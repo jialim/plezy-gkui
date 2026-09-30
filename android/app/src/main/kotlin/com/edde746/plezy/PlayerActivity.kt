@@ -251,7 +251,9 @@ class PlayerActivity : Activity() {
         }
         if (requestedAudioId.isNotBlank()) diagnostics.add("Audio selection: Plex track $requestedAudioId")
         if (requestedSubtitleId.isNotBlank()) diagnostics.add("Subtitle selection: Plex track $requestedSubtitleId")
+        diagnostics.add("Player setup: configuring track preferences")
         trackSelector.parameters = trackParameters.build()
+        diagnostics.add("Player setup: creating ExoPlayer")
         val exo = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
             .setLoadControl(loadControl)
@@ -262,6 +264,7 @@ class PlayerActivity : Activity() {
             .setHandleAudioBecomingNoisy(true)
             .build()
         player = exo
+        diagnostics.add("Player setup: creating video surface")
 
         val view = StyledPlayerView(this).apply {
             useController = false
@@ -278,11 +281,19 @@ class PlayerActivity : Activity() {
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT,
         ))
-        root.addView(createCarControls(), FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM,
-        ))
+        try {
+            root.addView(createCarControls(), FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM,
+            ))
+            diagnostics.add("Player controls: GKUI large-touch overlay")
+        } catch (error: LinkageError) {
+            clearCustomControlReferences()
+            view.useController = true
+            view.setShowSubtitleButton(true)
+            diagnostics.add("Player controls: stock compatibility fallback (${describeLinkage(error)})")
+        }
         view.setOnClickListener { toggleControls() }
         val skip = Button(this).apply {
             visibility = View.GONE
@@ -302,7 +313,7 @@ class PlayerActivity : Activity() {
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
             Gravity.END or Gravity.CENTER_VERTICAL,
-        ).apply { marginEnd = dp(28) })
+        ).apply { setMargins(0, 0, dp(28), 0) })
         setContentView(root)
         showControls()
 
@@ -343,7 +354,11 @@ class PlayerActivity : Activity() {
                     requestedAudioLanguage.isNotBlank()
                 if (!initialAudioApplied && audioRequested) {
                     initialAudioApplied = true
-                    applyRequestedAudio()
+                    try {
+                        applyRequestedAudio()
+                    } catch (error: LinkageError) {
+                        diagnostics.add("Audio selection fallback: ${describeLinkage(error)}")
+                    }
                 }
                 val subtitleRequested = requestedSubtitleId.isNotBlank() ||
                     requestedSubtitleLanguage.isNotBlank() || requestedSubtitleUrl.isNotBlank()
@@ -351,7 +366,11 @@ class PlayerActivity : Activity() {
                     requestedSubtitleId != "off" && requestedSubtitleLanguage != "off"
                 ) {
                     initialSubtitleApplied = true
-                    applyRequestedSubtitle()
+                    try {
+                        applyRequestedSubtitle()
+                    } catch (error: LinkageError) {
+                        diagnostics.add("Subtitle selection fallback: ${describeLinkage(error)}")
+                    }
                 }
                 updateAudioButton()
                 updateCaptionsButton()
@@ -423,6 +442,7 @@ class PlayerActivity : Activity() {
             }
         }
         exo.setMediaItem(mediaItemBuilder.build())
+        diagnostics.add("Player setup: media item attached")
         val startMs = intent.getLongExtra(EXTRA_START_MS, 0L)
         if (startMs > 0L) exo.seekTo(startMs)
         playerStartedAtMs = SystemClock.elapsedRealtime()
@@ -503,7 +523,10 @@ class PlayerActivity : Activity() {
                 text = label
                 textSize = 19f
                 setTextColor(Color.WHITE)
-                setAllCaps(false)
+                // Some ECARX Android 4.4 builds omit TextView.setAllCaps despite
+                // reporting API 19. Removing the transformation is equivalent
+                // and only relies on the original TextView API.
+                transformationMethod = null
                 minWidth = 0
                 minHeight = dp(64)
                 contentDescription = description
@@ -514,8 +537,9 @@ class PlayerActivity : Activity() {
                 }
             }
             row.addView(button, LinearLayout.LayoutParams(0, dp(64), 1f).apply {
-                marginStart = dp(4)
-                marginEnd = dp(4)
+                // Avoid the API 17 start/end margin methods on vendor-modified
+                // Android 4.4 frameworks; this landscape UI is not RTL.
+                setMargins(dp(4), 0, dp(4), 0)
             })
             return button
         }
@@ -560,6 +584,23 @@ class PlayerActivity : Activity() {
         if (player?.isPlaying == true) {
             timelineHandler.postDelayed(hideControlsRunnable, 6_000L)
         }
+    }
+
+    private fun clearCustomControlReferences() {
+        controlPanel = null
+        playPauseButton = null
+        audioButton = null
+        captionsButton = null
+        seekBar = null
+        positionLabel = null
+    }
+
+    private fun describeLinkage(error: LinkageError): String {
+        val member = error.message
+            ?.replace(Regex("[^A-Za-z0-9_.$()/:;<> -]"), "?")
+            ?.take(180)
+            .orEmpty()
+        return if (member.isBlank()) error.javaClass.simpleName else "${error.javaClass.simpleName}: $member"
     }
 
     private fun updateCarControls(exo: ExoPlayer) {
@@ -679,7 +720,12 @@ class PlayerActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Audio language")
             .setSingleChoiceItems(adapter, selected) { dialog, choice ->
-                applyAudio(tracks[choice])
+                try {
+                    applyAudio(tracks[choice])
+                } catch (error: LinkageError) {
+                    diagnostics.add("Audio switch unavailable: ${describeLinkage(error)}")
+                    Toast.makeText(this, "Audio switch is unavailable on this firmware", Toast.LENGTH_LONG).show()
+                }
                 dialog.dismiss()
                 showControls()
             }
@@ -811,7 +857,12 @@ class PlayerActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Subtitles")
             .setSingleChoiceItems(adapter, selected) { dialog, choice ->
-                if (choice == 0) disableSubtitles() else applySubtitle(tracks[choice - 1])
+                try {
+                    if (choice == 0) disableSubtitles() else applySubtitle(tracks[choice - 1])
+                } catch (error: LinkageError) {
+                    diagnostics.add("Subtitle switch unavailable: ${describeLinkage(error)}")
+                    Toast.makeText(this, "Subtitle switch is unavailable on this firmware", Toast.LENGTH_LONG).show()
+                }
                 dialog.dismiss()
                 showControls()
             }

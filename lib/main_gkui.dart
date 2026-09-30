@@ -9,7 +9,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'gkui/diagnostics.dart';
 import 'gkui/plex_api.dart';
 
-const String buildLabel = 'Plezy GKUI 1.2.4 / subtitles and car controls';
+const String buildLabel = 'Plezy GKUI 1.2.5 / API 19 player hotfix';
 const String sourceLabel = 'Plezy 1.8.1 / GKUI compatibility fork';
 const String toolchainLabel = 'Flutter 3.19.6 / ExoPlayer 2.19.1 / API 19';
 const MethodChannel nativeChannel =

@@ -1,6 +1,13 @@
-# Plezy GKUI 1.2.4 — Subtitles and Car Controls
+# Plezy GKUI 1.2.5 — API 19 Player Compatibility Hotfix
 
 This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit. Phone remote and mirroring are intentionally excluded.
+
+## 1.2.5 API 19 player hotfix
+
+- Fixes the `PLAYER_LINKAGE: NoSuchMethodError` reported by the ECARX XE1115H immediately after the stored audio-track choice was loaded.
+- Removes direct use of optional start/end-margin and all-caps framework methods that are not consistently present in vendor-modified Android 4.4 builds.
+- Exact audio/subtitle selection and the large GKUI controller now fail open: an optional firmware linkage problem is recorded in Status, while video playback continues with language preference or the stock controller fallback.
+- Adds setup-stage diagnostics and a sanitized missing-method signature so any remaining vendor-framework incompatibility can be identified from one Status photo.
 
 ## 1.2.4 subtitles and car controls
 
@@ -48,10 +55,10 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 - Flutter tests: 19 passed, including 800×480 and 1280×720 coverage.
 - Android unit tests: passed.
 - Native Kotlin/ExoPlayer compilation: passed.
-- APK manifest: version 1.2.4 (10), minimum API 19, target API 34.
+- APK manifest: version 1.2.5 (11), minimum API 19, target API 34.
 - APK native ABI: armeabi-v7a only.
 - APK signatures: v1 and v2 verified.
-- APK SHA-256: `122bd26dc2d1beada2b896d2c3599797eb3fd6fe2f7f67877aaea2f8981f5f48`.
+- APK SHA-256: `f76d12bc0bff39eb81e46ed7a5386bcb5b15c9928d3cf8f256483af6a7c330a6`.
 
 ## One-pass M5 check
 

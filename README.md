@@ -18,13 +18,13 @@ not the App Store, Google Play, desktop, or current upstream Plezy build.
 
 ## Download
 
-The current tested build is **Plezy GKUI 1.2.4**:
+The current tested build is **Plezy GKUI 1.2.5**:
 
-- [Download the API 19 ARMv7 APK](https://github.com/jialim/plezy-gkui/releases/download/gkui-v1.2.4/Plezy-GKUI-1.2.4-api19-armeabi-v7a.apk)
-- [Release notes and checksum](https://github.com/jialim/plezy-gkui/releases/tag/gkui-v1.2.4)
+- [Download the API 19 ARMv7 APK](https://github.com/jialim/plezy-gkui/releases/download/gkui-v1.2.5/Plezy-GKUI-1.2.5-api19-armeabi-v7a.apk)
+- [Release notes and checksum](https://github.com/jialim/plezy-gkui/releases/tag/gkui-v1.2.5)
 - [All releases](https://github.com/jialim/plezy-gkui/releases)
 
-SHA-256: `122bd26dc2d1beada2b896d2c3599797eb3fd6fe2f7f67877aaea2f8981f5f48`
+SHA-256: `f76d12bc0bff39eb81e46ed7a5386bcb5b15c9928d3cf8f256483af6a7c330a6`
 
 The APK uses package ID `com.jialim.plezygkui`, requires Android API 19 or
 newer, and contains only the `armeabi-v7a` native ABI. Releases are signed with
@@ -147,7 +147,7 @@ cd android
 ./gradlew :app:testDebugUnitTest :app:compileDebugKotlin -x compileFlutterBuildDebug
 ```
 
-The 1.2.4 release passed Flutter analysis, 19 Flutter tests, Android unit tests,
+The 1.2.5 release passed Flutter analysis, 19 Flutter tests, Android unit tests,
 native Kotlin compilation, APK signature verification, and manifest/ABI
 inspection. Physical in-car playback remains the final hardware gate.
 
