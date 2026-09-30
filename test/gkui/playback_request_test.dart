@@ -35,6 +35,13 @@ void main() {
     expect(request.headers['X-Plex-Session-Identifier'], request.sessionId);
   });
 
+  test('external subtitle paths stay on the verified Plex endpoint', () {
+    expect(api.streamUrl('/library/streams/42'),
+        'https://example.test/library/streams/42');
+    expect(api.streamUrl('https://attacker.test/subtitle.srt'), isNull);
+    expect(api.streamUrl('relative/subtitle.srt'), isNull);
+  });
+
   test('version preference chooses the H264 1080p copy and avoids 4K', () {
     const versions = <PlexMediaVersion>[
       PlexMediaVersion(

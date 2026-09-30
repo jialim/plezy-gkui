@@ -9,7 +9,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'gkui/diagnostics.dart';
 import 'gkui/plex_api.dart';
 
-const String buildLabel = 'Plezy GKUI 1.2.3 / Zurg stream recovery';
+const String buildLabel = 'Plezy GKUI 1.2.4 / subtitles and car controls';
 const String sourceLabel = 'Plezy 1.8.1 / GKUI compatibility fork';
 const String toolchainLabel = 'Flutter 3.19.6 / ExoPlayer 2.19.1 / API 19';
 const MethodChannel nativeChannel =
@@ -641,7 +641,15 @@ class GkuiController extends ChangeNotifier {
             ? 'off'
             : selectedSubtitle?.languageCode ?? settings.subtitleLanguage,
         'audioTrackId': resolvedAudioTrackId ?? '',
+        'audioTitle': selectedAudio?.title ?? selectedAudio?.displayLabel ?? '',
+        'audioCodec': selectedAudio?.codec ?? '',
         'subtitleTrackId': resolvedSubtitleTrackId ?? '',
+        'subtitleUrl': request.transcoding
+            ? ''
+            : api!.streamUrl(selectedSubtitle?.key) ?? '',
+        'subtitleTitle':
+            selectedSubtitle?.title ?? selectedSubtitle?.displayLabel ?? '',
+        'subtitleCodec': selectedSubtitle?.codec ?? '',
         'seekBackMs': settings.seekBackSeconds * 1000,
         'seekForwardMs': settings.seekForwardSeconds * 1000,
         'skipMode': settings.skipMode.name,

@@ -1,7 +1,10 @@
 package com.edde746.plezy
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -10,15 +13,22 @@ import android.os.SystemClock
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ArrayAdapter
+import android.widget.LinearLayout
+import android.widget.SeekBar
+import android.widget.TextView
+import android.widget.Toast
 import com.google.android.exoplayer2.audio.AudioAttributes
 import com.google.android.exoplayer2.C
 import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.Format
 import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.Player
+import com.google.android.exoplayer2.Tracks
 import com.google.android.exoplayer2.analytics.AnalyticsListener
 import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector
@@ -36,6 +46,20 @@ import java.util.concurrent.atomic.AtomicLong
 
 class PlayerActivity : Activity() {
     private data class Marker(val type: String, val startMs: Long, val endMs: Long)
+    private data class NativeSubtitleTrack(
+        val rendererIndex: Int,
+        val groupIndex: Int,
+        val trackIndex: Int,
+        val label: String,
+        val candidate: MediaTrackCandidate,
+    )
+    private data class NativeAudioTrack(
+        val rendererIndex: Int,
+        val groupIndex: Int,
+        val trackIndex: Int,
+        val label: String,
+        val candidate: MediaTrackCandidate,
+    )
 
     private var player: ExoPlayer? = null
     private var ended = false
@@ -52,7 +76,28 @@ class PlayerActivity : Activity() {
     private var wasPlayingBeforePause = false
     private var activityPaused = false
     private var playerView: StyledPlayerView? = null
+    private var trackSelector: DefaultTrackSelector? = null
     private var skipButton: Button? = null
+    private var controlPanel: LinearLayout? = null
+    private var playPauseButton: Button? = null
+    private var audioButton: Button? = null
+    private var captionsButton: Button? = null
+    private var seekBar: SeekBar? = null
+    private var positionLabel: TextView? = null
+    private var userSeeking = false
+    private var initialSubtitleApplied = false
+    private var initialAudioApplied = false
+    private var activeSubtitle: NativeSubtitleTrack? = null
+    private var activeAudio: NativeAudioTrack? = null
+    private var requestedAudioId = ""
+    private var requestedAudioLanguage = ""
+    private var requestedAudioTitle = ""
+    private var requestedAudioCodec = ""
+    private var requestedSubtitleId = ""
+    private var requestedSubtitleLanguage = ""
+    private var requestedSubtitleTitle = ""
+    private var requestedSubtitleCodec = ""
+    private var requestedSubtitleUrl = ""
     private var markers: List<Marker> = emptyList()
     private var skipMode = "button"
     private val skippedMarkerIndexes = mutableSetOf<Int>()
@@ -69,6 +114,9 @@ class PlayerActivity : Activity() {
         val target = pendingSeekPositionMs
         pendingSeekPositionMs = null
         if (target != null && !completed) player?.seekTo(target)
+    }
+    private val hideControlsRunnable = Runnable {
+        if (player?.isPlaying == true) controlPanel?.visibility = View.GONE
     }
     private val startupTransferListener = object : TransferListener {
         override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
@@ -105,6 +153,7 @@ class PlayerActivity : Activity() {
                 lastTimelineReportAt = now
                 reportTimeline(exo.currentPosition, "playing")
             }
+            updateCarControls(exo)
             checkStartupProgress(exo, now)
             if (completed) return
             updateSkipButton(exo.currentPosition)
@@ -175,19 +224,33 @@ class PlayerActivity : Activity() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
         val trackSelector = DefaultTrackSelector(this)
+        this.trackSelector = trackSelector
         val trackParameters = trackSelector.buildUponParameters()
-        val audioLanguage = intent.getStringExtra(EXTRA_AUDIO_LANGUAGE).orEmpty()
-        val subtitleLanguage = intent.getStringExtra(EXTRA_SUBTITLE_LANGUAGE).orEmpty()
-        if (audioLanguage.isNotBlank()) trackParameters.setPreferredAudioLanguage(audioLanguage)
-        if (subtitleLanguage == "off") {
-            trackParameters.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-        } else if (subtitleLanguage.isNotBlank()) {
-            trackParameters.setPreferredTextLanguage(subtitleLanguage)
+        requestedAudioLanguage = intent.getStringExtra(EXTRA_AUDIO_LANGUAGE).orEmpty()
+        requestedAudioId = intent.getStringExtra(EXTRA_AUDIO_TRACK_ID).orEmpty()
+        requestedAudioTitle = intent.getStringExtra(EXTRA_AUDIO_TITLE).orEmpty()
+        requestedAudioCodec = intent.getStringExtra(EXTRA_AUDIO_CODEC).orEmpty()
+        requestedSubtitleLanguage = intent.getStringExtra(EXTRA_SUBTITLE_LANGUAGE).orEmpty()
+        requestedSubtitleId = intent.getStringExtra(EXTRA_SUBTITLE_TRACK_ID).orEmpty()
+        requestedSubtitleTitle = intent.getStringExtra(EXTRA_SUBTITLE_TITLE).orEmpty()
+        requestedSubtitleCodec = intent.getStringExtra(EXTRA_SUBTITLE_CODEC).orEmpty()
+        requestedSubtitleUrl = intent.getStringExtra(EXTRA_SUBTITLE_URL).orEmpty()
+        if (requestedAudioLanguage.isNotBlank()) {
+            trackParameters.setPreferredAudioLanguage(requestedAudioLanguage)
         }
-        val audioTrackId = intent.getStringExtra(EXTRA_AUDIO_TRACK_ID).orEmpty()
-        val subtitleTrackId = intent.getStringExtra(EXTRA_SUBTITLE_TRACK_ID).orEmpty()
-        if (audioTrackId.isNotBlank()) diagnostics.add("Audio selection: Plex track $audioTrackId")
-        if (subtitleTrackId.isNotBlank()) diagnostics.add("Subtitle selection: Plex track $subtitleTrackId")
+        if (requestedSubtitleLanguage == "off" || requestedSubtitleId == "off") {
+            trackParameters.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        } else {
+            trackParameters.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            if (requestedSubtitleLanguage.isNotBlank()) {
+                trackParameters.setPreferredTextLanguage(requestedSubtitleLanguage)
+            }
+            if (requestedSubtitleId.isNotBlank() || requestedSubtitleUrl.isNotBlank()) {
+                trackParameters.setSelectUndeterminedTextLanguage(true)
+            }
+        }
+        if (requestedAudioId.isNotBlank()) diagnostics.add("Audio selection: Plex track $requestedAudioId")
+        if (requestedSubtitleId.isNotBlank()) diagnostics.add("Subtitle selection: Plex track $requestedSubtitleId")
         trackSelector.parameters = trackParameters.build()
         val exo = ExoPlayer.Builder(this)
             .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
@@ -201,14 +264,13 @@ class PlayerActivity : Activity() {
         player = exo
 
         val view = StyledPlayerView(this).apply {
-            useController = true
-            setShowSubtitleButton(true)
+            useController = false
             setShowBuffering(StyledPlayerView.SHOW_BUFFERING_ALWAYS)
-            controllerShowTimeoutMs = 4_000
-            controllerAutoShow = true
             keepScreenOn = true
             player = exo
             contentDescription = intent.getStringExtra(EXTRA_TITLE) ?: "Plezy player"
+            subtitleView?.setFractionalTextSize(0.062f)
+            subtitleView?.setBottomPaddingFraction(0.12f)
         }
         playerView = view
         val root = FrameLayout(this)
@@ -216,14 +278,23 @@ class PlayerActivity : Activity() {
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT,
         ))
+        root.addView(createCarControls(), FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM,
+        ))
+        view.setOnClickListener { toggleControls() }
         val skip = Button(this).apply {
             visibility = View.GONE
-            textSize = 17f
-            minHeight = 56
-            minWidth = 150
+            textSize = 20f
+            minHeight = dp(64)
+            minWidth = dp(170)
+            setTextColor(Color.WHITE)
+            background = carButtonBackground(0xEEFF9800.toInt())
             setOnClickListener {
                 val active = activeMarker(player?.currentPosition ?: -1L)
                 if (active != null) player?.seekTo(active.endMs)
+                showControls()
             }
         }
         skipButton = skip
@@ -231,8 +302,9 @@ class PlayerActivity : Activity() {
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
             Gravity.END or Gravity.CENTER_VERTICAL,
-        ).apply { marginEnd = 28 })
+        ).apply { marginEnd = dp(28) })
         setContentView(root)
+        showControls()
 
         exo.addAnalyticsListener(object : AnalyticsListener {
             override fun onVideoDecoderInitialized(
@@ -259,10 +331,30 @@ class PlayerActivity : Activity() {
                     Player.STATE_ENDED -> "ended"
                     else -> "unknown"
                 })
+                updateCarControls(exo)
                 if (state == Player.STATE_ENDED) {
                     ended = true
                     window.decorView.postDelayed({ finishWithResult(null) }, 350L)
                 }
+            }
+
+            override fun onTracksChanged(tracks: Tracks) {
+                val audioRequested = requestedAudioId.isNotBlank() ||
+                    requestedAudioLanguage.isNotBlank()
+                if (!initialAudioApplied && audioRequested) {
+                    initialAudioApplied = true
+                    applyRequestedAudio()
+                }
+                val subtitleRequested = requestedSubtitleId.isNotBlank() ||
+                    requestedSubtitleLanguage.isNotBlank() || requestedSubtitleUrl.isNotBlank()
+                if (!initialSubtitleApplied && subtitleRequested &&
+                    requestedSubtitleId != "off" && requestedSubtitleLanguage != "off"
+                ) {
+                    initialSubtitleApplied = true
+                    applyRequestedSubtitle()
+                }
+                updateAudioButton()
+                updateCaptionsButton()
             }
 
             override fun onRenderedFirstFrame() {
@@ -306,7 +398,31 @@ class PlayerActivity : Activity() {
                 window.decorView.post { finishWithResult(playbackError) }
             }
         })
-        exo.setMediaItem(MediaItem.fromUri(Uri.parse(url)))
+        val mediaItemBuilder = MediaItem.Builder().setUri(Uri.parse(url))
+        if (requestedSubtitleUrl.isNotBlank()) {
+            val subtitleUri = Uri.parse(requestedSubtitleUrl)
+            val mimeType = MediaTrackSelectionPolicy.subtitleMimeType(
+                requestedSubtitleCodec,
+                requestedSubtitleUrl,
+            )
+            if (subtitleUri.scheme == "https" && mimeType != null) {
+                val subtitleBuilder = MediaItem.SubtitleConfiguration.Builder(subtitleUri)
+                    .setId(requestedSubtitleId.ifBlank { "plex-external" })
+                    .setMimeType(mimeType)
+                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                if (requestedSubtitleLanguage.isNotBlank()) {
+                    subtitleBuilder.setLanguage(requestedSubtitleLanguage)
+                }
+                if (requestedSubtitleTitle.isNotBlank()) {
+                    subtitleBuilder.setLabel(requestedSubtitleTitle)
+                }
+                mediaItemBuilder.setSubtitleConfigurations(listOf(subtitleBuilder.build()))
+                diagnostics.add("Subtitle source: external ${requestedSubtitleCodec.ifBlank { mimeType }}")
+            } else {
+                diagnostics.add("Subtitle source unsupported: ${requestedSubtitleCodec.ifBlank { "unknown" }}")
+            }
+        }
+        exo.setMediaItem(mediaItemBuilder.build())
         val startMs = intent.getLongExtra(EXTRA_START_MS, 0L)
         if (startMs > 0L) exo.seekTo(startMs)
         playerStartedAtMs = SystemClock.elapsedRealtime()
@@ -317,6 +433,390 @@ class PlayerActivity : Activity() {
         exo.prepare()
         exo.playWhenReady = true
         timelineHandler.post(timelineRunnable)
+    }
+
+    private fun createCarControls(): LinearLayout {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(10), dp(18), dp(12))
+            background = GradientDrawable().apply { setColor(0xE6161616.toInt()) }
+        }
+        controlPanel = panel
+
+        val time = TextView(this).apply {
+            text = "00:00 / --:--"
+            textSize = 18f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+        }
+        positionLabel = time
+        panel.addView(time, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(30),
+        ))
+
+        val progress = SeekBar(this).apply {
+            max = 1_000
+            minHeight = dp(48)
+            contentDescription = "Playback position"
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onStartTrackingTouch(seekBar: SeekBar) {
+                    userSeeking = true
+                    timelineHandler.removeCallbacks(hideControlsRunnable)
+                }
+
+                override fun onProgressChanged(seekBar: SeekBar, value: Int, fromUser: Boolean) {
+                    if (!fromUser) return
+                    val duration = player?.duration?.takeIf { it > 0L } ?: return
+                    val target = duration * value / seekBar.max
+                    positionLabel?.text = "${formatTime(target)} / ${formatTime(duration)}"
+                }
+
+                override fun onStopTrackingTouch(seekBar: SeekBar) {
+                    val exo = player
+                    val duration = exo?.duration?.takeIf { it > 0L }
+                    if (exo != null && duration != null) {
+                        exo.seekTo(duration * seekBar.progress / seekBar.max)
+                    }
+                    userSeeking = false
+                    showControls()
+                }
+            })
+        }
+        seekBar = progress
+        panel.addView(progress, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(48),
+        ))
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        panel.addView(row, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            dp(70),
+        ))
+
+        fun addButton(label: String, description: String, action: () -> Unit): Button {
+            val button = Button(this).apply {
+                text = label
+                textSize = 19f
+                setTextColor(Color.WHITE)
+                setAllCaps(false)
+                minWidth = 0
+                minHeight = dp(64)
+                contentDescription = description
+                background = carButtonBackground(0xFF303030.toInt())
+                setOnClickListener {
+                    action()
+                    showControls()
+                }
+            }
+            row.addView(button, LinearLayout.LayoutParams(0, dp(64), 1f).apply {
+                marginStart = dp(4)
+                marginEnd = dp(4)
+            })
+            return button
+        }
+
+        addButton("Close", "Close player") { finishWithResult(playbackError) }
+        addButton("−${seekBackMs / 1_000}s", "Rewind ${seekBackMs / 1_000} seconds") {
+            queueSeek(-seekBackMs)
+        }
+        playPauseButton = addButton("Pause", "Play or pause") {
+            val exo = player
+            if (exo?.isPlaying == true) exo.pause() else exo?.play()
+            exo?.let(::updateCarControls)
+        }
+        addButton("+${seekForwardMs / 1_000}s", "Forward ${seekForwardMs / 1_000} seconds") {
+            queueSeek(seekForwardMs)
+        }
+        audioButton = addButton("Audio", "Choose audio language") { showAudioDialog() }
+        captionsButton = addButton("CC", "Choose subtitles") { showSubtitleDialog() }
+        return panel
+    }
+
+    private fun carButtonBackground(color: Int): GradientDrawable = GradientDrawable().apply {
+        setColor(color)
+        cornerRadius = dp(8).toFloat()
+        setStroke(dp(1), 0xFF707070.toInt())
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density + 0.5f).toInt()
+
+    private fun toggleControls() {
+        if (controlPanel?.visibility == View.VISIBLE) {
+            controlPanel?.visibility = View.GONE
+            timelineHandler.removeCallbacks(hideControlsRunnable)
+        } else {
+            showControls()
+        }
+    }
+
+    private fun showControls() {
+        controlPanel?.visibility = View.VISIBLE
+        timelineHandler.removeCallbacks(hideControlsRunnable)
+        if (player?.isPlaying == true) {
+            timelineHandler.postDelayed(hideControlsRunnable, 6_000L)
+        }
+    }
+
+    private fun updateCarControls(exo: ExoPlayer) {
+        playPauseButton?.text = if (exo.isPlaying) "Pause" else "Play"
+        playPauseButton?.contentDescription = if (exo.isPlaying) "Pause video" else "Play video"
+        if (userSeeking) return
+        val duration = exo.duration.takeIf { it > 0L }
+        val position = exo.currentPosition.coerceAtLeast(0L)
+        positionLabel?.text = "${formatTime(position)} / ${duration?.let(::formatTime) ?: "--:--"}"
+        seekBar?.apply {
+            isEnabled = duration != null
+            progress = if (duration == null) 0 else ((position * max) / duration).toInt()
+        }
+    }
+
+    private fun formatTime(milliseconds: Long): String {
+        val totalSeconds = milliseconds.coerceAtLeast(0L) / 1_000L
+        val hours = totalSeconds / 3_600L
+        val minutes = (totalSeconds % 3_600L) / 60L
+        val seconds = totalSeconds % 60L
+        return if (hours > 0L) {
+            String.format("%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format("%02d:%02d", minutes, seconds)
+        }
+    }
+
+    private fun audioTracks(): List<NativeAudioTrack> {
+        val selector = trackSelector ?: return emptyList()
+        val mapped = selector.currentMappedTrackInfo ?: return emptyList()
+        val result = mutableListOf<NativeAudioTrack>()
+        for (rendererIndex in 0 until mapped.rendererCount) {
+            if (mapped.getRendererType(rendererIndex) != C.TRACK_TYPE_AUDIO) continue
+            val groups = mapped.getTrackGroups(rendererIndex)
+            for (groupIndex in 0 until groups.length) {
+                val group = groups[groupIndex]
+                for (trackIndex in 0 until group.length) {
+                    val format = group.getFormat(trackIndex)
+                    val fields = listOfNotNull(
+                        format.label?.takeIf { it.isNotBlank() },
+                        format.language?.takeIf { it.isNotBlank() },
+                        format.sampleMimeType?.substringAfterLast('/')?.uppercase(),
+                        format.channelCount.takeIf { it > 0 }?.let { "${it}ch" },
+                    ).distinct()
+                    val label = fields.joinToString(" • ").ifBlank { "Audio ${result.size + 1}" }
+                    result += NativeAudioTrack(
+                        rendererIndex = rendererIndex,
+                        groupIndex = groupIndex,
+                        trackIndex = trackIndex,
+                        label = label,
+                        candidate = MediaTrackCandidate(
+                            id = format.id,
+                            language = format.language,
+                            label = format.label,
+                            codec = format.sampleMimeType ?: format.codecs,
+                        ),
+                    )
+                }
+            }
+        }
+        return result
+    }
+
+    private fun applyRequestedAudio() {
+        val tracks = audioTracks()
+        val index = MediaTrackSelectionPolicy.bestIndex(
+            tracks.map { it.candidate },
+            requestedAudioId,
+            requestedAudioLanguage,
+            requestedAudioTitle,
+            requestedAudioCodec,
+        ) ?: return
+        applyAudio(tracks[index])
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applyAudio(track: NativeAudioTrack) {
+        val selector = trackSelector ?: return
+        val mapped = selector.currentMappedTrackInfo ?: return
+        val builder = selector.buildUponParameters()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+        for (rendererIndex in 0 until mapped.rendererCount) {
+            if (mapped.getRendererType(rendererIndex) == C.TRACK_TYPE_AUDIO) {
+                builder.clearSelectionOverrides(rendererIndex)
+            }
+        }
+        builder.setSelectionOverride(
+            track.rendererIndex,
+            mapped.getTrackGroups(track.rendererIndex),
+            DefaultTrackSelector.SelectionOverride(track.groupIndex, track.trackIndex),
+        )
+        selector.parameters = builder.build()
+        activeAudio = track
+        diagnostics.add("Audio active: ${track.label}")
+        updateAudioButton()
+    }
+
+    private fun updateAudioButton() {
+        val language = activeAudio?.candidate?.language?.uppercase()
+        audioButton?.text = language?.takeIf { it.length <= 4 } ?: "Audio"
+    }
+
+    private fun showAudioDialog() {
+        val tracks = audioTracks()
+        if (tracks.isEmpty()) {
+            Toast.makeText(this, "No selectable audio tracks", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val selected = activeAudio?.let { active ->
+            tracks.indexOfFirst {
+                it.rendererIndex == active.rendererIndex &&
+                    it.groupIndex == active.groupIndex &&
+                    it.trackIndex == active.trackIndex
+            }.takeIf { it >= 0 }
+        } ?: 0
+        val adapter = largeChoiceAdapter(tracks.map { it.label })
+        AlertDialog.Builder(this)
+            .setTitle("Audio language")
+            .setSingleChoiceItems(adapter, selected) { dialog, choice ->
+                applyAudio(tracks[choice])
+                dialog.dismiss()
+                showControls()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun subtitleTracks(): List<NativeSubtitleTrack> {
+        val selector = trackSelector ?: return emptyList()
+        val mapped = selector.currentMappedTrackInfo ?: return emptyList()
+        val result = mutableListOf<NativeSubtitleTrack>()
+        for (rendererIndex in 0 until mapped.rendererCount) {
+            if (mapped.getRendererType(rendererIndex) != C.TRACK_TYPE_TEXT) continue
+            val groups = mapped.getTrackGroups(rendererIndex)
+            for (groupIndex in 0 until groups.length) {
+                val group = groups[groupIndex]
+                for (trackIndex in 0 until group.length) {
+                    val format = group.getFormat(trackIndex)
+                    val label = format.label?.takeIf { it.isNotBlank() }
+                        ?: format.language?.takeIf { it.isNotBlank() }
+                        ?: "Subtitle ${result.size + 1}"
+                    result += NativeSubtitleTrack(
+                        rendererIndex = rendererIndex,
+                        groupIndex = groupIndex,
+                        trackIndex = trackIndex,
+                        label = label,
+                        candidate = MediaTrackCandidate(
+                            id = format.id,
+                            language = format.language,
+                            label = format.label,
+                            codec = format.sampleMimeType ?: format.codecs,
+                        ),
+                    )
+                }
+            }
+        }
+        return result
+    }
+
+    private fun applyRequestedSubtitle() {
+        val tracks = subtitleTracks()
+        val index = MediaTrackSelectionPolicy.bestIndex(
+            tracks.map { it.candidate },
+            requestedSubtitleId,
+            requestedSubtitleLanguage,
+            requestedSubtitleTitle,
+            requestedSubtitleCodec,
+        ) ?: return
+        applySubtitle(tracks[index])
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applySubtitle(track: NativeSubtitleTrack) {
+        val selector = trackSelector ?: return
+        val mapped = selector.currentMappedTrackInfo ?: return
+        val builder = selector.buildUponParameters()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .setSelectUndeterminedTextLanguage(true)
+        for (rendererIndex in 0 until mapped.rendererCount) {
+            if (mapped.getRendererType(rendererIndex) == C.TRACK_TYPE_TEXT) {
+                builder.clearSelectionOverrides(rendererIndex)
+            }
+        }
+        builder.setSelectionOverride(
+            track.rendererIndex,
+            mapped.getTrackGroups(track.rendererIndex),
+            DefaultTrackSelector.SelectionOverride(track.groupIndex, track.trackIndex),
+        )
+        selector.parameters = builder.build()
+        activeSubtitle = track
+        diagnostics.add("Subtitle active: ${track.label}")
+        updateCaptionsButton()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun disableSubtitles() {
+        val selector = trackSelector ?: return
+        val mapped = selector.currentMappedTrackInfo
+        val builder = selector.buildUponParameters()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        if (mapped != null) {
+            for (rendererIndex in 0 until mapped.rendererCount) {
+                if (mapped.getRendererType(rendererIndex) == C.TRACK_TYPE_TEXT) {
+                    builder.clearSelectionOverrides(rendererIndex)
+                }
+            }
+        }
+        selector.parameters = builder.build()
+        activeSubtitle = null
+        diagnostics.add("Subtitle active: off")
+        updateCaptionsButton()
+    }
+
+    private fun updateCaptionsButton() {
+        captionsButton?.text = if (activeSubtitle == null) "CC Off" else "CC On"
+    }
+
+    private fun largeChoiceAdapter(labels: List<String>): ArrayAdapter<String> =
+        object : ArrayAdapter<String>(
+            this,
+            android.R.layout.simple_list_item_single_choice,
+            labels,
+        ) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                return (super.getView(position, convertView, parent) as TextView).apply {
+                    minHeight = dp(64)
+                    textSize = 20f
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(22), 0, dp(22), 0)
+                }
+            }
+        }
+
+    private fun showSubtitleDialog() {
+        val tracks = subtitleTracks()
+        if (tracks.isEmpty()) {
+            Toast.makeText(this, "No playable subtitle tracks", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = listOf("Off") + tracks.map { it.label }
+        val selected = activeSubtitle?.let { active ->
+            tracks.indexOfFirst {
+                it.rendererIndex == active.rendererIndex &&
+                    it.groupIndex == active.groupIndex &&
+                    it.trackIndex == active.trackIndex
+            }.takeIf { it >= 0 }?.plus(1)
+        } ?: 0
+        val adapter = largeChoiceAdapter(labels)
+        AlertDialog.Builder(this)
+            .setTitle("Subtitles")
+            .setSingleChoiceItems(adapter, selected) { dialog, choice ->
+                if (choice == 0) disableSubtitles() else applySubtitle(tracks[choice - 1])
+                dialog.dismiss()
+                showControls()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -345,6 +845,7 @@ class PlayerActivity : Activity() {
         activityPaused = true
         wasPlayingBeforePause = exo?.isPlaying == true
         if (!completed && wasPlayingBeforePause) exo?.pause()
+        showControls()
         super.onPause()
     }
 
@@ -367,17 +868,20 @@ class PlayerActivity : Activity() {
             KeyEvent.KEYCODE_DPAD_LEFT,
             KeyEvent.KEYCODE_MEDIA_REWIND -> {
                 queueSeek(-seekBackMs)
+                showControls()
                 return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT,
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
                 queueSeek(seekForwardMs)
+                showControls()
                 return true
             }
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                 if (exo?.isPlaying == true) exo.pause() else exo?.play()
+                showControls()
                 return true
             }
         }
@@ -485,6 +989,7 @@ class PlayerActivity : Activity() {
         val duration = exo?.duration?.takeIf { it > 0L } ?: 0L
         timelineHandler.removeCallbacks(timelineRunnable)
         timelineHandler.removeCallbacks(seekRunnable)
+        timelineHandler.removeCallbacks(hideControlsRunnable)
         if (renderedFirstFrame) reportTimeline(position, if (ended) "stopped" else "paused")
         playerView?.player = null
         player?.release()
@@ -509,6 +1014,7 @@ class PlayerActivity : Activity() {
     override fun onDestroy() {
         timelineHandler.removeCallbacks(timelineRunnable)
         timelineHandler.removeCallbacks(seekRunnable)
+        timelineHandler.removeCallbacks(hideControlsRunnable)
         playerView?.player = null
         player?.release()
         player = null
@@ -559,7 +1065,12 @@ class PlayerActivity : Activity() {
         const val EXTRA_AUDIO_LANGUAGE = "audioLanguage"
         const val EXTRA_SUBTITLE_LANGUAGE = "subtitleLanguage"
         const val EXTRA_AUDIO_TRACK_ID = "audioTrackId"
+        const val EXTRA_AUDIO_TITLE = "audioTitle"
+        const val EXTRA_AUDIO_CODEC = "audioCodec"
         const val EXTRA_SUBTITLE_TRACK_ID = "subtitleTrackId"
+        const val EXTRA_SUBTITLE_URL = "subtitleUrl"
+        const val EXTRA_SUBTITLE_TITLE = "subtitleTitle"
+        const val EXTRA_SUBTITLE_CODEC = "subtitleCodec"
         const val EXTRA_SKIP_MODE = "skipMode"
         const val EXTRA_STARTUP_HARD_TIMEOUT_MS = "startupHardTimeoutMs"
         const val EXTRA_SEEK_BACK_MS = "seekBackMs"

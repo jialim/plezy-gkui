@@ -10,7 +10,7 @@ import 'package:uuid/uuid.dart';
 import 'diagnostics.dart';
 
 const String plexProduct = 'Plezy GKUI';
-const String plexVersion = '1.2.3';
+const String plexVersion = '1.2.4';
 
 class PlexPin {
   const PlexPin({required this.id, required this.code});
@@ -206,6 +206,7 @@ class PlexTrack {
     this.language,
     this.title,
     this.codec,
+    this.key,
     this.channels,
     this.selected = false,
     this.forced = false,
@@ -217,6 +218,7 @@ class PlexTrack {
   final String? language;
   final String? title;
   final String? codec;
+  final String? key;
   final int? channels;
   final bool selected;
   final bool forced;
@@ -1055,6 +1057,7 @@ class PlexApi {
               title: stream['title']?.toString() ??
                   stream['displayTitle']?.toString(),
               codec: stream['codec']?.toString(),
+              key: stream['key']?.toString(),
               channels: (stream['channels'] as num?)?.toInt(),
               selected: stream['selected'] == true || stream['selected'] == 1,
               forced: stream['forced'] == true || stream['forced'] == 1,
@@ -1128,6 +1131,12 @@ class PlexApi {
       'upscale': '1',
     });
     return uri.toString();
+  }
+
+  String? streamUrl(String? path) {
+    final value = session;
+    if (value == null || path == null || !path.startsWith('/')) return null;
+    return Uri.parse(value.baseUrl).resolve(path).toString();
   }
 
   Map<String, String> get imageHeaders {

@@ -1,6 +1,16 @@
-# Plezy GKUI 1.2.3 — Zurg Stream Recovery
+# Plezy GKUI 1.2.4 — Subtitles and Car Controls
 
 This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit. Phone remote and mirroring are intentionally excluded.
+
+## 1.2.4 subtitles and car controls
+
+- The subtitle chosen on the media screen is now explicitly matched and selected in ExoPlayer instead of relying only on a language hint.
+- External Plex SRT, SSA/ASS, WebVTT, TTML, and TX3G subtitle streams are attached to Direct Play with the authenticated media request.
+- The old phone-sized ExoPlayer controls are replaced by a full-width GKUI overlay with large Close, rewind, Play/Pause, forward, Audio, and CC buttons.
+- Audio opens a large language/track picker for dual-audio and multi-audio videos; the media-screen choice is also explicitly applied on startup.
+- The seek bar spans the display and shows elapsed and total time.
+- CC opens a real subtitle-track chooser with 64dp rows and a clear CC On/Off state.
+- Subtitles use a larger text size and higher bottom margin for the 800×480 vehicle display.
 
 ## 1.2.3 Zurg stream recovery
 
@@ -35,24 +45,25 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 ## Verified off-car
 
 - Flutter static analysis: clean.
-- Flutter tests: 18 passed, including 800×480 and 1280×720 coverage.
+- Flutter tests: 19 passed, including 800×480 and 1280×720 coverage.
 - Android unit tests: passed.
 - Native Kotlin/ExoPlayer compilation: passed.
-- APK manifest: version 1.2.3 (9), minimum API 19, target API 34.
+- APK manifest: version 1.2.4 (10), minimum API 19, target API 34.
 - APK native ABI: armeabi-v7a only.
 - APK signatures: v1 and v2 verified.
-- APK SHA-256: `0d946809110a9de2d737686ac761dddc58b9a8938d09466c6cc28d94cca4ad3c`.
+- APK SHA-256: `122bd26dc2d1beada2b896d2c3599797eb3fd6fe2f7f67877aaea2f8981f5f48`.
 
 ## One-pass M5 check
 
 1. Install over 1.1.0 and confirm the existing account remains signed in.
 2. Switch Plex Home profiles once, including a PIN-protected profile if available.
-3. Open a multi-version title and confirm 1080p H.264 is selected; change audio/subtitles once.
-4. Direct Play a local-copy H.264 1080p title, use D-pad seek repeatedly, sleep/wake the unit, and resume.
-5. Direct Play a Zurg-backed title and leave it playing for 2–3 minutes; if Direct Play cannot render it, confirm the automatic 720p/480p fallback can start.
-6. Play one 720p-compatible transcode and one 480p-safe transcode.
-7. Verify Skip Intro/Credits and the Play Next countdown on an episode that has Plex markers.
-8. Reopen the title and confirm its version/audio/subtitle choices were remembered.
-9. Open Status and photograph both columns if anything fails; include the startup network-byte and last-failure rows.
+3. Open a multi-version title, choose a subtitle, and confirm that subtitle appears immediately during playback.
+4. Tap the video to show the large controls; test Play/Pause, rewind, forward, the seek bar, Audio switching, CC Off/On, and Close.
+5. Direct Play a local-copy H.264 1080p title, use D-pad seek repeatedly, sleep/wake the unit, and resume.
+6. Direct Play a Zurg-backed title and leave it playing for 2–3 minutes; if Direct Play cannot render it, confirm the automatic 720p/480p fallback can start.
+7. Play one 720p-compatible transcode and one 480p-safe transcode.
+8. Verify Skip Intro/Credits and the Play Next countdown on an episode that has Plex markers.
+9. Reopen the title and confirm its version/audio/subtitle choices were remembered.
+10. Open Status and photograph both columns if anything fails; include the startup network-byte and last-failure rows.
 
 Physical ECARX/M5 playback remains the final hardware gate because its Android 4.4 decoder and vehicle firmware cannot be reproduced by desktop tests.

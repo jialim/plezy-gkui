@@ -18,13 +18,13 @@ not the App Store, Google Play, desktop, or current upstream Plezy build.
 
 ## Download
 
-The current tested build is **Plezy GKUI 1.2.3**:
+The current tested build is **Plezy GKUI 1.2.4**:
 
-- [Download the API 19 ARMv7 APK](https://github.com/jialim/plezy-gkui/releases/download/gkui-v1.2.3/Plezy-GKUI-1.2.3-api19-armeabi-v7a.apk)
-- [Release notes and checksum](https://github.com/jialim/plezy-gkui/releases/tag/gkui-v1.2.3)
+- [Download the API 19 ARMv7 APK](https://github.com/jialim/plezy-gkui/releases/download/gkui-v1.2.4/Plezy-GKUI-1.2.4-api19-armeabi-v7a.apk)
+- [Release notes and checksum](https://github.com/jialim/plezy-gkui/releases/tag/gkui-v1.2.4)
 - [All releases](https://github.com/jialim/plezy-gkui/releases)
 
-SHA-256: `0d946809110a9de2d737686ac761dddc58b9a8938d09466c6cc28d94cca4ad3c`
+SHA-256: `122bd26dc2d1beada2b896d2c3599797eb3fd6fe2f7f67877aaea2f8981f5f48`
 
 The APK uses package ID `com.jialim.plezygkui`, requires Android API 19 or
 newer, and contains only the `armeabi-v7a` native ABI. Releases are signed with
@@ -54,6 +54,10 @@ GKUI builds.
 - Native ExoPlayer 2.19.1 playback compatible with Android API 19
 - Automatic preference for an H.264 1080p copy when multiple versions exist
 - Explicit media-version, audio-track, and subtitle-track selectors
+- Selected embedded and external Plex subtitles are applied to the native player
+- Full-width car controls with large Close, seek, Play/Pause, Audio, and CC targets
+- In-player audio-language chooser for dual-audio and multi-audio videos
+- In-player audio and subtitle choosers with 64dp rows and explicit CC On/Off state
 - Remembered choices per Plex profile and title or show
 - Direct Play plus 720p compatible and 480p safe Plex transcode modes
 - Configurable seek intervals and hardware/D-pad controls
@@ -143,7 +147,7 @@ cd android
 ./gradlew :app:testDebugUnitTest :app:compileDebugKotlin -x compileFlutterBuildDebug
 ```
 
-The 1.2.3 release passed Flutter analysis, 18 Flutter tests, Android unit tests,
+The 1.2.4 release passed Flutter analysis, 19 Flutter tests, Android unit tests,
 native Kotlin compilation, APK signature verification, and manifest/ABI
 inspection. Physical in-car playback remains the final hardware gate.
 
