@@ -4,6 +4,8 @@ on:
   push:
     branches: [plezy-xgimi-lite]
     tags: ['xgimi-lite-*']
+  pull_request:
+    branches: [plezy-xgimi-lite]
   workflow_dispatch:
     inputs:
       build_label:
@@ -38,30 +40,58 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get --enforce-lockfile --no-example
 
+      - name: Analyze
+        run: flutter analyze
+
+      # The profile edits shared code (focus, theme, track and version
+      # selection), so the whole upstream suite must still pass.
+      - name: Upstream tests
+        run: flutter test
+
       - name: Verify XGIMI logic
         run: >-
           flutter test
           test/media/media_version_family_projector_test.dart
           test/services/family_projector_subtitle_test.dart
+          test/services/family_projector_subtitle_selection_test.dart
           test/services/family_projector_ui_test.dart
           --dart-define=FAMILY_PROJECTOR_MODE=true
 
-      - name: Configure test APK signing
+      # A stable key lets each new build install over the last one, keeping the
+      # projector's Plex sign-in and settings. Without the secrets, fall back to
+      # a throwaway key, which forces an uninstall between builds.
+      - name: Configure APK signing
         shell: bash
+        env:
+          XGIMI_KEYSTORE_BASE64: ${{ secrets.XGIMI_KEYSTORE_BASE64 }}
+          XGIMI_KEYSTORE_PASSWORD: ${{ secrets.XGIMI_KEYSTORE_PASSWORD }}
+          XGIMI_KEY_ALIAS: ${{ secrets.XGIMI_KEY_ALIAS }}
+          XGIMI_KEY_PASSWORD: ${{ secrets.XGIMI_KEY_PASSWORD }}
         run: |
-          keytool -genkeypair -noprompt \
-            -keystore android/app/xgimi-test-keystore.jks \
-            -storepass android \
-            -alias xgimi-test \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname 'CN=Plezy XGIMI Lite Test,O=Plezy,C=MY'
-          cat > android/key.properties <<'EOF'
-          storePassword=android
-          keyPassword=android
-          keyAlias=xgimi-test
+          if [ -n "$XGIMI_KEYSTORE_BASE64" ]; then
+            printf '%s' "$XGIMI_KEYSTORE_BASE64" | base64 -d > android/app/xgimi-test-keystore.jks
+            store_password="$XGIMI_KEYSTORE_PASSWORD"
+            key_alias="$XGIMI_KEY_ALIAS"
+            key_password="${XGIMI_KEY_PASSWORD:-$XGIMI_KEYSTORE_PASSWORD}"
+          else
+            echo "::warning::XGIMI_KEYSTORE_BASE64 is not set; signing with a throwaway key. Uninstall the previous build before installing this one."
+            store_password=android
+            key_alias=xgimi-test
+            key_password=android
+            keytool -genkeypair -noprompt \
+              -keystore android/app/xgimi-test-keystore.jks \
+              -storepass "$store_password" \
+              -alias "$key_alias" \
+              -keypass "$key_password" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname 'CN=Plezy XGIMI Lite Test,O=Plezy,C=MY'
+          fi
+          cat > android/key.properties <<EOF
+          storePassword=$store_password
+          keyPassword=$key_password
+          keyAlias=$key_alias
           storeFile=xgimi-test-keystore.jks
           EOF
 

@@ -44,15 +44,13 @@ Strictly refusing all video transcoding is not enabled in test 1. Direct Play se
 
 ## Chinese subtitles
 
-Explicit manual choices and server-selected tracks remain authoritative. When no such choice exists, Family Projector Mode ranks available text tracks as:
+Explicit manual choices and server-selected tracks remain authoritative. Plex reports "subtitles off" by selecting no stream, so when nothing is selected the profile turns subtitles on only if a Chinese track exists and the audio is not already Chinese. English-only or Chinese-audio titles keep subtitles off. When the profile does pick a track, it ranks them as:
 
-1. Simplified Chinese (`zh-CN`, `zh-SG`, `zh-Hans`)
-2. Traditional Chinese (`zh-TW`, `zh-HK`, `zh-MO`, `zh-Hant`)
-3. Generic Chinese (`zh`, `zho`, `chi`)
-4. English
-5. Off
+1. Simplified Chinese (`zh-CN`, `zh-SG`, `zh-Hans`, `chs`)
+2. Traditional Chinese (`zh-TW`, `zh-HK`, `zh-MO`, `zh-Hant`, `cht`)
+3. Generic Chinese (`zh`, `zho`, `chi`, `cmn`, `yue`)
 
-`简`, `繁`, `CHS`, `CHT`, `SC`, and `TC` title hints are used only when language metadata is absent or generic. Proper language metadata wins over filename/title text. Manual subtitle search remains available.
+`简`/`簡`, `繁`, `CHS`, `CHT`, `SC`, `TC`, `GB`, `BIG5`, `Hans`, `Hant`, `Simplified`, and `Traditional` title hints split generic Chinese tracks, and are used for untagged tracks. Proper language metadata wins over filename/title text. Manual subtitle search remains available.
 
 ## Diagnostics
 
@@ -74,7 +72,14 @@ The existing performance overlay continues to expose live playback information. 
 
 `.github/workflows/xgimi-lite.yml` builds and uploads both `arm64-v8a` and `armeabi-v7a` APKs plus tarballs. Both variants should be retained until the projector confirms its Android userspace ABI.
 
-Test builds use an ephemeral test-only signing key so they can be sideloaded without repository secrets. The key is deleted before artifact packaging. Installations from different CI runs may require uninstalling the previous test build first; production/update-compatible builds need a stable protected signing secret.
+Builds are signed with the key in the `XGIMI_KEYSTORE_BASE64`, `XGIMI_KEYSTORE_PASSWORD`, `XGIMI_KEY_ALIAS` and `XGIMI_KEY_PASSWORD` repository secrets, so each new build installs over the last one and keeps the projector's sign-in and settings. When those secrets are missing, CI falls back to a throwaway key and warns that the previous build must be uninstalled first. The key file is deleted before artifact packaging.
+
+To create the key once:
+
+```sh
+keytool -genkeypair -keystore xgimi.jks -alias xgimi -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Plezy XGIMI Lite'
+base64 -w0 xgimi.jks   # paste into the XGIMI_KEYSTORE_BASE64 secret
+```
 
 ## Known limitations
 
