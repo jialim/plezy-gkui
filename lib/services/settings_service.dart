@@ -18,6 +18,7 @@ import '../utils/language_codes.dart';
 import 'base_shared_preferences_service.dart';
 import 'sensitive_prefs.dart';
 import 'device_performance.dart';
+import 'family_projector_profile.dart';
 import 'shortcut_action.dart';
 export 'base_shared_preferences_service.dart'
     show
@@ -1048,6 +1049,8 @@ class SettingsService extends BaseSharedPreferencesService {
   Future<void> onInit() async {
     _assertCredentialsReadable();
 
+    await _seedFamilyProjectorDefaults();
+
     const legacyRecentRoomsKey = 'watch_together_recent_rooms';
     await prefs.remove(legacyRecentRoomsKey);
     // One-way move to the mpv default: the pre-`android_use_exoplayer` pick is
@@ -1062,6 +1065,40 @@ class SettingsService extends BaseSharedPreferencesService {
     } else if (endpoint.canonicalBaseUrl != storedRelay) {
       await prefs.setString(customRelayUrl.key, endpoint.canonicalBaseUrl);
     }
+  }
+
+  /// Seed the distribution profile without taking ownership of the settings.
+  /// Existing values always win, so every choice remains individually
+  /// overridable and switching back to a normal Plezy build keeps the user's
+  /// explicit preferences.
+  Future<void> _seedFamilyProjectorDefaults() async {
+    if (!FamilyProjectorProfile.enabled) return;
+
+    Future<void> setStringIfMissing(Pref<Object?> pref, String value) async {
+      if (!prefs.containsKey(pref.key)) await prefs.setString(pref.key, value);
+    }
+
+    Future<void> setBoolIfMissing(Pref<Object?> pref, bool value) async {
+      if (!prefs.containsKey(pref.key)) await prefs.setBool(pref.key, value);
+    }
+
+    Future<void> setIntIfMissing(Pref<Object?> pref, int value) async {
+      if (!prefs.containsKey(pref.key)) await prefs.setInt(pref.key, value);
+    }
+
+    await setStringIfMissing(appLocale, AppLocale.zh.name);
+    await setStringIfMissing(visualEffects, VisualEffectsSetting.reduced.name);
+    await setIntIfMissing(libraryDensity, 4);
+    await setStringIfMissing(gridSpacing, GridSpacing.normal.name);
+    await setBoolIfMissing(tvFullCardLayout, true);
+    await setBoolIfMissing(showHeroSection, true);
+    await setBoolIfMissing(showExploreTab, false);
+    await setBoolIfMissing(ambientLighting, false);
+    await setBoolIfMissing(audioPassthrough, false);
+    await setStringIfMissing(audioChannelLimit, AudioChannelLimit.stereo.name);
+    await setStringIfMissing(playbackBufferTier, PlaybackBufferTier.auto.name);
+    await setStringIfMissing(subtitleSearchLanguage, 'zh');
+    await setBoolIfMissing(directPlayCoveredQuality, true);
   }
 
   /// Raises [UnreadableSensitivePreferenceException] if any stored credential

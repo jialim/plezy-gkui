@@ -34,6 +34,7 @@ import '../media/media_version.dart';
 import '../utils/app_logger.dart';
 import '../utils/global_key_utils.dart';
 import '../utils/json_utils.dart';
+import 'family_projector_profile.dart';
 import 'file_info_parser.dart';
 import 'plex_constants.dart';
 
@@ -1326,6 +1327,8 @@ PlexPlaybackSelection? resolvePlexPlaybackSelection(
     mediaIndex = byId;
   } else if (preferredVersionSignature != null && preferredVersionSignature.isNotEmpty) {
     mediaIndex = MediaVersion.findMatchingIndex(versions, {preferredVersionSignature}) ?? mediaIndex;
+  } else if (FamilyProjectorProfile.enabled && mediaIndex == 0) {
+    mediaIndex = MediaVersion.findFamilyProjectorIndex(versions) ?? mediaIndex;
   }
   if (mediaIndex < 0 || mediaIndex >= versions.length) mediaIndex = 0;
   if (preferPlayable && !versions[mediaIndex].isPlayable) {

@@ -6,6 +6,7 @@ import '../utils/formatters.dart';
 import '../utils/json_utils.dart';
 import '../utils/resolution_label.dart';
 import 'media_part.dart';
+import 'media_stream.dart';
 
 part 'media_version.g.dart';
 
@@ -60,6 +61,14 @@ class MediaVersion {
   /// Defaults to true when file-access fields are absent. Plex only populates
   /// them when metadata is fetched with `checkFiles=1`.
   bool get isPlayable => parts.isEmpty || parts.any((part) => part.isPlayable);
+
+  Iterable<MediaStream> get _videoStreams => parts.expand((part) => part.streams).where(
+    (stream) => stream.kind == MediaStreamKind.video,
+  );
+
+  bool get isHdr => _videoStreams.any((stream) => stream.hdr);
+
+  bool get isDolbyVision => _videoStreams.any((stream) => stream.dolbyVision);
 
   /// Approximate vertical resolution, for ordering versions best-first.
   ///
@@ -157,6 +166,50 @@ class MediaVersion {
     }
 
     return null;
+  }
+
+  /// Pick a sofa-friendly source for a 1080p low-memory display.
+  ///
+  /// This does not impose a bitrate ceiling and never invents a transcode. It
+  /// only chooses among files the server already exposes, favouring a playable
+  /// 1080p SDR source over 4K/HDR/Dolby Vision. If there is no HD source at or
+  /// below the display resolution, the caller keeps the server's selection.
+  static int? findFamilyProjectorIndex(List<MediaVersion> versions) {
+    if (versions.length < 2) return null;
+
+    final candidates = <int>[];
+    for (var i = 0; i < versions.length; i++) {
+      final version = versions[i];
+      final height = version.resolutionHeight;
+      if (version.isPlayable && height != null && height >= 720 && height <= 1200) candidates.add(i);
+    }
+    if (candidates.isEmpty) return null;
+
+    int score(MediaVersion version) {
+      final height = version.resolutionHeight!;
+      var value = height >= 900 ? 100 : 70;
+      value -= ((height - 1080).abs() / 30).round();
+      if (!version.isHdr) value += 35;
+      if (version.isDolbyVision) value -= 20;
+      value += switch ((version.videoCodec ?? '').toLowerCase()) {
+        'h264' || 'avc' => 15,
+        'hevc' || 'h265' => 10,
+        'vp9' => 5,
+        _ => 0,
+      };
+      return value;
+    }
+
+    var best = candidates.first;
+    var bestScore = score(versions[best]);
+    for (final index in candidates.skip(1)) {
+      final candidateScore = score(versions[index]);
+      if (candidateScore > bestScore) {
+        best = index;
+        bestScore = candidateScore;
+      }
+    }
+    return best;
   }
 }
 

@@ -11,6 +11,38 @@ import '../utils/app_logger.dart';
 import '../utils/language_codes.dart';
 import '../utils/subtitle_forced_semantics.dart';
 import 'subtitle_preference.dart';
+import 'family_projector_profile.dart';
+
+int familyProjectorSubtitleRank(SubtitleTrack track) {
+  final language = (track.language ?? '').trim().toLowerCase().replaceAll('_', '-');
+  final title = (track.title ?? '').trim();
+  final simplifiedHint = title.contains('简') ||
+      RegExp(r'(^|[\s\[\(\-_.])(?:chs|sc)(?=$|[\s\]\)\-_.])', caseSensitive: false).hasMatch(title);
+  final traditionalHint = title.contains('繁') ||
+      RegExp(r'(^|[\s\[\(\-_.])(?:cht|tc)(?=$|[\s\]\)\-_.])', caseSensitive: false).hasMatch(title);
+
+  const simplified = {'zh-cn', 'zh-sg', 'zh-hans'};
+  const traditional = {'zh-tw', 'zh-hk', 'zh-mo', 'zh-hant'};
+  const genericChinese = {'zh', 'zho', 'chi', 'chinese'};
+  const unknown = {'', 'und', 'unknown'};
+
+  if (simplified.contains(language)) return 400;
+  if (traditional.contains(language)) return 300;
+  if (genericChinese.contains(language)) {
+    if (simplifiedHint) return 390;
+    if (traditionalHint) return 290;
+    return 200;
+  }
+  if (language == 'en' || language == 'eng' || language == 'english' || language.startsWith('en-')) return 100;
+
+  // Title hints are a fallback only when the server/player supplied no useful
+  // language metadata. A mislabeled English track must not outrank metadata.
+  if (unknown.contains(language)) {
+    if (simplifiedHint) return 380;
+    if (traditionalHint) return 280;
+  }
+  return 0;
+}
 
 // These functions match MPV tracks to Plex tracks by properties (language,
 // codec, title, etc.) instead of list index, since the two may be ordered
@@ -777,6 +809,20 @@ class TrackSelectionService {
     return null;
   }
 
+  SubtitleTrack? _findFamilyProjectorSubtitle(List<SubtitleTrack> availableTracks) {
+    SubtitleTrack? best;
+    var bestRank = 0;
+    for (final track in availableTracks) {
+      if (track.id == SubtitleTrack.auto.id || track.id == SubtitleTrack.off.id) continue;
+      final rank = familyProjectorSubtitleRank(track);
+      if (rank > bestRank) {
+        best = track;
+        bestRank = rank;
+      }
+    }
+    return best;
+  }
+
   SubtitleTrack? _findForcedSubtitleTrack(List<SubtitleTrack> availableTracks) {
     for (final track in availableTracks) {
       if (track.effectiveForced) return track;
@@ -1143,6 +1189,10 @@ class TrackSelectionService {
         }
       } else if (metadata.backend == MediaBackend.plex && info.subtitleTracks.isNotEmpty) {
         if (availableTracks.isEmpty && waitForPendingSource) return null;
+        if (FamilyProjectorProfile.enabled) {
+          final familyTrack = _findFamilyProjectorSubtitle(availableTracks);
+          if (familyTrack != null) return TrackSelectionResult(familyTrack, TrackSelectionPriority.profile);
+        }
         // Native tracks exist and none maps to a server-selected stream.
         return TrackSelectionResult(SubtitleTrack.off, TrackSelectionPriority.serverSelected);
       }
@@ -1154,6 +1204,11 @@ class TrackSelectionService {
     // a mode: PMS already folded it into `selected` above.
     final profileSelectedTrack = _selectSubtitleTrackByProfile(availableTracks, selectedAudioTrack);
     if (profileSelectedTrack != null) return profileSelectedTrack;
+
+    if (FamilyProjectorProfile.enabled) {
+      final familyTrack = _findFamilyProjectorSubtitle(availableTracks);
+      if (familyTrack != null) return TrackSelectionResult(familyTrack, TrackSelectionPriority.profile);
+    }
 
     // Priority 4: Check for default subtitle
     final defaultTrack = _findDefaultSubtitleTrack(availableTracks);
