@@ -7,11 +7,11 @@ A performance-focused Android TV build of [Plezy](https://github.com/edde746/ple
 
 This branch is intentionally separate from **Plezy GKUI**. GKUI is a compact API 19 client using native ExoPlayer; XGIMI Lite keeps the complete Plezy 2.22 interface and mpv/FFmpeg playback stack.
 
-> **Test release:** the APKs are installable and CI-verified, but playback still needs validation on the physical projector. Do not treat this as a production-signed release yet.
+> **Test release:** the APKs are installable, CI-verified, and signed with a permanent XGIMI Lite key, but playback still needs validation on the physical projector.
 
 ## Download
 
-Download the APKs from [Plezy XGIMI Lite 2.22.0 Test 2](https://github.com/jialim/plezy-gkui/releases/tag/xgimi-lite-v2.22.0-test2).
+Download the APKs from [Plezy XGIMI Lite 2.22.0 Test 4](https://github.com/jialim/plezy-gkui/releases/tag/xgimi-lite-v2.22.0-test4).
 
 | APK | Use it when |
 | --- | --- |
@@ -27,7 +27,7 @@ Both APKs contain exactly one native ABI. Release assets also include compressed
 3. Install the APK and complete Plex, Jellyfin, or Emby sign-in.
 4. Open **Settings → Advanced → View logs** and save the diagnostics header before testing playback.
 
-CI test releases use a new temporary signing key for each build. Android may report an incompatible signature when installing a newer test over an older one; uninstall the previous test build first. A stable protected signing key is required before normal in-place updates can be supported.
+Test 4 establishes the permanent signing identity for XGIMI Lite. Future releases signed with this key can update Test 4 in place while preserving sign-in and settings. Tests 1-3 used unrelated disposable keys; uninstall one of those legacy tests before installing Test 4. If you have not installed an earlier test, install Test 4 directly.
 
 ## Projector-focused defaults
 
@@ -85,7 +85,7 @@ Plezy GKUI is much smaller because it is a separate lightweight client that reli
 - A compatible 1080p version is preferred when Plex exposes one, but a single incompatible source can still reach Plezy's normal transcode fallback.
 - Strict refusal of all video transcoding is not enabled yet.
 - HEVC Main10, complex ASS subtitles, seek latency, dropped frames, thermal behavior, and 30+ minute memory stability need device testing.
-- The APKs use test-only signing and are published as pre-releases until hardware validation is complete.
+- The APKs are published as pre-releases until hardware validation is complete. Test 4 and later use the protected permanent XGIMI Lite signing key.
 
 See [XGIMI_LITE.md](XGIMI_LITE.md) for implementation details and [XGIMI_TESTING.md](XGIMI_TESTING.md) for the physical-device checklist.
 
@@ -102,7 +102,7 @@ flutter build apk --release --split-per-abi \
   '--dart-define=FAMILY_PROJECTOR_NAME=Plezy XGIMI Lite'
 ```
 
-Unsigned local release builds are not suitable for sideloading. The XGIMI workflow creates an ephemeral test keystore before building and deletes it before artifact upload.
+Unsigned local release builds are not suitable for sideloading. Branch releases require the protected XGIMI signing secrets; CI refuses to publish if they are missing. Pull-request checks may use an isolated temporary key. Key material is deleted before artifact upload.
 
 ## Upstream and license
 
