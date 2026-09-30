@@ -1,10 +1,11 @@
-# Plezy GKUI 1.2.7 — Keep Plex Default Tracks
+# Plezy GKUI 1.2.7 — Subtitles On by Default
 
 This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit. Phone remote and mirroring are intentionally excluded.
 
-## 1.2.7 keep Plex default tracks
+## 1.2.7 subtitles on by default
 
-- Fixes 1.2.6 turning on the first subtitle track, and picking the first audio track, for any title without a remembered choice. Such titles again use Plex's own defaults, including subtitles off.
+- Subtitles are on by default: a title without a remembered choice uses Plex's selected subtitle, or the first available one when Plex has none. Turning CC Off is still remembered for that title or show.
+- A title without a remembered audio choice uses Plex's default audio track again instead of the first one.
 - New releases are built, signed with the 1.2.5 certificate, checked and published automatically when a new version is merged.
 
 ## 1.2.6 car controls and track memory

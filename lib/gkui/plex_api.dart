@@ -409,6 +409,12 @@ PlexTrack? trackForPreference(
   return languageMatches.firstOrNull;
 }
 
+/// Subtitles are on by default in the car: Plex's selected subtitle when it
+/// has one, otherwise the first available track. Choosing CC Off is remembered
+/// per title/show and wins over this.
+PlexTrack? defaultSubtitleTrack(List<PlexTrack> tracks) =>
+    tracks.where((track) => track.selected).firstOrNull ?? tracks.firstOrNull;
+
 class PlexMedia {
   const PlexMedia({
     required this.ratingKey,

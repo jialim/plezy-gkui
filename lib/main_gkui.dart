@@ -9,7 +9,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'gkui/diagnostics.dart';
 import 'gkui/plex_api.dart';
 
-const String buildLabel = 'Plezy GKUI 1.2.7 / keep Plex default tracks';
+const String buildLabel = 'Plezy GKUI 1.2.7 / subtitles on by default';
 const String sourceLabel = 'Plezy 1.8.1 / GKUI compatibility fork';
 const String toolchainLabel = 'Flutter 3.19.6 / ExoPlayer 2.19.1 / API 19';
 const MethodChannel nativeChannel =
@@ -677,7 +677,7 @@ class GkuiController extends ChangeNotifier {
                 ordinal:
                     subtitleTrackId == null ? remembered.subtitleOrdinal : null,
               ) ??
-              versionSubtitles.where((track) => track.selected).firstOrNull;
+              defaultSubtitleTrack(versionSubtitles);
       final resolvedAudioTrackId = selectedAudio?.id;
       final resolvedSubtitleTrackId = requestedSubtitleId == 'off'
           ? 'off'
