@@ -7,6 +7,9 @@ import 'package:plezy/theme/mono_theme.dart';
 import 'package:plezy/utils/layout_constants.dart';
 
 void main() {
+  // Runs in the XGIMI build check, which sets FAMILY_PROJECTOR_MODE=true.
+  const skip = !FamilyProjectorProfile.enabled;
+
   test('projector profile uses ten-foot sizing', () {
     expect(FamilyProjectorProfile.enabled, isTrue);
     expect(FamilyProjectorProfile.uiScale, 1.2);
@@ -16,7 +19,7 @@ void main() {
     expect(FocusTheme.focusScale, 1.06);
     expect(FocusTheme.fullCardFocusScale, 1.07);
     expect(FocusTheme.playerControlFocusScale, 1.18);
-  });
+  }, skip: skip);
 
   test('projector palette stays highly legible on a low-contrast display', () {
     final theme = monoTheme(dark: true, oled: true);
@@ -28,7 +31,7 @@ void main() {
     expect(_contrast(scheme.onSurface, scheme.surface), greaterThanOrEqualTo(7));
     expect(_contrast(muted, scheme.surface), greaterThanOrEqualTo(7));
     expect(_contrast(scheme.onPrimary, scheme.primary), greaterThanOrEqualTo(7));
-  });
+  }, skip: skip);
 
   testWidgets('projector root enlarges a 1080p logical surface by 1.2x', (tester) async {
     tester.view.physicalSize = const Size(1920, 1080);
@@ -52,7 +55,7 @@ void main() {
 
     expect(media.size, const Size(1600, 900));
     expect(media.devicePixelRatio, 1.2);
-  });
+  }, skip: skip);
 }
 
 double _contrast(Color a, Color b) {

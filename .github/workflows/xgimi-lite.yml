@@ -4,6 +4,8 @@ on:
   push:
     branches: [plezy-xgimi-lite]
     tags: ['xgimi-lite-*']
+  pull_request:
+    branches: [plezy-xgimi-lite]
   workflow_dispatch:
     inputs:
       build_label:
@@ -38,30 +40,62 @@ jobs:
       - name: Resolve dependencies
         run: flutter pub get --enforce-lockfile --no-example
 
+      - name: Install wakelock_plus development dependencies
+        working-directory: packages/wakelock_plus
+        run: flutter pub get --enforce-lockfile --no-example
+
+      - name: Analyze
+        run: dart run scripts/checks/check_analyzer.dart
+
+      # The profile edits shared code (focus, theme, track and version
+      # selection), so the whole upstream suite must still pass.
+      - name: Upstream tests
+        run: flutter test
+
       - name: Verify XGIMI logic
         run: >-
           flutter test
           test/media/media_version_family_projector_test.dart
           test/services/family_projector_subtitle_test.dart
+          test/services/family_projector_subtitle_selection_test.dart
           test/services/family_projector_ui_test.dart
           --dart-define=FAMILY_PROJECTOR_MODE=true
 
-      - name: Configure test APK signing
+      # A stable key lets each new build install over the last one, keeping the
+      # projector's Plex sign-in and settings. Without the secrets, fall back to
+      # a throwaway key, which forces an uninstall between builds.
+      - name: Configure APK signing
         shell: bash
+        env:
+          XGIMI_KEYSTORE_BASE64: ${{ secrets.XGIMI_KEYSTORE_BASE64 }}
+          XGIMI_KEYSTORE_PASSWORD: ${{ secrets.XGIMI_KEYSTORE_PASSWORD }}
+          XGIMI_KEY_ALIAS: ${{ secrets.XGIMI_KEY_ALIAS }}
+          XGIMI_KEY_PASSWORD: ${{ secrets.XGIMI_KEY_PASSWORD }}
         run: |
-          keytool -genkeypair -noprompt \
-            -keystore android/app/xgimi-test-keystore.jks \
-            -storepass android \
-            -alias xgimi-test \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname 'CN=Plezy XGIMI Lite Test,O=Plezy,C=MY'
-          cat > android/key.properties <<'EOF'
-          storePassword=android
-          keyPassword=android
-          keyAlias=xgimi-test
+          if [ -n "$XGIMI_KEYSTORE_BASE64" ]; then
+            printf '%s' "$XGIMI_KEYSTORE_BASE64" | base64 -d > android/app/xgimi-test-keystore.jks
+            store_password="$XGIMI_KEYSTORE_PASSWORD"
+            key_alias="$XGIMI_KEY_ALIAS"
+            key_password="${XGIMI_KEY_PASSWORD:-$XGIMI_KEYSTORE_PASSWORD}"
+          else
+            echo "::warning::XGIMI_KEYSTORE_BASE64 is not set; signing with a throwaway key. Uninstall the previous build before installing this one."
+            store_password=android
+            key_alias=xgimi-test
+            key_password=android
+            keytool -genkeypair -noprompt \
+              -keystore android/app/xgimi-test-keystore.jks \
+              -storepass "$store_password" \
+              -alias "$key_alias" \
+              -keypass "$key_password" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname 'CN=Plezy XGIMI Lite Test,O=Plezy,C=MY'
+          fi
+          cat > android/key.properties <<EOF
+          storePassword=$store_password
+          keyPassword=$key_password
+          keyAlias=$key_alias
           storeFile=xgimi-test-keystore.jks
           EOF
 
@@ -96,3 +130,82 @@ jobs:
             plezy-xgimi-lite-*.apk
             plezy-xgimi-lite-*.tar.gz
           retention-days: 30
+
+  # Every change merged to the branch is published as the next test
+  # pre-release, so the projector always has a downloadable APK for it.
+  release:
+    needs: android
+    if: github.event_name == 'push' && github.ref == 'refs/heads/plezy-xgimi-lite'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: plezy-xgimi-lite-android
+          path: dist
+
+      - name: Publish test pre-release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNED_WITH_STABLE_KEY: ${{ secrets.XGIMI_KEYSTORE_BASE64 != '' }}
+        run: |
+          set -euo pipefail
+          prefix="xgimi-lite-v${XGIMI_VERSION}-test"
+          last=$(git tag --list "${prefix}*" | sed "s/^${prefix}//" | grep -E '^[0-9]+$' | sort -n | tail -1 || true)
+          number=$(( ${last:-0} + 1 ))
+          tag="${prefix}${number}"
+          label="test${number}"
+
+          cd dist
+          for file in *; do
+            mv "$file" "${file/sha-${GITHUB_SHA::7}/$label}"
+          done
+          arm64_sha=$(sha256sum *-arm64-v8a.apk | cut -d' ' -f1)
+          armv7_sha=$(sha256sum *-armeabi-v7a.apk | cut -d' ' -f1)
+          cd ..
+
+          if [ -n "$last" ]; then
+            changes=$(git log --no-merges --format='- %s' "${prefix}${last}..HEAD")
+          else
+            changes=$(git log -1 --format='- %s')
+          fi
+          if [ "$SIGNED_WITH_STABLE_KEY" = true ]; then
+            signing="Signed with the stable XGIMI Lite key, so it installs over the previous build."
+          else
+            signing="Signed with a throwaway test key. Uninstall the previous Plezy build before installing this one."
+          fi
+
+          cat > notes.md <<NOTES
+          ## Changes
+
+          ${changes}
+
+          ## Downloads
+
+          - **arm64-v8a**: try this first on most XGIMI projectors
+          - **armeabi-v7a**: use only if the arm64 APK does not install
+
+          The \`.tar.gz\` files contain the same APKs for download environments that block APK files.
+
+          ## Verification
+
+          GitHub Actions run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          - Source commit: ${GITHUB_SHA}
+          - arm64 APK SHA-256: \`${arm64_sha}\`
+          - armv7 APK SHA-256: \`${armv7_sha}\`
+
+          ${signing}
+          NOTES
+
+          gh release create "$tag" dist/* \
+            --target "$GITHUB_SHA" \
+            --title "Plezy XGIMI Lite ${XGIMI_VERSION} Test ${number}" \
+            --notes-file notes.md \
+            --prerelease
