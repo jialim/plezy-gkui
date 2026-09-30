@@ -43,6 +43,7 @@ jobs:
           flutter test
           test/media/media_version_family_projector_test.dart
           test/services/family_projector_subtitle_test.dart
+          test/services/family_projector_ui_test.dart
           --dart-define=FAMILY_PROJECTOR_MODE=true
 
       - name: Configure test APK signing

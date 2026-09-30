@@ -11,7 +11,7 @@ This branch is intentionally separate from **Plezy GKUI**. GKUI is a compact API
 
 ## Download
 
-Download the APKs from [Plezy XGIMI Lite 2.22.0 Test 1](https://github.com/jialim/plezy-gkui/releases/tag/xgimi-lite-v2.22.0-test1).
+Download the APKs from [Plezy XGIMI Lite 2.22.0 Test 2](https://github.com/jialim/plezy-gkui/releases/tag/xgimi-lite-v2.22.0-test2).
 
 | APK | Use it when |
 | --- | --- |
@@ -40,8 +40,12 @@ The `FAMILY_PROJECTOR_MODE` build profile seeds settings only when the user has 
 - audio passthrough disabled and stereo output selected
 - Direct Play preferred without an arbitrary bitrate ceiling
 - existing playable 1080p SDR versions preferred over 4K HDR/Dolby Vision versions
+- 1.2× ten-foot UI scale so 40 px controls render at least 48 px on a 1080p surface
+- high-contrast white text, distinct charcoal cards, and a thick amber focus ring
 
 Manual settings, explicit media-version choices, and server-selected tracks remain authoritative.
+
+The projector palette keeps a black background for dark-room viewing but avoids near-black cards that disappear on a low-contrast projection surface. Amber focus is reinforced by a 4 px outline and a larger focused-state scale, so navigation does not rely on colour alone.
 
 ## Chinese subtitle priority
 

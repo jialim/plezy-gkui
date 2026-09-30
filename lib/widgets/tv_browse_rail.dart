@@ -19,6 +19,7 @@ import '../media/media_item.dart';
 import '../navigation/main_screen_scope.dart';
 import '../screens/hub_detail_screen.dart';
 import '../services/device_performance.dart';
+import '../services/family_projector_profile.dart';
 import '../services/settings_service.dart';
 import '../theme/mono_tokens.dart';
 import '../utils/layout_constants.dart';
@@ -73,9 +74,9 @@ class TvBrowseRailLayoutMetrics {
 }
 
 class TvBrowseRailLayout {
-  static const double compactTallPosterScale = 0.8;
-  static const double compactEpisodeThumbnailScale = compactTallPosterScale;
-  static const double fullCardFocusScale = FocusTheme.fullCardFocusScale;
+  static double get compactTallPosterScale => FamilyProjectorProfile.enabled ? 0.9 : 0.8;
+  static double get compactEpisodeThumbnailScale => compactTallPosterScale;
+  static double get fullCardFocusScale => FocusTheme.fullCardFocusScale;
 
   static double scaleForSize(Size size) => TvLayoutConstants.scaleForSize(size);
 

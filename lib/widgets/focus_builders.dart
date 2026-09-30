@@ -83,7 +83,7 @@ class FocusBuilders {
     VoidCallback? onTap,
     VoidCallback? onLongPress,
     double borderRadius = FocusTheme.defaultBorderRadius,
-    double focusScale = FocusTheme.focusScale,
+    double? focusScale,
     bool useFocusGlow = false,
     bool delegateFocusBorder = false,
 
@@ -107,8 +107,9 @@ class FocusBuilders {
     }
 
     final duration = FocusTheme.getAnimationDuration(context);
+    final resolvedFocusScale = focusScale ?? FocusTheme.focusScale;
     final focusedWidget = AnimatedScale(
-      scale: isFocused ? focusScale : 1.0,
+      scale: isFocused ? resolvedFocusScale : 1.0,
       duration: duration,
       curve: Curves.easeOutCubic,
       child: buildFocusChrome(

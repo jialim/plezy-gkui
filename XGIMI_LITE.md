@@ -24,8 +24,12 @@ Build with `--dart-define=FAMILY_PROJECTOR_MODE=true`. The profile seeds default
 - automatic memory-aware playback buffer
 - Chinese subtitle search language
 - Direct Play for a source already covered by the selected quality
+- 1.2× ten-foot UI scaling for a 1080p projector surface
+- white primary text, brighter secondary text, distinct charcoal surfaces, and amber actions/focus
 
 Artwork remains sharp. Upstream 2.22.0 already caps reduced-tier artwork downloads at three concurrent requests, uses a 64 MiB Flutter image cache, caps the Skia cache, requests server-sized artwork, and avoids disk-side image re-decoding. XGIMI Lite preserves those mechanisms.
+
+The accessibility palette is tuned for an elderly viewer on a low-lumen projector in a dark room. A 4 px amber focus outline and larger focused-state scale remain visible even though the reduced-effects tier deliberately disables expensive blurred focus glows.
 
 ## Playback policy
 

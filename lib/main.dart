@@ -35,6 +35,7 @@ import 'screens/profile/profile_switch_screen.dart';
 import 'services/storage_service.dart';
 import 'services/assistive_technology_service.dart';
 import 'services/device_performance.dart';
+import 'services/family_projector_profile.dart';
 import 'services/video_decode_capabilities.dart';
 import 'services/macos_window_service.dart';
 import 'services/native_window_service.dart';
@@ -1927,6 +1928,12 @@ class FormFactorScale extends StatelessWidget {
     // behavior and overscan handling remain unchanged.
     if (PlatformDetector.isAppleTV()) {
       return _scaledSurface(child: child, scale: _appleTvScale, zeroInsets: true);
+    }
+    // This is a compile-time distribution profile, so apply its ten-foot
+    // scale even if an unusual projector firmware omits the Leanback feature.
+    // Safe-area insets remain real on Android and are preserved.
+    if (FamilyProjectorProfile.enabled) {
+      return _scaledSurface(child: child, scale: FamilyProjectorProfile.uiScale, zeroInsets: false);
     }
     if (!PlatformDetector.isAutomotive()) return child;
 

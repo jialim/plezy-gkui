@@ -167,7 +167,7 @@ class FocusableWrapper extends StatefulWidget {
   /// Useful for elements like sliders where scaling looks odd.
   final bool disableScale;
 
-  final double focusScale;
+  final double? focusScale;
 
   /// Whether to draw a glow around the focused widget.
   final bool useFocusGlow;
@@ -216,7 +216,7 @@ class FocusableWrapper extends StatefulWidget {
     this.useBackgroundFocus = false,
     this.focusColor,
     this.disableScale = false,
-    this.focusScale = FocusTheme.focusScale,
+    this.focusScale,
     this.useFocusGlow = false,
     this.delegateFocusBorder = false,
     this.descendantsAreFocusable = true,
@@ -262,7 +262,7 @@ class _FocusableWrapperState extends State<FocusableWrapper> with SingleTickerPr
   Animation<double> _createScaleAnimation(AnimationController controller) {
     return Tween<double>(
       begin: 1.0,
-      end: widget.focusScale,
+      end: widget.focusScale ?? FocusTheme.focusScale,
     ).animate(CurvedAnimation(parent: controller, curve: Curves.easeOutCubic));
   }
 

@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import '../services/device_performance.dart';
+import '../services/family_projector_profile.dart';
 import '../theme/mono_tokens.dart';
 import '../utils/platform_detector.dart';
 
 class FocusTheme {
   FocusTheme._();
 
-  static const double focusScale = 1.02;
-  static const double fullCardFocusScale = 1.03;
+  static double get focusScale => FamilyProjectorProfile.enabled ? FamilyProjectorProfile.focusScale : 1.02;
+  static double get fullCardFocusScale =>
+      FamilyProjectorProfile.enabled ? FamilyProjectorProfile.fullCardFocusScale : 1.03;
 
   /// Round 40px player controls: the card scale is imperceptible on a
   /// control that small, so the focused disc grows enough to be seen move.
-  static const double playerControlFocusScale = 1.12;
-  static const double focusBorderWidth = 2.5;
+  static double get playerControlFocusScale =>
+      FamilyProjectorProfile.enabled ? FamilyProjectorProfile.playerControlFocusScale : 1.12;
+  static double get focusBorderWidth =>
+      FamilyProjectorProfile.enabled ? FamilyProjectorProfile.focusBorderWidth : 2.5;
   static const double defaultBorderRadius = 8.0;
   static const double focusGlowInnerBlurRadius = 18;
   static const double focusGlowOuterBlurRadius = 34;
