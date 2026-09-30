@@ -1,0 +1,74 @@
+name: XGIMI Lite Android
+
+on:
+  push:
+    branches: [plezy-xgimi-lite]
+    tags: ['xgimi-lite-*']
+  workflow_dispatch:
+    inputs:
+      build_label:
+        description: Artifact suffix (for example test2)
+        default: test1
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: '3.47.1'
+  XGIMI_VERSION: '2.22.0'
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get --enforce-lockfile --no-example
+
+      - name: Verify XGIMI logic
+        run: >-
+          flutter test
+          test/media/media_version_family_projector_test.dart
+          test/services/family_projector_subtitle_test.dart
+          --dart-define=FAMILY_PROJECTOR_MODE=true
+
+      - name: Build ARM APKs
+        run: >-
+          flutter build apk --release --split-per-abi
+          --target-platform android-arm,android-arm64
+          --dart-define=FAMILY_PROJECTOR_MODE=true
+          --dart-define=FAMILY_PROJECTOR_NAME=Plezy XGIMI Lite
+          --dart-define=GIT_COMMIT=${{ github.sha }}
+
+      - name: Name sideload artifacts
+        shell: bash
+        env:
+          INPUT_LABEL: ${{ inputs.build_label }}
+        run: |
+          label="${INPUT_LABEL:-sha-${GITHUB_SHA::7}}"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "plezy-xgimi-lite-${XGIMI_VERSION}-${label}-arm64-v8a.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "plezy-xgimi-lite-${XGIMI_VERSION}-${label}-armeabi-v7a.apk"
+          tar -czf "plezy-xgimi-lite-${XGIMI_VERSION}-${label}-arm64-v8a.tar.gz" "plezy-xgimi-lite-${XGIMI_VERSION}-${label}-arm64-v8a.apk"
+          tar -czf "plezy-xgimi-lite-${XGIMI_VERSION}-${label}-armeabi-v7a.tar.gz" "plezy-xgimi-lite-${XGIMI_VERSION}-${label}-armeabi-v7a.apk"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: plezy-xgimi-lite-android
+          if-no-files-found: error
+          path: |
+            plezy-xgimi-lite-*.apk
+            plezy-xgimi-lite-*.tar.gz
+          retention-days: 30
