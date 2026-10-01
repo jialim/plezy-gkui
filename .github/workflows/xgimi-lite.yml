@@ -19,6 +19,10 @@ permissions:
 env:
   FLUTTER_VERSION: '3.47.1'
   XGIMI_VERSION: '2.22.0'
+  # SHA-256 of the permanent XGIMI Lite signing certificate (Test 4 onward).
+  # Publishing is refused for any APK signed with something else, so every
+  # release installs over the previous one without an uninstall.
+  XGIMI_CERT_SHA256: ebf36e62002238ae5e3d2cccb8fdd233c9a467e428bee5e377430e5871a7f3d0
 
 concurrency:
   group: xgimi-lite-${{ github.ref }}
@@ -183,6 +187,13 @@ jobs:
           cd dist
           for file in *; do
             mv "$file" "${file/sha-${GITHUB_SHA::7}/$label}"
+          done
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          for apk in *.apk; do
+            if ! "$apksigner" verify --print-certs "$apk" | grep -qi "certificate SHA-256 digest: ${XGIMI_CERT_SHA256}"; then
+              echo "::error::$apk is not signed with the permanent XGIMI Lite key; refusing to publish."
+              exit 1
+            fi
           done
           arm64_sha=$(sha256sum *-arm64-v8a.apk | cut -d' ' -f1)
           armv7_sha=$(sha256sum *-armeabi-v7a.apk | cut -d' ' -f1)
