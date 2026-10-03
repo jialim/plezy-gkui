@@ -11,7 +11,7 @@ This branch is intentionally separate from **Plezy GKUI**. GKUI is a compact API
 
 ## Download
 
-Download the APKs from [Plezy XGIMI Lite 2.22.0 Test 4](https://github.com/jialim/plezy-gkui/releases/tag/xgimi-lite-v2.22.0-test4).
+Download the APKs from [Plezy XGIMI Lite 2.22.0 Test 6](https://github.com/jialim/plezy-gkui/releases/tag/xgimi-lite-v2.22.0-test6).
 
 | APK | Use it when |
 | --- | --- |
@@ -27,7 +27,11 @@ Both APKs contain exactly one native ABI. Release assets also include compressed
 3. Install the APK and complete Plex, Jellyfin, or Emby sign-in.
 4. Open **Settings → Advanced → View logs** and save the diagnostics header before testing playback.
 
-Test 4 establishes the permanent signing identity for XGIMI Lite. Future releases signed with this key can update Test 4 in place while preserving sign-in and settings. Tests 1-3 used unrelated disposable keys; uninstall one of those legacy tests before installing Test 4. If you have not installed an earlier test, install Test 4 directly.
+Test 4 established the permanent signing identity for XGIMI Lite. Test 4 and later update in place while preserving sign-in and settings. Tests 1-3 used unrelated disposable keys and must be uninstalled before installing the current line.
+
+### Updating without USB
+
+From Test 6 onward, XGIMI Lite checks this repository's pre-releases and can download the APK that matches the installed ABI. Choose **Download and install** in the update prompt. Android still asks for confirmation; the first time, enable **Allow from this source** for Plezy and return to the app, which continues to the installer automatically. The APK is streamed to cache and its GitHub SHA-256 digest is verified before Android opens it.
 
 ## Projector-focused defaults
 
@@ -42,6 +46,8 @@ The `FAMILY_PROJECTOR_MODE` build profile seeds settings only when the user has 
 - existing playable 1080p SDR versions preferred over 4K HDR/Dolby Vision versions
 - 1.2× ten-foot UI scale so 40 px controls render at least 48 px on a 1080p surface
 - high-contrast white text, distinct charcoal cards, and a thick amber focus ring
+- a visible **Play from beginning** action whenever the main button would resume partially watched media
+- an in-app, integrity-checked updater for future XGIMI Lite releases
 
 Manual settings, explicit media-version choices, and server-selected tracks remain authoritative.
 

@@ -76,6 +76,10 @@ Every push to `plezy-xgimi-lite` that passes the checks is published as the next
 
 Branch releases are signed with the permanent key in the `XGIMI_KEYSTORE_BASE64`, `XGIMI_KEYSTORE_PASSWORD`, `XGIMI_KEY_ALIAS` and `XGIMI_KEY_PASSWORD` repository secrets, so Test 4 and later install over one another and keep the projector's sign-in and settings. The release workflow fails closed when any signing secret is missing; only pull-request checks may fall back to a throwaway key. Tests 1-3 used unrelated disposable keys and cannot be updated in place to Test 4. The key file is deleted before artifact packaging.
 
+Test 6 adds the XGIMI updater. It selects the newest `xgimi-lite-v2.22.0-test<N>` release, chooses the APK for the running process ABI, streams it to the app cache, verifies the SHA-256 digest supplied by GitHub, and opens Android's package installer. Android's install confirmation remains mandatory. On first use Android may also require **Allow from this source**; returning to Plezy resumes the pending install automatically. The stable Test 4+ certificate is Android's final protection against an unrelated APK replacing the app.
+
+Partially watched movies and episodes also expose a separate, labeled **Play from beginning** action in the projector detail screen. It sends an explicit zero start position through the normal playback path, leaving the ordinary Resume action and stored server progress intact.
+
 To create the key once:
 
 ```sh

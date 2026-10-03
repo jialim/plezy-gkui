@@ -93,6 +93,42 @@ void main() {
     );
   });
 
+  test('XGIMI release selection chooses the newest valid APK for the process ABI', () {
+    final digest = List.filled(64, 'a').join();
+
+    Map<String, Object?> release(
+      int number, {
+      bool draft = false,
+      bool includeDigest = true,
+    }) => {
+      'tag_name': 'xgimi-lite-v2.22.0-test$number',
+      'name': 'Test $number',
+      'draft': draft,
+      'target_commitish': 'commit-$number',
+      'html_url': 'https://example.com/test$number',
+      'published_at': '2026-10-0$number',
+      'assets': [
+        for (final abi in ['arm64-v8a', 'armeabi-v7a'])
+          {
+            'name': 'plezy-xgimi-lite-2.22.0-test$number-$abi.apk',
+            'browser_download_url': 'https://example.com/test$number-$abi.apk',
+            if (includeDigest) 'digest': 'sha256:$digest',
+          },
+      ],
+    };
+
+    final releases = [release(9, draft: true), release(8, includeDigest: false), release(6), release(7)];
+
+    final arm64 = UpdateService.selectXgimiRelease(releases, is64Bit: true);
+    expect(arm64?['testNumber'], 7);
+    expect(arm64?['installFileName'], endsWith('-arm64-v8a.apk'));
+    expect(arm64?['installSha256'], digest);
+
+    final armv7 = UpdateService.selectXgimiRelease(releases, is64Bit: false);
+    expect(armv7?['testNumber'], 7);
+    expect(armv7?['installFileName'], endsWith('-armeabi-v7a.apk'));
+  });
+
   for (final failure in failedResponses.entries) {
     test('startup ${failure.key} records cooldown before request and manual check bypasses it', () async {
       final prefs = await BaseSharedPreferencesService.sharedCache();

@@ -19,6 +19,9 @@ void main() {
     expect(FocusTheme.focusScale, 1.06);
     expect(FocusTheme.fullCardFocusScale, 1.07);
     expect(FocusTheme.playerControlFocusScale, 1.18);
+    expect(FamilyProjectorProfile.shouldOfferPlayFromBeginning(null), isFalse);
+    expect(FamilyProjectorProfile.shouldOfferPlayFromBeginning(0), isFalse);
+    expect(FamilyProjectorProfile.shouldOfferPlayFromBeginning(90 * 1000), isTrue);
   }, skip: skip);
 
   test('projector palette stays highly legible on a low-contrast display', () {

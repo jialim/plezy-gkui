@@ -123,6 +123,7 @@ class MainActivity : FlutterActivity() {
   private var activityStarted = false
   private val externalPlayerChannel = ExternalPlayerChannel(this)
   private val userCertificateChannel = UserCertificateChannel()
+  private val xgimiUpdateInstaller = XgimiUpdateInstaller(this)
   private val exitDiagnosticsRequested = AtomicBoolean(false)
 
   private inline fun logTextInputDiag(message: () -> String) {
@@ -758,6 +759,13 @@ class MainActivity : FlutterActivity() {
     tryReconnectFlutterSurface()
   }
 
+  override fun onResume() {
+    super.onResume()
+    // If Android sent the viewer to "Install unknown apps", continue with
+    // the already downloaded and verified APK as soon as they return.
+    xgimiUpdateInstaller.onResume()
+  }
+
   /**
    * Arm a one-shot re-assert of the hidden navigation bar after a fold-class
    * configuration change. The manifest keeps this activity alive across
@@ -970,6 +978,7 @@ class MainActivity : FlutterActivity() {
 
     externalPlayerChannel.attach(flutterEngine.dartExecutor.binaryMessenger)
     userCertificateChannel.attach(flutterEngine.dartExecutor.binaryMessenger)
+    xgimiUpdateInstaller.attach(flutterEngine.dartExecutor.binaryMessenger)
 
     // Splash screen theme: persist user's chosen theme for next launch (API 31+)
     MethodChannel(flutterEngine.dartExecutor.binaryMessenger, THEME_CHANNEL).setMethodCallHandler { call, result ->

@@ -44,6 +44,7 @@
     "connect": "Connect",
     "disconnect": "Disconnect",
     "play": "Play",
+    "playFromBeginning": "Play from beginning",
     "pause": "Pause",
     "resume": "Resume",
     "error": "Error",
@@ -112,6 +113,10 @@
     "currentVersion": "Current: ${version}",
     "skipVersion": "Skip This Version",
     "viewRelease": "View Release",
+    "downloadAndInstall": "Download and install",
+    "downloading": "Downloading ${version}…",
+    "allowInstall": "Allow Plezy to install apps. The installer will continue automatically when you return.",
+    "downloadFailed": "The update could not be downloaded or verified. Check the connection and try again.",
     "latestVersion": "You are on the latest version",
     "checkFailed": "Failed to check for updates"
   },

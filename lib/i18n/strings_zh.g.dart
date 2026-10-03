@@ -157,6 +157,7 @@ class Translations$common$zh extends Translations$common$en {
 	@override String get connect => '连接';
 	@override String get disconnect => '断开连接';
 	@override String get play => '播放';
+	@override String get playFromBeginning => '从头播放';
 	@override String get pause => '暂停';
 	@override String get resume => '继续';
 	@override String get error => '错误';
@@ -214,6 +215,10 @@ class Translations$update$zh extends Translations$update$en {
 	@override String currentVersion({required Object version}) => '当前版本：${version}';
 	@override String get skipVersion => '跳过此版本';
 	@override String get viewRelease => '查看发布详情';
+	@override String get downloadAndInstall => '下载并安装';
+	@override String downloading({required Object version}) => '正在下载 ${version}…';
+	@override String get allowInstall => '请允许 Plezy 安装应用。返回后会自动继续安装。';
+	@override String get downloadFailed => '无法下载或验证更新。请检查网络后重试。';
 	@override String get latestVersion => '当前已是最新版本';
 	@override String get checkFailed => '无法检查更新';
 }
@@ -3065,6 +3070,7 @@ extension on TranslationsZh {
 			'common.connect' => '连接',
 			'common.disconnect' => '断开连接',
 			'common.play' => '播放',
+			'common.playFromBeginning' => '从头播放',
 			'common.pause' => '暂停',
 			'common.resume' => '继续',
 			'common.error' => '错误',
@@ -3125,6 +3131,10 @@ extension on TranslationsZh {
 			'update.currentVersion' => ({required Object version}) => '当前版本：${version}',
 			'update.skipVersion' => '跳过此版本',
 			'update.viewRelease' => '查看发布详情',
+			'update.downloadAndInstall' => '下载并安装',
+			'update.downloading' => ({required Object version}) => '正在下载 ${version}…',
+			'update.allowInstall' => '请允许 Plezy 安装应用。返回后会自动继续安装。',
+			'update.downloadFailed' => '无法下载或验证更新。请检查网络后重试。',
 			'update.latestVersion' => '当前已是最新版本',
 			'update.checkFailed' => '无法检查更新',
 			'settings.title' => '设置',

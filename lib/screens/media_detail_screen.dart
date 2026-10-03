@@ -3206,7 +3206,7 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
     });
   }
 
-  Future<void> _playFirstEpisode() async {
+  Future<void> _playFirstEpisode({bool fromBeginning = false}) async {
     if (!_canUseDetail) return;
     // Loading seasons and resolving the first episode cost network round
     // trips; show the shared scoped loading dialog so Play gives immediate
@@ -3285,6 +3285,9 @@ class _MediaDetailScreenState extends State<MediaDetailScreen>
           metadata: episodeWithServerId,
           isOffline: widget.isOffline,
           onRefresh: _refreshWatchState,
+          resolveWatchState: !fromBeginning,
+          initialPosition: fromBeginning ? Duration.zero : null,
+          explicitStartPolicy: fromBeginning,
           isLaunchCurrent: () => _canUseDetail,
         );
       }

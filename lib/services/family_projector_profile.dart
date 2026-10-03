@@ -25,4 +25,8 @@ abstract final class FamilyProjectorProfile {
     'FAMILY_PROJECTOR_NAME',
     defaultValue: 'Plezy XGIMI Lite',
   );
+
+  /// The explicit start-over action is useful only when ordinary Play would
+  /// resume meaningful progress. Keep it out of standard Plezy builds.
+  static bool shouldOfferPlayFromBeginning(int? viewOffsetMs) => enabled && (viewOffsetMs ?? 0) > 0;
 }

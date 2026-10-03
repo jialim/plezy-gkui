@@ -76,6 +76,11 @@ class DevicePerformance {
   /// before init. Used to scale memory-watchdog thresholds to the device.
   static int? get totalMemBytes => _singleton.instance?._totalMemBytes;
 
+  /// Whether this app process is using a 64-bit ABI. The XGIMI updater uses
+  /// the process ABI—not merely the device ABI—to download an APK that can
+  /// replace the currently installed split build.
+  static bool? get is64BitProcess => _singleton.instance?._is64Bit;
+
   /// Auto-detected low-end hardware (32-bit process / low-RAM / ≤2.2 GiB),
   /// independent of the visual-effects override. Use this for decisions tied to
   /// the hardware itself — e.g. the codec→display video pipeline on cheap TV

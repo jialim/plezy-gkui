@@ -239,6 +239,9 @@ class Translations$common$en {
 	/// en: 'Play'
 	String get play => 'Play';
 
+	/// en: 'Play from beginning'
+	String get playFromBeginning => 'Play from beginning';
+
 	/// en: 'Pause'
 	String get pause => 'Pause';
 
@@ -371,6 +374,18 @@ class Translations$update$en {
 
 	/// en: 'View Release'
 	String get viewRelease => 'View Release';
+
+	/// en: 'Download and install'
+	String get downloadAndInstall => 'Download and install';
+
+	/// en: 'Downloading ${version}…'
+	String downloading({required Object version}) => 'Downloading ${version}…';
+
+	/// en: 'Allow Plezy to install apps. The installer will continue automatically when you return.'
+	String get allowInstall => 'Allow Plezy to install apps. The installer will continue automatically when you return.';
+
+	/// en: 'The update could not be downloaded or verified. Check the connection and try again.'
+	String get downloadFailed => 'The update could not be downloaded or verified. Check the connection and try again.';
 
 	/// en: 'You are on the latest version'
 	String get latestVersion => 'You are on the latest version';
@@ -7356,6 +7371,7 @@ extension on Translations {
 			'common.connect' => 'Connect',
 			'common.disconnect' => 'Disconnect',
 			'common.play' => 'Play',
+			'common.playFromBeginning' => 'Play from beginning',
 			'common.pause' => 'Pause',
 			'common.resume' => 'Resume',
 			'common.error' => 'Error',
@@ -7416,6 +7432,10 @@ extension on Translations {
 			'update.currentVersion' => ({required Object version}) => 'Current: ${version}',
 			'update.skipVersion' => 'Skip This Version',
 			'update.viewRelease' => 'View Release',
+			'update.downloadAndInstall' => 'Download and install',
+			'update.downloading' => ({required Object version}) => 'Downloading ${version}…',
+			'update.allowInstall' => 'Allow Plezy to install apps. The installer will continue automatically when you return.',
+			'update.downloadFailed' => 'The update could not be downloaded or verified. Check the connection and try again.',
 			'update.latestVersion' => 'You are on the latest version',
 			'update.checkFailed' => 'Failed to check for updates',
 			'settings.title' => 'Settings',

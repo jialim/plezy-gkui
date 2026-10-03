@@ -44,6 +44,7 @@
     "connect": "连接",
     "disconnect": "断开连接",
     "play": "播放",
+    "playFromBeginning": "从头播放",
     "pause": "暂停",
     "resume": "继续",
     "error": "错误",
@@ -112,6 +113,10 @@
     "currentVersion": "当前版本：${version}",
     "skipVersion": "跳过此版本",
     "viewRelease": "查看发布详情",
+    "downloadAndInstall": "下载并安装",
+    "downloading": "正在下载 ${version}…",
+    "allowInstall": "请允许 Plezy 安装应用。返回后会自动继续安装。",
+    "downloadFailed": "无法下载或验证更新。请检查网络后重试。",
     "latestVersion": "当前已是最新版本",
     "checkFailed": "无法检查更新"
   },

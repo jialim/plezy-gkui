@@ -516,6 +516,9 @@ Future<bool?> navigateToVideoPlayerWithRefresh(
   int? selectedMediaIndex,
   String? selectedMediaSourceId,
   bool usePushReplacement = false,
+  bool resolveWatchState = true,
+  Duration? initialPosition,
+  bool explicitStartPolicy = false,
   bool Function()? isLaunchCurrent,
 }) async {
   final result = await navigateToVideoPlayer(
@@ -528,6 +531,9 @@ Future<bool?> navigateToVideoPlayerWithRefresh(
     selectedMediaIndex: selectedMediaIndex,
     selectedMediaSourceId: selectedMediaSourceId,
     usePushReplacement: usePushReplacement,
+    resolveWatchState: resolveWatchState,
+    initialPosition: initialPosition,
+    explicitStartPolicy: explicitStartPolicy,
     isLaunchCurrent: isLaunchCurrent,
   );
 

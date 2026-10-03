@@ -31,6 +31,15 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     final playIconSize = isTv ? 22 * tvScale : 20.0;
     final playTextStyle = TextStyle(fontSize: isTv ? 17 * tvScale : 16, fontWeight: .w700);
     final playButtonIcon = AppIcon(playIcon, fill: 1, size: playIconSize);
+    final startOverLabel = t.common.playFromBeginning;
+
+    final MediaItem? currentPlayTarget = metadata.isShow
+        ? _showPlayEpisode()
+        : metadata.isSeason
+        ? (_episodes.isEmpty ? null : _episodes.first)
+        : metadata;
+    final freshPlayTarget = currentPlayTarget == null ? null : _fresh(currentPlayTarget);
+    final showStartOver = FamilyProjectorProfile.shouldOfferPlayFromBeginning(freshPlayTarget?.viewOffsetMs);
 
     // Split "Play Version" segment (#1881): a visible second Play segment
     // that surfaces multiple versions without opening the ⋮ menu. Only when
@@ -60,6 +69,17 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
           )
         : null;
 
+    Future<void> playItem(MediaItem item, {bool fromBeginning = false}) => navigateToVideoPlayerWithRefresh(
+      context,
+      metadata: item,
+      isOffline: widget.isOffline,
+      onRefresh: _refreshWatchState,
+      resolveWatchState: !fromBeginning,
+      initialPosition: fromBeginning ? Duration.zero : null,
+      explicitStartPolicy: fromBeginning,
+      isLaunchCurrent: () => _canUseDetail,
+    );
+
     Future<void> onPlayPressed() async {
       if (!_canUseDetail) return;
       // For TV shows, play the episode the hero describes (focused on TV,
@@ -68,39 +88,32 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
         final episode = _showPlayEpisode();
         if (episode != null) {
           appLogger.d('Playing episode: ${episode.title}');
-          await navigateToVideoPlayerWithRefresh(
-            context,
-            metadata: episode,
-            isOffline: widget.isOffline,
-            onRefresh: _refreshWatchState,
-            isLaunchCurrent: () => _canUseDetail,
-          );
+          await playItem(episode);
         } else {
           await _playFirstEpisode();
         }
       } else if (metadata.isSeason) {
         // For seasons, play the first episode
         if (_episodes.isNotEmpty) {
-          await navigateToVideoPlayerWithRefresh(
-            context,
-            metadata: _episodes.first,
-            isOffline: widget.isOffline,
-            onRefresh: _refreshWatchState,
-            isLaunchCurrent: () => _canUseDetail,
-          );
+          await playItem(_episodes.first);
         } else {
           await _playFirstEpisode();
         }
       } else {
         appLogger.d('Playing: ${metadata.title}');
         // For movies or episodes, play directly
-        await navigateToVideoPlayerWithRefresh(
-          context,
-          metadata: metadata,
-          isOffline: widget.isOffline,
-          onRefresh: _refreshWatchState,
-          isLaunchCurrent: () => _canUseDetail,
-        );
+        await playItem(metadata);
+      }
+    }
+
+    Future<void> onStartOverPressed() async {
+      if (!_canUseDetail) return;
+      final target = currentPlayTarget;
+      if (target != null) {
+        appLogger.d('Playing from beginning: ${target.title}');
+        await playItem(target, fromBeginning: true);
+      } else {
+        await _playFirstEpisode(fromBeginning: true);
       }
     }
 
@@ -229,6 +242,33 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
       );
     }
 
+    Widget startOverButton(FocusableActionBuildState state) {
+      return Semantics(
+        label: startOverLabel,
+        button: true,
+        onTap: onStartOverPressed,
+        excludeSemantics: true,
+        child: SizedBox(
+          height: actionSize,
+          child: FilledButton(
+            onPressed: onStartOverPressed,
+            style: actionButtonStyle(
+              showFocus: state.showFocus,
+              padding: .symmetric(horizontal: isTv ? 17 * tvScale : 16, vertical: isTv ? 9 * tvScale : 0),
+            ),
+            child: Row(
+              mainAxisSize: .min,
+              children: [
+                AppIcon(Symbols.replay_rounded, fill: 1, size: playIconSize),
+                SizedBox(width: isTv ? 7 * tvScale : 8),
+                Text(startOverLabel, style: playTextStyle),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     Widget iconActionButton(
       FocusableActionBuildState state, {
       required Widget icon,
@@ -259,6 +299,14 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
             spacingBefore: splitGap,
             onPressed: onPlayVersionPressed,
             builder: (context, state) => versionButton(state),
+          )
+        : null;
+
+    final startOverAction = showStartOver
+        ? FocusableAction(
+            debugLabel: 'detail_play_from_beginning',
+            onPressed: onStartOverPressed,
+            builder: (context, state) => startOverButton(state),
           )
         : null;
 
@@ -360,6 +408,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     final allActions = <FocusableAction>[
       playAction,
       ?versionAction,
+      ?startOverAction,
       ?trailerAction,
       ?shuffleAction,
       ?downloadAction,
@@ -383,11 +432,25 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     }
 
     final estimatedPlayWidth = playButtonWidthEstimate();
+    final startOverTextPainter = TextPainter(
+      text: TextSpan(text: startOverLabel, style: playTextStyle),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+    )..layout();
+    final estimatedStartOverWidth =
+        (startOverTextPainter.width + (isTv ? 34.0 * tvScale : 32.0) + playIconSize + (isTv ? 7.0 * tvScale : 8.0))
+            .clamp(64.0, double.infinity)
+            .toDouble();
+    startOverTextPainter.dispose();
     double estimatedRowWidth(List<FocusableAction> actions) {
       if (actions.isEmpty) return 0;
       var width = estimatedPlayWidth;
       for (var i = 1; i < actions.length; i++) {
-        final actionWidth = identical(actions[i], versionAction) ? versionSegmentWidth : actionSize;
+        final actionWidth = identical(actions[i], versionAction)
+            ? versionSegmentWidth
+            : identical(actions[i], startOverAction)
+            ? estimatedStartOverWidth
+            : actionSize;
         width += (actions[i].spacingBefore ?? gap) + actionWidth;
       }
       return width;
@@ -400,13 +463,20 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
         return compact;
       }
 
-      final medium = <FocusableAction>[playAction, ?versionAction, ?downloadAction, watchedAction, ?moreActionsAction];
+      final medium = <FocusableAction>[
+        playAction,
+        ?versionAction,
+        ?startOverAction,
+        ?downloadAction,
+        watchedAction,
+        ?moreActionsAction,
+      ];
       if (!maxWidth.isFinite || estimatedRowWidth(medium) <= maxWidth) return medium;
 
-      final compact = <FocusableAction>[playAction, ?versionAction, watchedAction, ?moreActionsAction];
+      final compact = <FocusableAction>[playAction, ?versionAction, ?startOverAction, watchedAction, ?moreActionsAction];
       if (estimatedRowWidth(compact) <= maxWidth) return compact;
 
-      return [playAction, ?versionAction, ?moreActionsAction];
+      return [playAction, ?versionAction, ?startOverAction, ?moreActionsAction];
     }
 
     Widget actionBar(List<FocusableAction> actions) {
