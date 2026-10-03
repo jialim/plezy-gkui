@@ -128,4 +128,39 @@ void main() {
     expect(tester.takeException(), isNull);
     controller.dispose();
   });
+
+  testWidgets('details offer resume and start-over at 800x480', (tester) async {
+    tester.view.physicalSize = const Size(800, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = GkuiController();
+    controller.api = await PlexApi.create(controller.logs);
+    controller.api!.session = const PlexSession(
+      accountToken: 'account',
+      serverToken: 'server',
+      serverName: 'Test PMS',
+      serverId: 'machine',
+      baseUrl: 'https://example.test',
+    );
+    const episode = PlexMedia(
+      ratingKey: '7',
+      key: '/library/metadata/7',
+      type: 'episode',
+      title: 'Pilot',
+      subtitle: 'Some Show',
+      parentIndex: 1,
+      index: 3,
+      durationMs: 45 * 60000,
+      viewOffsetMs: 754000,
+    );
+    await tester.pumpWidget(MaterialApp(
+        home: DetailsScreen(media: episode, controller: controller)));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Resume from 12:34'), findsOneWidget);
+    expect(find.text('Play from start'), findsOneWidget);
+    expect(find.textContaining('S1 E3'), findsWidgets);
+    expect(tester.takeException(), isNull);
+    controller.dispose();
+  });
 }

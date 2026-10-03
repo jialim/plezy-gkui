@@ -78,6 +78,9 @@ class PlayerActivity : Activity() {
     private var playerView: StyledPlayerView? = null
     private var trackSelector: DefaultTrackSelector? = null
     private var skipButton: Button? = null
+    private var statusLabel: TextView? = null
+    private var reconnecting = false
+    private var bufferingSinceMs = 0L
     private var controlPanel: LinearLayout? = null
     private var playPauseButton: Button? = null
     private var audioButton: Button? = null
@@ -162,6 +165,7 @@ class PlayerActivity : Activity() {
             }
             updateCarControls(exo)
             resetReconnectBudgetIfStable(exo, now)
+            updateBufferingStatus(exo, now)
             checkStartupProgress(exo, now)
             if (completed) return
             updateSkipButton(exo.currentPosition)
@@ -214,19 +218,29 @@ class PlayerActivity : Activity() {
     private fun initializePlayer(url: String, headers: Map<String, String>) {
         require(Uri.parse(url).scheme == "https") { "Playback requires HTTPS" }
         diagnostics.add("Player: native HTTPS, TLS 1.2, Plex Generation-Y trust")
-        val okHttpClient = LegacyTls.createClient(this, diagnostics)
+        // A slow Zurg read is retried by the loader below; a longer read
+        // timeout avoids abandoning a request that is about to deliver.
+        val okHttpClient = LegacyTls.createClient(this, diagnostics, readTimeoutSeconds = 30L)
         playbackHttpClient = okHttpClient
         val httpFactory = OkHttpDataSource.Factory(okHttpClient)
             .setDefaultRequestProperties(headers)
             .setTransferListener(startupTransferListener)
 
-        // Small buffers are intentional: this head unit reports a 64 MiB app heap.
+        // The byte cap follows the app heap (64 MiB on this head unit); the
+        // longer durations ride out Zurg read pauses instead of stuttering.
+        val targetBufferBytes = StreamResilience.targetBufferBytes(Runtime.getRuntime().maxMemory())
         val loadControl = DefaultLoadControl.Builder()
             .setAllocator(DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE))
-            .setBufferDurationsMs(5_000, 18_000, 1_000, 2_500)
-            .setTargetBufferBytes(12 * 1024 * 1024)
+            .setBufferDurationsMs(
+                StreamResilience.MIN_BUFFER_MS,
+                StreamResilience.MAX_BUFFER_MS,
+                StreamResilience.BUFFER_FOR_PLAYBACK_MS,
+                StreamResilience.BUFFER_AFTER_REBUFFER_MS,
+            )
+            .setTargetBufferBytes(targetBufferBytes)
             .setPrioritizeTimeOverSizeThresholds(false)
             .build()
+        diagnostics.add("Player buffer: ${targetBufferBytes / (1024 * 1024)} MiB, ${StreamResilience.LOAD_RETRY_COUNT} read retries")
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
@@ -265,7 +279,10 @@ class PlayerActivity : Activity() {
         trackSelector.parameters = trackParameters.build()
         diagnostics.add("Player setup: creating ExoPlayer")
         val exo = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(httpFactory)
+                    .setLoadErrorHandlingPolicy(ZurgLoadErrorHandlingPolicy()),
+            )
             .setLoadControl(loadControl)
             .setTrackSelector(trackSelector)
             .setSeekBackIncrementMs(seekBackMs)
@@ -324,6 +341,20 @@ class PlayerActivity : Activity() {
             FrameLayout.LayoutParams.WRAP_CONTENT,
             Gravity.END or Gravity.CENTER_VERTICAL,
         ).apply { setMargins(0, 0, dp(28), 0) })
+        val status = TextView(this).apply {
+            visibility = View.GONE
+            textSize = 20f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(dp(22), dp(10), dp(22), dp(10))
+            background = carButtonBackground(0xD0161616.toInt())
+        }
+        statusLabel = status
+        root.addView(status, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.CENTER_HORIZONTAL,
+        ).apply { setMargins(0, dp(24), 0, 0) })
         setContentView(root)
         showControls()
 
@@ -356,7 +387,38 @@ class PlayerActivity : Activity() {
                     recoveredAtMs = 0L
                 }
                 updateCarControls(exo)
+                when (state) {
+                    Player.STATE_BUFFERING -> if (bufferingSinceMs == 0L) {
+                        bufferingSinceMs = SystemClock.elapsedRealtime()
+                    }
+                    else -> bufferingSinceMs = 0L
+                }
+                if (state == Player.STATE_READY) {
+                    if (reconnecting) {
+                        diagnostics.add("Player: reconnected")
+                        failureKind = null
+                    }
+                    reconnecting = false
+                    hideStatus()
+                }
                 if (state == Player.STATE_ENDED) {
+                    // A Zurg read that is cut off can look like a clean end of
+                    // file. Resume just past it instead of closing the video.
+                    val position = exo.currentPosition
+                    val duration = exo.duration.takeIf { it > 0L } ?: mediaDurationMs
+                    if (renderedFirstFrame && StreamResilience.endedEarly(position, duration) &&
+                        scheduleReconnect("stream ended early at ${formatTime(position)}", position + 1_000L)
+                    ) {
+                        return
+                    }
+                    if (renderedFirstFrame && StreamResilience.endedEarly(position, duration)) {
+                        // Not a real ending: keep it out of watched and autoplay.
+                        failureKind = "network"
+                        playbackError = "STREAM_ENDED_EARLY: stream stopped at ${formatTime(position)}"
+                        diagnostics.add("Player failed: $playbackError")
+                        window.decorView.post { finishWithResult(playbackError) }
+                        return
+                    }
                     ended = true
                     window.decorView.postDelayed({ finishWithResult(null) }, 350L)
                 }
@@ -413,22 +475,9 @@ class PlayerActivity : Activity() {
                 playbackError = "${error.errorCodeName}: ${PlaybackDiagnostics.describe(error)}" +
                     (http?.let { "; HTTP ${it.responseCode}" } ?: "")
                 diagnostics.add("Player failed: $playbackError")
-                if (failureKind == "network" && automaticRetries < 2 && !completed) {
-                    automaticRetries += 1
-                    diagnostics.add("Player: reconnect retry $automaticRetries of 2")
-                    window.decorView.postDelayed({
-                        if (!completed) {
-                            playbackError = null
-                            val retryStartedAt = SystemClock.elapsedRealtime()
-                            startupAttemptStartedAtMs = retryStartedAt
-                            lastStartupProgressAtMs = retryStartedAt
-                            lastBufferedPositionMs = exo.bufferedPosition
-                            readyWithoutFrameAtMs = 0L
-                            recoveredAtMs = 0L
-                            exo.prepare()
-                            exo.playWhenReady = true
-                        }
-                    }, 1_500L * automaticRetries)
+                if (StreamResilience.isReconnectable(failureKind, http?.responseCode) &&
+                    scheduleReconnect("connection lost")
+                ) {
                     return
                 }
                 window.decorView.post { finishWithResult(playbackError) }
@@ -960,9 +1009,57 @@ class PlayerActivity : Activity() {
             .show()
     }
 
+    /** Reopens the same stream after a dropout; false once this dropout's attempts are spent. */
+    private fun scheduleReconnect(reason: String, resumeAtMs: Long? = null): Boolean {
+        val exo = player ?: return false
+        if (completed || automaticRetries >= StreamResilience.RECONNECT_ATTEMPTS) return false
+        automaticRetries += 1
+        val attempt = automaticRetries
+        val total = StreamResilience.RECONNECT_ATTEMPTS
+        diagnostics.add("Player: $reason; reconnect $attempt of $total")
+        reconnecting = true
+        showStatus("Reconnecting to Plex ($attempt of $total)…")
+        window.decorView.postDelayed({
+            if (!completed && player === exo) {
+                playbackError = null
+                val retryStartedAt = SystemClock.elapsedRealtime()
+                startupAttemptStartedAtMs = retryStartedAt
+                lastStartupProgressAtMs = retryStartedAt
+                lastBufferedPositionMs = exo.bufferedPosition
+                readyWithoutFrameAtMs = 0L
+                recoveredAtMs = 0L
+                if (resumeAtMs != null) exo.seekTo(resumeAtMs)
+                exo.prepare()
+                exo.playWhenReady = true
+            }
+        }, StreamResilience.reconnectDelayMs(attempt))
+        return true
+    }
+
+    private fun showStatus(text: String) {
+        statusLabel?.text = text
+        statusLabel?.visibility = View.VISIBLE
+    }
+
+    private fun hideStatus() {
+        statusLabel?.visibility = View.GONE
+    }
+
+    /** Tells the driver a mid-video pause is the server, not a frozen app. */
+    private fun updateBufferingStatus(exo: ExoPlayer, now: Long) {
+        if (reconnecting || !renderedFirstFrame) return
+        if (exo.playbackState == Player.STATE_BUFFERING && bufferingSinceMs > 0L &&
+            now - bufferingSinceMs >= 3_000L
+        ) {
+            showStatus("Waiting for the server…")
+        } else {
+            hideStatus()
+        }
+    }
+
     private fun resetReconnectBudgetIfStable(exo: ExoPlayer, now: Long) {
         // Reconnect retries are for each dropout, not for the whole video: after
-        // 30 seconds of steady playback a later mobile-data drop gets 2 fresh tries.
+        // 30 seconds of steady playback a later dropout gets fresh tries.
         if (automaticRetries == 0) return
         if (!exo.isPlaying) {
             recoveredAtMs = 0L
@@ -1035,12 +1132,14 @@ class PlayerActivity : Activity() {
         val exo = player
         when (keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS,
             KeyEvent.KEYCODE_MEDIA_REWIND -> {
                 queueSeek(-seekBackMs)
                 showControls()
                 return true
             }
             KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_MEDIA_NEXT,
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
                 queueSeek(seekForwardMs)
                 showControls()
@@ -1051,6 +1150,21 @@ class PlayerActivity : Activity() {
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                 if (exo?.isPlaying == true) exo.pause() else exo?.play()
                 showControls()
+                return true
+            }
+            // Steering-wheel buttons often send separate play and pause keys.
+            KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                exo?.play()
+                showControls()
+                return true
+            }
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                exo?.pause()
+                showControls()
+                return true
+            }
+            KeyEvent.KEYCODE_MEDIA_STOP -> {
+                finishWithResult(playbackError)
                 return true
             }
         }
