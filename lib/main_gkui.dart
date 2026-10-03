@@ -9,7 +9,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'gkui/diagnostics.dart';
 import 'gkui/plex_api.dart';
 
-const String buildLabel = 'Plezy GKUI 1.2.7 / subtitles on by default';
+const String buildLabel = 'Plezy GKUI 1.2.8 / steadier streams';
 const String sourceLabel = 'Plezy 1.8.1 / GKUI compatibility fork';
 const String toolchainLabel = 'Flutter 3.19.6 / ExoPlayer 2.19.1 / API 19';
 const MethodChannel nativeChannel =
@@ -143,6 +143,46 @@ PlaybackMode? playbackFallback(PlaybackMode mode, String? failureKind) {
   };
 }
 
+/// A playing stream that dropped gets one automatic resume from where it
+/// stopped; a video that never started keeps the normal failure dialog.
+bool shouldAutoResume(
+        {required bool renderedFrame,
+        required String? failureKind,
+        required bool alreadyResumed}) =>
+    renderedFrame &&
+    !alreadyResumed &&
+    (failureKind == 'network' || failureKind == 'http');
+
+String formatPlaybackTime(int milliseconds) {
+  final total = (milliseconds < 0 ? 0 : milliseconds) ~/ 1000;
+  final hours = total ~/ 3600;
+  final minutes = (total % 3600) ~/ 60;
+  final seconds = total % 60;
+  String two(int value) => value.toString().padLeft(2, '0');
+  return hours > 0
+      ? '$hours:${two(minutes)}:${two(seconds)}'
+      : '${two(minutes)}:${two(seconds)}';
+}
+
+String formatRuntime(int milliseconds) {
+  final minutes = (milliseconds / 60000).round();
+  if (minutes < 60) return '$minutes min';
+  final rest = minutes % 60;
+  return rest == 0 ? '${minutes ~/ 60} h' : '${minutes ~/ 60} h $rest min';
+}
+
+String? episodeLabel(PlexMedia media) {
+  if (media.type != 'episode') return null;
+  final number = <String>[
+    if (media.parentIndex != null) 'S${media.parentIndex}',
+    if (media.index != null) 'E${media.index}',
+  ].join(' ');
+  return <String>[
+    if (number.isNotEmpty) number,
+    if (media.subtitle != null && media.subtitle!.isNotEmpty) media.subtitle!,
+  ].join(' · ');
+}
+
 int playbackStartupHardTimeoutMs(PlaybackMode mode) =>
     mode == PlaybackMode.direct ? 90000 : 120000;
 
@@ -182,6 +222,10 @@ class GkuiController extends ChangeNotifier {
   String? lastVideoFormat;
   int? lastStartupNetworkBytes;
   String? lastPlaybackFailure;
+  // What this car last played, so screens opened before playback show the
+  // new resume point instead of the one Plex returned when they loaded.
+  final Map<String, int> _localProgress = <String, int>{};
+  final Set<String> _locallyWatched = <String>{};
   bool loadingContent = false;
   bool searching = false;
   bool loadingMoreLibrary = false;
@@ -195,6 +239,17 @@ class GkuiController extends ChangeNotifier {
   bool disposed = false;
 
   bool get clockValid => DateTime.now().year >= 2024;
+
+  int resumeOffsetFor(PlexMedia media) =>
+      _localProgress[media.ratingKey] ?? media.viewOffsetMs;
+
+  bool isWatched(PlexMedia media) =>
+      media.watched || _locallyWatched.contains(media.ratingKey);
+
+  void _clearLocalProgress() {
+    _localProgress.clear();
+    _locallyWatched.clear();
+  }
 
   Future<void> initialize() async {
     logs.add('Starting consolidated GKUI build.');
@@ -524,6 +579,7 @@ class GkuiController extends ChangeNotifier {
       await api!.saveCurrentHomeUser(user);
       await api!.clearContentCache();
       currentHomeUser = user;
+      _clearLocalProgress();
       shelves = const <PlexShelf>[];
       libraryItems = const <PlexMedia>[];
       searchResults = const <PlexMedia>[];
@@ -580,6 +636,7 @@ class GkuiController extends ChangeNotifier {
     periodicRefresh?.cancel();
     periodicRefresh = null;
     await api?.signOut();
+    _clearLocalProgress();
     shelves = const <PlexShelf>[];
     sections = const <PlexSection>[];
     libraryItems = const <PlexMedia>[];
@@ -600,8 +657,12 @@ class GkuiController extends ChangeNotifier {
       {int? mediaIndex,
       String? audioTrackId,
       String? subtitleTrackId,
+      int? startMs,
+      bool autoResumed = false,
       bool allowAutoNext = true}) async {
     String? failureKind;
+    var renderedFrame = false;
+    int? resumeAtMs = startMs;
     PlaybackRequest? activeRequest;
     var preparingVisible = false;
     // Retries and fallbacks reuse any track the driver picked inside the player.
@@ -644,6 +705,8 @@ class GkuiController extends ChangeNotifier {
           .where((version) => version.index == selectedIndex)
           .firstOrNull;
       lastSelectedVersion = selectedVersion?.displayLabel ?? 'Original';
+      final startAt = startMs ?? resumeOffsetFor(item);
+      resumeAtMs = startAt;
 
       final versionAudio = selectedVersion?.audioTracks ?? const <PlexTrack>[];
       final versionSubtitles =
@@ -733,7 +796,7 @@ class GkuiController extends ChangeNotifier {
         'url': request.url,
         'headers': request.headers,
         'title': item.title,
-        'startMs': item.viewOffsetMs,
+        'startMs': startAt,
         'ratingKey': item.ratingKey,
         'durationMs': item.durationMs,
         'timelineUrl': '${api!.session!.baseUrl}/:/timeline',
@@ -783,8 +846,10 @@ class GkuiController extends ChangeNotifier {
         logs.add(line.toString());
       }
       failureKind = raw?['failureKind']?.toString();
-      final position =
-          (raw?['positionMs'] as num?)?.toInt() ?? item.viewOffsetMs;
+      renderedFrame = raw?['renderedFrame'] == true;
+      final position = (raw?['positionMs'] as num?)?.toInt() ?? startAt;
+      final ended = raw?['ended'] == true;
+      if (renderedFrame) resumeAtMs = position;
       lastFirstFrameMs = (raw?['firstFrameMs'] as num?)?.toInt();
       lastDecoder = raw?['decoder']?.toString();
       lastVideoFormat = raw?['videoFormat']?.toString();
@@ -835,11 +900,13 @@ class GkuiController extends ChangeNotifier {
         }
         logs.add('Remembered in-player track choice.');
       }
-      _updateLocalProgress(item.ratingKey, position);
+      if (renderedFrame) {
+        _updateLocalProgress(item.ratingKey, ended ? 0 : position);
+        if (ended) _locallyWatched.add(item.ratingKey);
+      }
       notifySafely();
-      if (raw?['renderedFrame'] == true) {
-        await api!.reportProgress(
-            item, position, raw?['ended'] == true ? 'stopped' : 'paused',
+      if (renderedFrame) {
+        await api!.reportProgress(item, position, ended ? 'stopped' : 'paused',
             sessionId: request.sessionId);
       }
       await api!.stopPlaybackSession(request);
@@ -847,13 +914,14 @@ class GkuiController extends ChangeNotifier {
       final playerError = raw?['error']?.toString();
       if (playerError != null && playerError.isNotEmpty)
         throw StateError(playerError);
-      if (raw?['ended'] == true && settings.autoPlayNext && allowAutoNext) {
+      if (ended && settings.autoPlayNext && allowAutoNext) {
         final next = await api!.loadNextEpisode(item);
         if (next != null && context.mounted) {
           final proceed = await _showPlayNextCountdown(context, next);
           if (proceed && context.mounted) {
             logs.add('Autoplaying next episode: ${next.title}.');
-            await play(context, next, PlaybackMode.direct, allowAutoNext: true);
+            await play(context, next, PlaybackMode.direct,
+                startMs: 0, allowAutoNext: true);
           }
         }
       }
@@ -872,6 +940,28 @@ class GkuiController extends ChangeNotifier {
             failureKind == 'http' ||
             failureKind == 'initialization';
         final fallback = playbackFallback(mode, failureKind);
+        if (fallback == null &&
+            shouldAutoResume(
+                renderedFrame: renderedFrame,
+                failureKind: failureKind,
+                alreadyResumed: autoResumed)) {
+          final resumeAt = resumeAtMs ?? 0;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                'Connection dropped; resuming at ${formatPlaybackTime(resumeAt)}…'),
+          ));
+          await Future<void>.delayed(const Duration(seconds: 1));
+          if (context.mounted) {
+            await play(context, item, mode,
+                mediaIndex: selectedIndex,
+                audioTrackId: retryAudioTrackId,
+                subtitleTrackId: retrySubtitleTrackId,
+                startMs: resumeAt,
+                autoResumed: true,
+                allowAutoNext: allowAutoNext);
+          }
+          return;
+        }
         if (fallback != null) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(mode == PlaybackMode.direct
@@ -883,7 +973,10 @@ class GkuiController extends ChangeNotifier {
             await play(context, item, fallback,
                 mediaIndex: selectedIndex,
                 audioTrackId: retryAudioTrackId,
-                subtitleTrackId: retrySubtitleTrackId);
+                subtitleTrackId: retrySubtitleTrackId,
+                startMs: resumeAtMs,
+                autoResumed: autoResumed,
+                allowAutoNext: allowAutoNext);
           }
           return;
         }
@@ -896,8 +989,12 @@ class GkuiController extends ChangeNotifier {
                           ? 'Video could not start'
                           : 'Playback failed'),
                   content: SingleChildScrollView(
-                      child: Text(
-                          '${compact(caught)}\n\nThe Status screen contains the connection details.')),
+                      child: Text(<String>[
+                    compact(caught),
+                    if (renderedFrame && resumeAtMs != null)
+                      'Retry continues from ${formatPlaybackTime(resumeAtMs)}.',
+                    'The Status screen contains the connection details.',
+                  ].join('\n\n'))),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(context, false),
@@ -912,7 +1009,9 @@ class GkuiController extends ChangeNotifier {
           await play(context, item, mode,
               mediaIndex: selectedIndex,
               audioTrackId: retryAudioTrackId,
-              subtitleTrackId: retrySubtitleTrackId);
+              subtitleTrackId: retrySubtitleTrackId,
+              startMs: resumeAtMs,
+              allowAutoNext: allowAutoNext);
         }
       }
     } finally {
@@ -962,6 +1061,7 @@ class GkuiController extends ChangeNotifier {
   }
 
   void _updateLocalProgress(String ratingKey, int position) {
+    _localProgress[ratingKey] = position;
     PlexMedia update(PlexMedia item) => item.ratingKey == ratingKey
         ? item.copyWith(viewOffsetMs: position)
         : item;
@@ -1881,6 +1981,7 @@ class MediaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final image = controller.api!.imageUrl(media.thumb);
+    final offset = controller.resumeOffsetFor(media);
     return InkWell(
       onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => DetailsScreen(media: media, controller: controller))),
@@ -1914,7 +2015,7 @@ class MediaCard extends StatelessWidget {
                           ),
                   ),
                   if (controller.settings.showWatchedIndicators &&
-                      media.watched)
+                      controller.isWatched(media))
                     const Positioned(
                       top: 7,
                       right: 7,
@@ -1936,10 +2037,14 @@ class MediaCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 15)),
-            if (media.viewOffsetMs > 0 && media.durationMs > 0)
+            if (episodeLabel(media) case final label? when label.isNotEmpty)
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, color: Colors.white60)),
+            if (offset > 0 && media.durationMs > 0)
               LinearProgressIndicator(
-                  value:
-                      (media.viewOffsetMs / media.durationMs).clamp(0.0, 1.0),
+                  value: (offset / media.durationMs).clamp(0.0, 1.0),
                   minHeight: 3),
           ]),
     );
@@ -2008,99 +2113,121 @@ class _DetailsScreenState extends State<DetailsScreen> {
                 memCacheWidth: 900,
               )),
         Container(color: Colors.black.withOpacity(0.38)),
-        Padding(
-            padding: const EdgeInsets.all(26),
-            child: children == null
-                ? FutureBuilder<PlexMedia>(
-                    future: details,
-                    initialData: media,
-                    builder: (context, snapshot) =>
-                        playableDetails(snapshot.data ?? media),
-                  )
-                : childrenList(media)),
+        // Rebuilds after playback so Resume and progress show where the
+        // video actually stopped.
+        AnimatedBuilder(
+            animation: widget.controller,
+            builder: (context, _) => Padding(
+                padding: const EdgeInsets.all(26),
+                child: children == null
+                    ? FutureBuilder<PlexMedia>(
+                        future: details,
+                        initialData: media,
+                        builder: (context, snapshot) =>
+                            playableDetails(snapshot.data ?? media),
+                      )
+                    : childrenList(media))),
       ]),
     );
   }
 
-  Widget playableDetails(PlexMedia media) =>
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-        SizedBox(
-            width: 210,
-            child: MediaCard(media: media, controller: widget.controller)),
-        const SizedBox(width: 28),
-        Expanded(
-            child: ListView(children: <Widget>[
-          Text(media.title,
-              style:
-                  const TextStyle(fontSize: 30, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          Text(
-              <String>[
-                if (media.year != null) '${media.year}',
-                if (media.subtitle != null) media.subtitle!
-              ].join(' • '),
-              style: const TextStyle(fontSize: 18, color: Colors.white70)),
+  Widget playableDetails(PlexMedia media) {
+    final resumeOffset = widget.controller.resumeOffsetFor(media);
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+      SizedBox(
+          width: 210,
+          child: MediaCard(media: media, controller: widget.controller)),
+      const SizedBox(width: 28),
+      Expanded(
+          child: ListView(children: <Widget>[
+        Text(media.title,
+            style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
+        Text(
+            <String>[
+              if (episodeLabel(media) case final label? when label.isNotEmpty)
+                label
+              else if (media.subtitle != null)
+                media.subtitle!,
+              if (media.year != null) '${media.year}',
+              if (media.durationMs > 0) formatRuntime(media.durationMs),
+            ].join(' • '),
+            style: const TextStyle(fontSize: 18, color: Colors.white70)),
+        const SizedBox(height: 14),
+        Text(media.summary ?? 'No summary available.',
+            style: const TextStyle(fontSize: 17, height: 1.4)),
+        const SizedBox(height: 22),
+        if (media.versions.length > 1) ...<Widget>[
+          OutlinedButton.icon(
+            onPressed: () => chooseVersion(media),
+            icon: const Icon(Icons.video_settings),
+            label: Text('Version: ${selectedVersionLabel(media)}'),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (currentVersion(media) case final version?) ...<Widget>[
+          Text('Selected media: ${version.displayLabel}',
+              style: const TextStyle(fontSize: 16, color: Colors.white70)),
+          const SizedBox(height: 10),
+          Wrap(spacing: 12, runSpacing: 10, children: <Widget>[
+            if (version.audioTracks.isNotEmpty)
+              OutlinedButton.icon(
+                onPressed: () => chooseAudioTrack(media),
+                icon: const Icon(Icons.audiotrack),
+                label: Text('Audio: ${selectedAudioLabel(media)}'),
+              ),
+            if (version.subtitleTracks.isNotEmpty)
+              OutlinedButton.icon(
+                onPressed: () => chooseSubtitleTrack(media),
+                icon: const Icon(Icons.subtitles),
+                label: Text('Subtitles: ${selectedSubtitleLabel(media)}'),
+              ),
+          ]),
           const SizedBox(height: 14),
-          Text(media.summary ?? 'No summary available.',
-              style: const TextStyle(fontSize: 17, height: 1.4)),
-          const SizedBox(height: 22),
-          if (media.versions.length > 1) ...<Widget>[
+        ],
+        Wrap(spacing: 12, runSpacing: 12, children: <Widget>[
+          ElevatedButton.icon(
+            onPressed: () => widget.controller.play(
+                context, media, PlaybackMode.direct,
+                mediaIndex: requestedMediaIndex(media),
+                audioTrackId: selectedAudioTrackId,
+                subtitleTrackId: selectedSubtitleTrackId),
+            icon: const Icon(Icons.play_arrow),
+            label: Text(resumeOffset > 0
+                ? 'Resume from ${formatPlaybackTime(resumeOffset)}'
+                : 'Play'),
+          ),
+          if (resumeOffset > 0)
             OutlinedButton.icon(
-              onPressed: () => chooseVersion(media),
-              icon: const Icon(Icons.video_settings),
-              label: Text('Version: ${selectedVersionLabel(media)}'),
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (currentVersion(media) case final version?) ...<Widget>[
-            Text('Selected media: ${version.displayLabel}',
-                style: const TextStyle(fontSize: 16, color: Colors.white70)),
-            const SizedBox(height: 10),
-            Wrap(spacing: 12, runSpacing: 10, children: <Widget>[
-              if (version.audioTracks.isNotEmpty)
-                OutlinedButton.icon(
-                  onPressed: () => chooseAudioTrack(media),
-                  icon: const Icon(Icons.audiotrack),
-                  label: Text('Audio: ${selectedAudioLabel(media)}'),
-                ),
-              if (version.subtitleTracks.isNotEmpty)
-                OutlinedButton.icon(
-                  onPressed: () => chooseSubtitleTrack(media),
-                  icon: const Icon(Icons.subtitles),
-                  label: Text('Subtitles: ${selectedSubtitleLabel(media)}'),
-                ),
-            ]),
-            const SizedBox(height: 14),
-          ],
-          Wrap(spacing: 12, runSpacing: 12, children: <Widget>[
-            ElevatedButton.icon(
               onPressed: () => widget.controller.play(
                   context, media, PlaybackMode.direct,
                   mediaIndex: requestedMediaIndex(media),
                   audioTrackId: selectedAudioTrackId,
-                  subtitleTrackId: selectedSubtitleTrackId),
-              icon: const Icon(Icons.play_arrow),
-              label: Text(media.viewOffsetMs > 0 ? 'Resume' : 'Play'),
+                  subtitleTrackId: selectedSubtitleTrackId,
+                  startMs: 0),
+              icon: const Icon(Icons.replay),
+              label: const Text('Play from start'),
             ),
-            OutlinedButton(
-              onPressed: () => widget.controller.play(
-                  context, media, PlaybackMode.transcode720,
-                  mediaIndex: requestedMediaIndex(media),
-                  audioTrackId: selectedAudioTrackId,
-                  subtitleTrackId: selectedSubtitleTrackId),
-              child: const Text('720p compatible'),
-            ),
-            OutlinedButton(
-              onPressed: () => widget.controller.play(
-                  context, media, PlaybackMode.transcode480,
-                  mediaIndex: requestedMediaIndex(media),
-                  audioTrackId: selectedAudioTrackId,
-                  subtitleTrackId: selectedSubtitleTrackId),
-              child: const Text('480p safe mode'),
-            ),
-          ]),
-        ])),
-      ]);
+          OutlinedButton(
+            onPressed: () => widget.controller.play(
+                context, media, PlaybackMode.transcode720,
+                mediaIndex: requestedMediaIndex(media),
+                audioTrackId: selectedAudioTrackId,
+                subtitleTrackId: selectedSubtitleTrackId),
+            child: const Text('720p compatible'),
+          ),
+          OutlinedButton(
+            onPressed: () => widget.controller.play(
+                context, media, PlaybackMode.transcode480,
+                mediaIndex: requestedMediaIndex(media),
+                audioTrackId: selectedAudioTrackId,
+                subtitleTrackId: selectedSubtitleTrackId),
+            child: const Text('480p safe mode'),
+          ),
+        ]),
+      ])),
+    ]);
+  }
 
   int selectedIndex(PlexMedia media) =>
       selectedMediaIndex ?? PlexMediaVersion.preferredIndex(media.versions);

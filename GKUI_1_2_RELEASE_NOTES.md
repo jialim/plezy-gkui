@@ -1,6 +1,17 @@
-# Plezy GKUI 1.2.7 — Subtitles On by Default
+# Plezy GKUI 1.2.8 — Steadier Streams
 
 This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit. Phone remote and mirroring are intentionally excluded.
+
+## 1.2.8 steadier Zurg streams
+
+- The player buffers up to 50 seconds ahead (about 21 MiB on this head unit, a third of the app heap) instead of 18 seconds / 12 MiB, so short Zurg read pauses no longer stall the picture.
+- After a stall, playback waits for 6 seconds of video instead of 2.5 before continuing, which stops the play-stop-play stutter on a slow mount.
+- A failed read is retried quietly up to 10 times with growing gaps (about 40 seconds in all) before the player gives up; Plex server errors (5xx, 408, 429) are retried too, while missing files and permission errors still fail at once.
+- If the player still loses the stream, it reconnects up to 3 times (after 2, 4 and 8 seconds) and shows "Reconnecting to Plex" on screen. A pause of more than 3 seconds mid-video shows "Waiting for the server…".
+- A stream cut off more than a minute before the end is resumed instead of being treated as finished, so it no longer marks the video watched or jumps to the next episode.
+- If a playing video still fails, the app reopens it once automatically from where it stopped. Retry and the 720p/480p fallbacks also continue from that point instead of the original start position.
+- Details screens now say "Resume from 12:34", add "Play from start", and update their progress after you return from the player. Episodes show their season and episode number, and details show the runtime.
+- Steering-wheel Play, Pause, Stop, Next and Previous keys work in the player (Next/Previous seek).
 
 ## 1.2.7 subtitles on by default
 
@@ -72,7 +83,7 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 
 - Flutter static analysis and the GKUI Flutter test suite pass.
 - Android unit tests, Kotlin/ExoPlayer compilation, and fatal API-19 `NewApi` lint pass.
-- The release APK is version 1.2.7 (13), minimum API 19, target API 34, and ARMv7 only.
+- The release APK is version 1.2.8 (14), minimum API 19, target API 34, and ARMv7 only.
 - APK v1/v2 signatures, certificate continuity, manifest, ABI, and SHA-256 are verified before publishing; the checksum is recorded on the GitHub release.
 
 ## One-pass M5 check

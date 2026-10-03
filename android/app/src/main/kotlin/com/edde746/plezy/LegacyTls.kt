@@ -16,7 +16,11 @@ import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 
 object LegacyTls {
-    fun createClient(context: Context, listener: EventListener = EventListener.NONE): OkHttpClient {
+    fun createClient(
+        context: Context,
+        listener: EventListener = EventListener.NONE,
+        readTimeoutSeconds: Long = 20L,
+    ): OkHttpClient {
         val system = trustManager(null)
         val customStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply { load(null) }
         context.assets.open("flutter_assets/assets/ca/legacy-roots.pem").use { input ->
@@ -35,7 +39,7 @@ object LegacyTls {
             .connectionSpecs(listOf(ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
                 .tlsVersions(TlsVersion.TLS_1_2, TlsVersion.TLS_1_3).build()))
             .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(readTimeoutSeconds, TimeUnit.SECONDS)
             .writeTimeout(12, TimeUnit.SECONDS)
             .eventListener(listener)
             .followRedirects(false)
