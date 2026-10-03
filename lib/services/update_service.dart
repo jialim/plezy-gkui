@@ -168,7 +168,7 @@ class UpdateService {
       }
 
       if (_useXgimiUpdater) {
-        return _performXgimiUpdateCheck(packageInfo: packageInfo, client: client ?? httpClient);
+        return await _performXgimiUpdateCheck(packageInfo: packageInfo, client: client ?? httpClient);
       }
 
       final response = await (client ?? httpClient).get(

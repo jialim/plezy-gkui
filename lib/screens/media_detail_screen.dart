@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../navigation/profile_navigation_scope.dart';
 import '../services/device_performance.dart';
+import '../services/family_projector_profile.dart';
 import '../services/fullscreen_state_manager.dart';
 import 'package:flutter/services.dart';
 import 'package:plezy/utils/platform_detector.dart';
