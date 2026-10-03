@@ -95,6 +95,7 @@ flutter {
 dependencies {
     testImplementation 'junit:junit:4.13.2'
     implementation 'androidx.multidex:multidex:2.0.1'
+    implementation 'androidx.core:core:1.8.0'
     implementation 'com.google.android.exoplayer:exoplayer-core:2.19.1'
     implementation 'com.google.android.exoplayer:exoplayer-hls:2.19.1'
     implementation 'com.google.android.exoplayer:exoplayer-ui:2.19.1'

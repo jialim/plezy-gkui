@@ -1,6 +1,14 @@
-# Plezy GKUI 1.2.8 — Steadier Streams
+# Plezy GKUI 1.2.9 — Start Over and In-App Updates (2026-10-03)
 
 This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit. Phone remote and mirroring are intentionally excluded.
+
+## 1.2.9 start over and in-app updates
+
+- A resumable title now shows both **Resume from hh:mm** and **Play from beginning**. The latter explicitly starts at zero and does not reuse the saved Plex position.
+- Plezy checks the latest stable `plezy-gkui` GitHub release automatically after startup; Settings also has a large **Check now** action.
+- Updates download directly on the head unit, removing the USB-transfer step. Android still shows its required installer confirmation.
+- The updater accepts only the expected API 19 ARMv7 asset from this repository, checks the GitHub SHA-256, package ID, version, and installed signing certificate before opening it.
+- Android 8+ units are directed to the per-app unknown-sources permission when necessary; the ECARX Android 4.4 unit uses its existing system unknown-sources setting.
 
 ## 1.2.8 steadier Zurg streams
 
@@ -10,7 +18,7 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 - If the player still loses the stream, it reconnects up to 3 times (after 2, 4 and 8 seconds) and shows "Reconnecting to Plex" on screen. A pause of more than 3 seconds mid-video shows "Waiting for the server…".
 - A stream cut off more than a minute before the end is resumed instead of being treated as finished, so it no longer marks the video watched or jumps to the next episode.
 - If a playing video still fails, the app reopens it once automatically from where it stopped. Retry and the 720p/480p fallbacks also continue from that point instead of the original start position.
-- Details screens now say "Resume from 12:34", add "Play from start", and update their progress after you return from the player. Episodes show their season and episode number, and details show the runtime.
+- Details screens now say "Resume from 12:34", add a start-over action, and update their progress after you return from the player. Episodes show their season and episode number, and details show the runtime.
 - Steering-wheel Play, Pause, Stop, Next and Previous keys work in the player (Next/Previous seek).
 
 ## 1.2.7 subtitles on by default
@@ -78,12 +86,13 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 - Wi-Fi/network retry, app resume refresh, native audio focus, and in-place playback retry.
 - Watched badges, Continue Watching refresh, and memory-pressure poster cleanup.
 - Redacted diagnostics for endpoint, profile, selected version, content startup, first-frame time, decoder, and video format.
+- Automatic signed in-app updates from the official Plezy GKUI GitHub release.
 
 ## Verified off-car
 
 - Flutter static analysis and the GKUI Flutter test suite pass.
 - Android unit tests, Kotlin/ExoPlayer compilation, and fatal API-19 `NewApi` lint pass.
-- The release APK is version 1.2.8 (14), minimum API 19, target API 34, and ARMv7 only.
+- The release APK is version 1.2.9 (15), minimum API 19, target API 34, and ARMv7 only.
 - APK v1/v2 signatures, certificate continuity, manifest, ABI, and SHA-256 are verified before publishing; the checksum is recorded on the GitHub release.
 
 ## One-pass M5 check
@@ -96,7 +105,8 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 6. Direct Play a Zurg-backed title and leave it playing for 2–3 minutes; if Direct Play cannot render it, confirm the automatic 720p/480p fallback can start.
 7. Play one 720p-compatible transcode and one 480p-safe transcode.
 8. Verify Skip Intro/Credits and the Play Next countdown on an episode that has Plex markers.
-9. Reopen the title and confirm its version/audio/subtitle choices were remembered.
-10. Open Status and photograph both columns if anything fails; include the startup network-byte and last-failure rows.
+9. Reopen a partly watched title; test both Resume and Play from beginning.
+10. In Settings, tap Check now. On 1.2.9 it should report current; use this path for the next release instead of USB.
+11. Open Status and photograph both columns if anything fails; include the startup network-byte and last-failure rows.
 
 Physical ECARX/M5 playback remains the final hardware gate because its Android 4.4 decoder and vehicle firmware cannot be reproduced by desktop tests.

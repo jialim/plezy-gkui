@@ -10,7 +10,7 @@ import 'package:uuid/uuid.dart';
 import 'diagnostics.dart';
 
 const String plexProduct = 'Plezy GKUI';
-const String plexVersion = '1.2.8';
+const String plexVersion = '1.2.9';
 
 class PlexPin {
   const PlexPin({required this.id, required this.code});

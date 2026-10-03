@@ -18,10 +18,10 @@ not the App Store, Google Play, desktop, or current upstream Plezy build.
 
 ## Download
 
-The current tested build is **Plezy GKUI 1.2.6**:
+The current release is **Plezy GKUI 1.2.9**:
 
-- [Download the API 19 ARMv7 APK](https://github.com/jialim/plezy-gkui/releases/download/gkui-v1.2.6/Plezy-GKUI-1.2.6-api19-armeabi-v7a.apk)
-- [Release notes and checksum](https://github.com/jialim/plezy-gkui/releases/tag/gkui-v1.2.6)
+- [Download the latest API 19 ARMv7 APK](https://github.com/jialim/plezy-gkui/releases/latest)
+- [Release notes](GKUI_1_2_RELEASE_NOTES.md)
 - [All releases](https://github.com/jialim/plezy-gkui/releases)
 
 The APK uses package ID `com.jialim.plezygkui`, requires Android API 19 or
@@ -62,6 +62,15 @@ GKUI builds.
 - Skip Intro/Credits button or automatic mode when Plex supplies markers
 - Next-episode autoplay with a configurable countdown
 - Playback progress, resume, session tracking, and transcode cleanup
+- Separate Resume and Play from beginning actions for partly watched titles
+
+### In-app updates
+
+- Automatic checks for new stable Plezy GKUI releases
+- A manual **Check now** action under Settings
+- Direct APK download on the head unit; no USB transfer after installing 1.2.9
+- SHA-256, package ID, version, and signing-certificate verification before installation
+- Android's installer confirmation remains required; silent installation is intentionally not attempted
 
 ### Mobile-data and recovery behavior
 
@@ -104,12 +113,13 @@ Unsupported sources should use the automatic Plex transcode fallback.
 
 ## Installing on a GKUI head unit
 
-1. Download the APK from the latest GitHub Release.
-2. Transfer it to the head unit using the installation method available for
-   your vehicle.
-3. Allow installation from that source when prompted.
-4. Install over an earlier Plezy GKUI build, or perform a fresh installation.
-5. Open Plezy GKUI, complete Plex PIN sign-in, and select the server/profile.
+1. For the first installation—or to move from 1.2.8 to 1.2.9—download the APK
+   from the latest GitHub Release and transfer it to the head unit once.
+2. Enable installation from unknown sources in the head unit's Android settings.
+3. Install over an earlier Plezy GKUI build, or perform a fresh installation.
+4. Open Plezy GKUI, complete Plex PIN sign-in, and select the server/profile.
+5. Starting with 1.2.9, future versions are offered automatically and can also
+   be installed from Settings → App updates → Check now, without a USB drive.
 
 Use the Status screen and photograph both diagnostic columns if playback still
 fails on physical hardware.
@@ -145,7 +155,7 @@ cd android
 ./gradlew :app:testDebugUnitTest :app:compileDebugKotlin -x compileFlutterBuildDebug
 ```
 
-The 1.2.6 release passed Flutter analysis, the GKUI Flutter and Android test
+The 1.2.9 release passes Flutter analysis, the GKUI Flutter and Android test
 suites, native Kotlin compilation, API-19 lint, APK signature verification,
 and manifest/ABI inspection. Physical in-car playback remains the final
 hardware gate.

@@ -14,11 +14,21 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel(diagnosticsChannelName),
-      (call) async => <String, Object>{
-        'app': '0.1.0 (1)',
-        'android': '4.4.4 / API 19',
-        'abi': 'armeabi-v7a',
-        'memory class': '256 MiB',
+      (call) async {
+        if (call.method == 'checkForAppUpdate') {
+          return <String, Object>{
+            'available': false,
+            'currentVersion': '1.2.9',
+            'latestVersion': '1.2.9',
+            'assetSize': 14700000,
+          };
+        }
+        return <String, Object>{
+          'app': '1.2.9 (15)',
+          'android': '4.4.4 / API 19',
+          'abi': 'armeabi-v7a',
+          'memory class': '256 MiB',
+        };
       },
     );
   });
@@ -158,9 +168,26 @@ void main() {
         home: DetailsScreen(media: episode, controller: controller)));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('Resume from 12:34'), findsOneWidget);
-    expect(find.text('Play from start'), findsOneWidget);
+    expect(find.text('Play from beginning'), findsOneWidget);
     expect(find.textContaining('S1 E3'), findsWidgets);
     expect(tester.takeException(), isNull);
+    controller.dispose();
+  });
+
+  testWidgets('settings expose USB-free signed app updates', (tester) async {
+    final controller = GkuiController();
+    controller.api = await PlexApi.create(controller.logs);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: SettingsPane(controller: controller))));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Check now'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('App updates'), findsOneWidget);
+    expect(find.text('Check now'), findsOneWidget);
+    expect(find.textContaining('no USB drive'), findsOneWidget);
     controller.dispose();
   });
 }

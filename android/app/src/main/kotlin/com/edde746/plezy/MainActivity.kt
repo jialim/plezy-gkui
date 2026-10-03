@@ -8,9 +8,11 @@ import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : FlutterActivity() {
     private var pendingPlaybackResult: MethodChannel.Result? = null
+    private val updateInProgress = AtomicBoolean(false)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -20,6 +22,12 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getDiagnostics" -> result.success(readDiagnostics())
+                "checkForAppUpdate" -> runUpdateTask(result) {
+                    GkuiUpdater(applicationContext).check()
+                }
+                "downloadAndInstallUpdate" -> runUpdateTask(result) {
+                    GkuiUpdater(applicationContext).downloadAndOpenInstaller()
+                }
                 "playVideo" -> {
                     if (pendingPlaybackResult != null) {
                         result.error("PLAYER_BUSY", "A video is already playing", null)
@@ -115,6 +123,39 @@ class MainActivity : FlutterActivity() {
 
     private fun stringList(value: Any?): Array<String> =
         (value as? List<*>)?.mapNotNull { it as? String }?.toTypedArray() ?: emptyArray()
+
+    private fun runUpdateTask(
+        result: MethodChannel.Result,
+        task: () -> Map<String, Any>,
+    ) {
+        if (!updateInProgress.compareAndSet(false, true)) {
+            result.error("UPDATE_BUSY", "An update operation is already running.", null)
+            return
+        }
+        Thread {
+            try {
+                val payload = task()
+                runOnUiThread {
+                    updateInProgress.set(false)
+                    result.success(payload)
+                }
+            } catch (error: UpdateException) {
+                runOnUiThread {
+                    updateInProgress.set(false)
+                    result.error(error.code, error.message, null)
+                }
+            } catch (error: Throwable) {
+                runOnUiThread {
+                    updateInProgress.set(false)
+                    result.error(
+                        "UPDATE_FAILED",
+                        "Update failed (${error.javaClass.simpleName}).",
+                        null,
+                    )
+                }
+            }
+        }.start()
+    }
 
     @Suppress("DEPRECATION")
     private fun readDiagnostics(): Map<String, Any> {

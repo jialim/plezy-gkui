@@ -9,7 +9,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'gkui/diagnostics.dart';
 import 'gkui/plex_api.dart';
 
-const String buildLabel = 'Plezy GKUI 1.2.8 / steadier streams';
+const String buildLabel = 'Plezy GKUI 1.2.9 / start-over and in-app updates';
 const String sourceLabel = 'Plezy 1.8.1 / GKUI compatibility fork';
 const String toolchainLabel = 'Flutter 3.19.6 / ExoPlayer 2.19.1 / API 19';
 const MethodChannel nativeChannel =
@@ -171,6 +171,123 @@ String formatRuntime(int milliseconds) {
   return rest == 0 ? '${minutes ~/ 60} h' : '${minutes ~/ 60} h $rest min';
 }
 
+class GkuiUpdateInfo {
+  const GkuiUpdateInfo({
+    required this.available,
+    required this.currentVersion,
+    required this.latestVersion,
+    required this.assetSize,
+  });
+
+  final bool available;
+  final String currentVersion;
+  final String latestVersion;
+  final int assetSize;
+
+  factory GkuiUpdateInfo.fromMap(Map<Object?, Object?> raw) => GkuiUpdateInfo(
+        available: raw['available'] == true,
+        currentVersion: raw['currentVersion']?.toString() ?? 'unknown',
+        latestVersion: raw['latestVersion']?.toString() ?? 'unknown',
+        assetSize: (raw['assetSize'] as num?)?.toInt() ?? 0,
+      );
+}
+
+String formatUpdateSize(int bytes) => bytes >= 1024 * 1024
+    ? '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MiB'
+    : '${bytes ~/ 1024} KiB';
+
+Future<void> offerGkuiUpdate(
+  BuildContext context,
+  GkuiController controller, {
+  required bool silent,
+}) async {
+  final info = await controller.checkForAppUpdate(silent: silent);
+  if (!context.mounted) return;
+  if (info == null) {
+    if (!silent) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content:
+              Text(controller.updateError ?? 'Could not check for updates.')));
+    }
+    return;
+  }
+  if (!info.available) {
+    if (!silent) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Plezy GKUI ${info.currentVersion} is up to date.')));
+    }
+    return;
+  }
+
+  final install = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Plezy GKUI update available'),
+      content: Text(
+        'Version ${info.latestVersion} is ready (${formatUpdateSize(info.assetSize)}).\n\n'
+        'Plezy will download and verify the signed ARMv7 APK, then Android will ask you to confirm installation. No USB drive is needed.',
+      ),
+      actions: <Widget>[
+        TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Later')),
+        ElevatedButton.icon(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          icon: const Icon(Icons.system_update),
+          label: const Text('Download and install'),
+        ),
+      ],
+    ),
+  );
+  if (install != true || !context.mounted) return;
+
+  var progressOpen = true;
+  unawaited(showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const AlertDialog(
+      content: Row(children: <Widget>[
+        SizedBox(
+            width: 30,
+            height: 30,
+            child: CircularProgressIndicator(strokeWidth: 3)),
+        SizedBox(width: 18),
+        Expanded(
+            child: Text('Downloading and verifying update…',
+                style: TextStyle(fontSize: 18))),
+      ]),
+    ),
+  ).whenComplete(() => progressOpen = false));
+  await Future<void>.delayed(const Duration(milliseconds: 100));
+
+  try {
+    await controller.downloadAndInstallUpdate();
+    if (context.mounted && progressOpen) {
+      Navigator.of(context, rootNavigator: true).pop();
+      progressOpen = false;
+    }
+  } catch (_) {
+    if (context.mounted && progressOpen) {
+      Navigator.of(context, rootNavigator: true).pop();
+      progressOpen = false;
+    }
+    if (context.mounted) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Update could not be installed'),
+          content: Text(controller.updateError ?? 'The update failed.'),
+          actions: <Widget>[
+            ElevatedButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Close')),
+          ],
+        ),
+      );
+    }
+  }
+}
+
 String? episodeLabel(PlexMedia media) {
   if (media.type != 'episode') return null;
   final number = <String>[
@@ -222,6 +339,10 @@ class GkuiController extends ChangeNotifier {
   String? lastVideoFormat;
   int? lastStartupNetworkBytes;
   String? lastPlaybackFailure;
+  GkuiUpdateInfo? updateInfo;
+  String? updateError;
+  bool checkingForUpdate = false;
+  bool installingUpdate = false;
   // What this car last played, so screens opened before playback show the
   // new resume point instead of the one Plex returned when they loaded.
   final Map<String, int> _localProgress = <String, int>{};
@@ -538,6 +659,62 @@ class GkuiController extends ChangeNotifier {
     settings = value;
     await api!.saveSettings(value);
     notifySafely();
+  }
+
+  Future<GkuiUpdateInfo?> checkForAppUpdate({bool silent = false}) async {
+    if (checkingForUpdate || installingUpdate || !clockValid) return null;
+    checkingForUpdate = true;
+    updateError = null;
+    notifySafely();
+    try {
+      final raw = await nativeChannel
+          .invokeMapMethod<Object?, Object?>('checkForAppUpdate');
+      if (raw == null) throw StateError('The updater returned no status.');
+      updateInfo = GkuiUpdateInfo.fromMap(raw);
+      logs.add(updateInfo!.available
+          ? 'Update available: Plezy GKUI ${updateInfo!.latestVersion}.'
+          : 'Update check: this GKUI build is current.');
+      return updateInfo;
+    } on PlatformException catch (caught) {
+      updateError =
+          caught.message ?? 'The update check failed (${caught.code}).';
+      if (!silent) logs.add('Update check failed: $updateError');
+      return null;
+    } catch (caught) {
+      updateError = compact(caught);
+      if (!silent) logs.add('Update check failed: $updateError');
+      return null;
+    } finally {
+      checkingForUpdate = false;
+      notifySafely();
+    }
+  }
+
+  Future<void> downloadAndInstallUpdate() async {
+    if (installingUpdate) return;
+    installingUpdate = true;
+    updateError = null;
+    notifySafely();
+    try {
+      final raw = await nativeChannel
+          .invokeMapMethod<Object?, Object?>('downloadAndInstallUpdate');
+      if (raw?['installerOpened'] != true) {
+        throw StateError('No newer signed GKUI update is available.');
+      }
+      logs.add('Verified update downloaded; Android installer opened.');
+    } on PlatformException catch (caught) {
+      updateError =
+          caught.message ?? 'Update installation failed (${caught.code}).';
+      logs.add('Update installation failed: $updateError');
+      rethrow;
+    } catch (caught) {
+      updateError = compact(caught);
+      logs.add('Update installation failed: $updateError');
+      rethrow;
+    } finally {
+      installingUpdate = false;
+      notifySafely();
+    }
   }
 
   Future<void> loadHomeUsers() async {
@@ -1117,15 +1294,23 @@ class GkuiRoot extends StatefulWidget {
 
 class _GkuiRootState extends State<GkuiRoot> with WidgetsBindingObserver {
   final GkuiController controller = GkuiController();
+  Timer? updateCheckTimer;
+  bool appActive = true;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     controller.initialize();
+    updateCheckTimer = Timer(const Duration(seconds: 10), () {
+      if (mounted && appActive && controller.clockValid) {
+        unawaited(offerGkuiUpdate(context, controller, silent: true));
+      }
+    });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    appActive = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.resumed) {
       unawaited(controller.reconnectAfterResume());
     }
@@ -1138,6 +1323,7 @@ class _GkuiRootState extends State<GkuiRoot> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    updateCheckTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     controller.dispose();
     super.dispose();
@@ -1898,6 +2084,31 @@ class SettingsPane extends StatelessWidget {
           onChanged: (enabled) => controller
               .updateSettings(value.copyWith(showWatchedIndicators: enabled)),
         ),
+        _SettingCard(
+          title: 'App updates',
+          child: Row(children: <Widget>[
+            const Expanded(
+              child: Text(
+                'Checks automatically. Downloads the signed APK directly—no USB drive.',
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+            const SizedBox(width: 12),
+            ElevatedButton.icon(
+              onPressed: controller.checkingForUpdate ||
+                      controller.installingUpdate
+                  ? null
+                  : () => offerGkuiUpdate(context, controller, silent: false),
+              icon: controller.checkingForUpdate
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.system_update),
+              label: const Text('Check now'),
+            ),
+          ]),
+        ),
       ],
     );
   }
@@ -2206,7 +2417,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
                   subtitleTrackId: selectedSubtitleTrackId,
                   startMs: 0),
               icon: const Icon(Icons.replay),
-              label: const Text('Play from start'),
+              label: const Text('Play from beginning'),
             ),
           OutlinedButton(
             onPressed: () => widget.controller.play(
