@@ -18,7 +18,7 @@ not the App Store, Google Play, desktop, or current upstream Plezy build.
 
 ## Download
 
-The current release is **Plezy GKUI 1.2.9**:
+The current release is **Plezy GKUI 1.2.10**:
 
 - [Download the latest API 19 ARMv7 APK](https://github.com/jialim/plezy-gkui/releases/latest)
 - [Release notes](GKUI_1_2_RELEASE_NOTES.md)
@@ -148,14 +148,14 @@ environment variables. Keystores and passwords must never be committed.
 ## Validation
 
 ```powershell
-dart format lib/main_gkui.dart lib/gkui test/gkui
-flutter analyze lib/main_gkui.dart lib/gkui test/gkui
-flutter test test/gkui
+dart format lib test
+flutter analyze
+flutter test
 cd android
 ./gradlew :app:testDebugUnitTest :app:compileDebugKotlin -x compileFlutterBuildDebug
 ```
 
-The 1.2.9 release passes Flutter analysis, the GKUI Flutter and Android test
+The 1.2.10 release passes Flutter analysis, the GKUI Flutter and Android test
 suites, native Kotlin compilation, API-19 lint, APK signature verification,
 and manifest/ABI inspection. Physical in-car playback remains the final
 hardware gate.
@@ -163,11 +163,11 @@ hardware gate.
 ## Project documentation
 
 - [GKUI 1.2 release notes](GKUI_1_2_RELEASE_NOTES.md)
-- [Porting plan](PORTING_PLAN.md)
-- [Risks and validation gates](RISKS_AND_GATES.md)
-- [Compatibility dependency matrix](DEPENDENCY_MATRIX.md)
-- [Playback networking report](PLAYBACK_NETWORK_FIX_REPORT.md)
-- [Legacy certificate-chain report](PLEX_CERTIFICATE_CHAIN_FIX_REPORT.md)
+- [Porting plan](docs/PORTING_PLAN.md)
+- [Risks and validation gates](docs/RISKS_AND_GATES.md)
+- [Compatibility dependency matrix](docs/DEPENDENCY_MATRIX.md)
+- [Playback networking report](docs/PLAYBACK_NETWORK_FIX_REPORT.md)
+- [Legacy certificate-chain report](docs/PLEX_CERTIFICATE_CHAIN_FIX_REPORT.md)
 - [Privacy policy](PRIVACY.md)
 
 ## Upstream and license

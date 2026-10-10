@@ -85,4 +85,13 @@ void main() {
         ratingKey: '1', key: '/library/metadata/1', type: 'movie', title: 'M');
     expect(episodeLabel(movie), isNull);
   });
+
+  test('updates are checked again after twelve hours, not on every resume', () {
+    final start = DateTime(2026, 10, 10, 8);
+    expect(shouldRecheckForUpdate(null, start), isTrue);
+    expect(shouldRecheckForUpdate(start, start.add(const Duration(hours: 2))),
+        isFalse);
+    expect(shouldRecheckForUpdate(start, start.add(const Duration(hours: 12))),
+        isTrue);
+  });
 }

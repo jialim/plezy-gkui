@@ -54,3 +54,11 @@ duplication-report/
 **/fastlane/**/
 **/fastlane/report.xml
 maestro/**/*.png
+
+# Android-only project: Flutter regenerates plugin registrants for these
+# platforms on `pub get`; they are not part of Plezy GKUI.
+/ios/
+/linux/
+/macos/
+/windows/
+/web/

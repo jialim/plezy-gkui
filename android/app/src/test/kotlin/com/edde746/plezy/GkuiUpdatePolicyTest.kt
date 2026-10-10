@@ -45,4 +45,46 @@ class GkuiUpdatePolicyTest {
         assertFalse(GkuiUpdatePolicy.isTrustedDownloadHost("http", "github.com"))
         assertFalse(GkuiUpdatePolicy.isTrustedDownloadHost("https", "github.example.com"))
     }
+
+    @Test
+    fun picksNewestStableGkuiReleaseFromSharedRepository() {
+        val releases = listOf(
+            ReleaseSummary(0, "xgimi-lite-v2.23.0", draft = false, prerelease = false),
+            ReleaseSummary(1, "gkui-v1.2.10", draft = true, prerelease = false),
+            ReleaseSummary(2, "gkui-v1.2.9", draft = false, prerelease = false),
+            ReleaseSummary(3, "gkui-v1.3.0", draft = false, prerelease = true),
+            ReleaseSummary(4, "gkui-v1.2.8", draft = false, prerelease = false),
+        )
+        assertEquals(2, GkuiUpdatePolicy.newestStableIndex(releases))
+        assertNull(GkuiUpdatePolicy.newestStableIndex(releases.take(2)))
+    }
+
+    @Test
+    fun keepsUpdatingAfterAnOwnerRename() {
+        val name = GkuiUpdatePolicy.expectedAssetName("1.3.0")
+        assertTrue(GkuiUpdatePolicy.isTrustedAssetUrl(
+            "https://github.com/new-nick/plezy-gkui/releases/download/gkui-v1.3.0/$name",
+            "gkui-v1.3.0",
+            name,
+        ))
+        assertFalse(GkuiUpdatePolicy.isTrustedAssetUrl(
+            "https://github.com/new-nick/other-repo/releases/download/gkui-v1.3.0/$name",
+            "gkui-v1.3.0",
+            name,
+        ))
+        assertFalse(GkuiUpdatePolicy.isTrustedAssetUrl(
+            "https://github.com/new-nick/plezy-gkui/releases/download/gkui-v1.2.9/$name",
+            "gkui-v1.3.0",
+            name,
+        ))
+        assertTrue(GkuiUpdatePolicy.isTrustedApiRedirect("https", "api.github.com"))
+        assertFalse(GkuiUpdatePolicy.isTrustedApiRedirect("https", "example.com"))
+    }
+
+    @Test
+    fun recognisesOnlyFinishedGkuiDownloads() {
+        assertEquals("1.2.9", GkuiUpdatePolicy.versionFromAssetName("plezy-gkui-1.2.9-armeabi-v7a.apk"))
+        assertNull(GkuiUpdatePolicy.versionFromAssetName("plezy-gkui-1.2.9-armeabi-v7a.apk.download"))
+        assertNull(GkuiUpdatePolicy.versionFromAssetName("other.apk"))
+    }
 }

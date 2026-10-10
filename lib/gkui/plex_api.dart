@@ -7,10 +7,11 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import 'content_cache.dart';
 import 'diagnostics.dart';
 
 const String plexProduct = 'Plezy GKUI';
-const String plexVersion = '1.2.9';
+const String plexVersion = '1.2.10';
 
 class PlexPin {
   const PlexPin({required this.id, required this.code});
@@ -506,11 +507,12 @@ class PlaybackRequest {
 }
 
 class PlexApi {
-  PlexApi._(this._prefs, this.logs, this.clientIdentifier)
+  PlexApi._(this._prefs, this._cache, this.logs, this.clientIdentifier)
       : _accountDio = Dio(_options()),
         _serverDio = Dio(_options());
 
   final SharedPreferences _prefs;
+  final ContentCache _cache;
   final RedactingLogStore logs;
   final String clientIdentifier;
   final Dio _accountDio;
@@ -551,7 +553,7 @@ class PlexApi {
       id = const Uuid().v4();
       await prefs.setString('gkui.clientIdentifier', id);
     }
-    final api = PlexApi._(prefs, logs, id);
+    final api = PlexApi._(prefs, await ContentCache.open(prefs), logs, id);
     api.session = PlexSession.fromStorage(<String, String?>{
       'accountToken': prefs.getString('gkui.accountToken'),
       'serverToken': prefs.getString('gkui.serverToken'),
@@ -635,6 +637,9 @@ class PlexApi {
     } catch (_) {
       all = <String, dynamic>{};
     }
+    // Removing first moves this title to the newest end, so the bound below
+    // drops the least recently played titles rather than the first ever saved.
+    all.remove(_choiceKey(item));
     all[_choiceKey(item)] = <String, dynamic>{
       if (choice.mediaIndex != null) 'mediaIndex': choice.mediaIndex,
       if (choice.audioTrackId != null) 'audioTrackId': choice.audioTrackId,
@@ -770,20 +775,19 @@ class PlexApi {
     return servers;
   }
 
+  /// Tests every address at once and keeps the first verified one. Probing in
+  /// turn cost ~12 s per unreachable home-LAN address once the car was on
+  /// mobile data; a relay is used only when no direct address answers.
   Future<PlexSession> connect(
       String accountToken, PlexServerResource server) async {
-    final candidates = List<PlexConnection>.from(server.connections)
-      ..sort((a, b) {
-        final aScore = (a.local ? 0 : 2) + (a.relay ? 2 : 0);
-        final bScore = (b.local ? 0 : 2) + (b.relay ? 2 : 0);
-        return aScore.compareTo(bScore);
-      });
+    final cancel = CancelToken();
     Object? lastError;
-    for (final candidate in candidates) {
+    Future<PlexConnection?> probe(PlexConnection candidate) async {
       try {
         logs.add('Testing secure endpoint ${_safeHost(candidate.uri)}.');
         final response = await _serverDio.get<Map<String, dynamic>>(
           '${candidate.uri}/identity',
+          cancelToken: cancel,
           options: Options(
             headers: headers(server.token),
             receiveTimeout: const Duration(seconds: 7),
@@ -793,38 +797,75 @@ class PlexApi {
         final returnedId = identity['machineIdentifier']?.toString() ??
             response.data?['machineIdentifier']?.toString() ??
             '';
-        if (response.statusCode == 200 && returnedId == server.id) {
-          // /identity can be public. Verify the profile-specific resource token
-          // against a protected endpoint before persisting this route.
-          await _serverDio.get<Map<String, dynamic>>(
-            '${candidate.uri}/library/sections',
-            options: Options(
-              headers: headers(server.token),
-              receiveTimeout: const Duration(seconds: 7),
-            ),
-          );
-          final connected = PlexSession(
-            accountToken: accountToken,
-            serverToken: server.token,
-            serverName: server.name,
-            serverId: server.id,
-            baseUrl: candidate.uri,
-          );
-          await _saveSession(connected);
-          session = connected;
-          logs.add('Connected securely to ${server.name}.');
-          return connected;
-        } else if (returnedId.isNotEmpty && returnedId != server.id) {
-          logs.add('Rejected endpoint with a different server identity.');
+        if (response.statusCode != 200 || returnedId != server.id) {
+          if (returnedId.isNotEmpty) {
+            logs.add('Rejected endpoint with a different server identity.');
+          }
+          return null;
         }
+        // /identity can be public. Verify the profile-specific resource token
+        // against a protected endpoint before persisting this route.
+        await _serverDio.get<Map<String, dynamic>>(
+          '${candidate.uri}/library/sections',
+          cancelToken: cancel,
+          options: Options(
+            headers: headers(server.token),
+            receiveTimeout: const Duration(seconds: 7),
+          ),
+        );
+        return candidate;
       } catch (error) {
-        lastError = error;
-        logs.add('Endpoint ${_safeHost(candidate.uri)} did not respond.');
+        if (!cancel.isCancelled) {
+          lastError = error;
+          logs.add('Endpoint ${_safeHost(candidate.uri)} did not respond.');
+        }
+        return null;
       }
     }
-    throw StateError(
-        'No secure endpoint reached ${server.name}: ${_briefError(lastError)}');
+
+    final winner = await firstVerified<PlexConnection>(
+      server.connections.map(probe).toList(),
+      isFallback: (connection) => connection.relay,
+    );
+    cancel.cancel('A verified endpoint was found.');
+    if (winner == null) {
+      throw StateError(
+          'No secure endpoint reached ${server.name}: ${_briefError(lastError)}');
+    }
+    final connected = PlexSession(
+      accountToken: accountToken,
+      serverToken: server.token,
+      serverName: server.name,
+      serverId: server.id,
+      baseUrl: winner.uri,
+    );
+    await _saveSession(connected);
+    session = connected;
+    logs.add('Connected securely to ${server.name} '
+        '(${winner.relay ? 'relay' : winner.local ? 'local' : 'remote'}).');
+    return connected;
   }
+
+  /// Picks a working address again for the signed-in server. The saved
+  /// address can stop answering when the car leaves the home Wi-Fi, so a
+  /// failed refresh calls this before showing an error.
+  Future<PlexSession> reconnect() async {
+    final value = _requireSession();
+    logs.add('Saved endpoint failed; looking for another route.');
+    final servers = await fetchServers(value.accountToken);
+    final server = servers.where((item) => item.id == value.serverId);
+    if (server.isEmpty) {
+      throw StateError('${value.serverName} is no longer available.');
+    }
+    return connect(value.accountToken, server.first);
+  }
+
+  /// Whether [error] means the server could not be reached at all, as opposed
+  /// to Plex answering with an error such as an expired token.
+  static bool isUnreachable(Object error) =>
+      error is DioException &&
+      error.response == null &&
+      error.type != DioExceptionType.cancel;
 
   Future<void> _saveSession(PlexSession value) async {
     for (final entry in value.toStorage().entries) {
@@ -841,23 +882,17 @@ class PlexApi {
       'baseUrl',
       'currentHomeUserUuid',
       'currentHomeUserName',
-      'cache.home',
-      'cache.sections',
-      'cache.library'
     ]) {
       await _prefs.remove('gkui.$key');
     }
+    await _cache.clear();
     session = null;
     _markerCache.clear();
     logs.add('Signed out; stored Plex tokens removed.');
   }
 
   Future<void> clearContentCache() async {
-    await Future.wait(<Future<bool>>[
-      _prefs.remove('gkui.cache.home'),
-      _prefs.remove('gkui.cache.sections'),
-      _prefs.remove('gkui.cache.library'),
-    ]);
+    await _cache.clear();
     _markerCache.clear();
   }
 
@@ -889,14 +924,14 @@ class PlexApi {
       'hubs': responses[0]?.data,
       'onDeck': responses[1]?.data,
     };
-    await _prefs.setString('gkui.cache.home', jsonEncode(cache));
+    await _cache.write('home', jsonEncode(cache));
     final shelves = _parseHome(cache);
     logs.add('Loaded ${shelves.length} home shelves.');
     return shelves;
   }
 
   List<PlexShelf> loadCachedHome() {
-    final raw = _prefs.getString('gkui.cache.home');
+    final raw = _cache.read('home');
     if (raw == null) return const <PlexShelf>[];
     try {
       return _parseHome(jsonDecode(raw) as Map<String, dynamic>);
@@ -935,12 +970,12 @@ class PlexApi {
       '${value.baseUrl}/library/sections',
       options: Options(headers: headers(value.serverToken)),
     );
-    await _prefs.setString('gkui.cache.sections', jsonEncode(response.data));
+    await _cache.write('sections', jsonEncode(response.data));
     return _parseSections(response.data);
   }
 
   List<PlexSection> loadCachedSections() {
-    final raw = _prefs.getString('gkui.cache.sections');
+    final raw = _cache.read('sections');
     if (raw == null) return const <PlexSection>[];
     try {
       return _parseSections(jsonDecode(raw) as Map<String, dynamic>);
@@ -976,8 +1011,8 @@ class PlexApi {
       options: Options(headers: headers(value.serverToken)),
     );
     if (start == 0 && !unwatchedOnly) {
-      await _prefs.setString(
-          'gkui.cache.library',
+      await _cache.write(
+          'library',
           jsonEncode(<String, dynamic>{
             'sectionKey': sectionKey,
             'data': response.data,
@@ -999,7 +1034,7 @@ class PlexApi {
   }
 
   List<PlexMedia> loadCachedSection(String sectionKey) {
-    final raw = _prefs.getString('gkui.cache.library');
+    final raw = _cache.read('library');
     if (raw == null) return const <PlexMedia>[];
     try {
       final cache = jsonDecode(raw) as Map<String, dynamic>;
@@ -1039,6 +1074,59 @@ class PlexApi {
     if (items.isEmpty)
       throw StateError('Plex returned no metadata for this title.');
     return items.first;
+  }
+
+  /// Asks Plex whether the chosen file is still on disk before the player
+  /// opens it. Returns a viewer-facing reason when Plex reports it missing or
+  /// unreadable, and null when it is present or the check itself fails (a slow
+  /// mount must not block playback).
+  Future<String?> missingFileReason(String ratingKey, int mediaIndex) async {
+    final value = _requireSession();
+    try {
+      final response = await _serverDio.get<Map<String, dynamic>>(
+        '${value.baseUrl}/library/metadata/$ratingKey',
+        queryParameters: const <String, dynamic>{'checkFiles': 1},
+        options: Options(
+          headers: headers(value.serverToken),
+          receiveTimeout: const Duration(seconds: 8),
+        ),
+      );
+      final metadata = (_container(response.data)['Metadata'] as List<dynamic>?)
+          ?.firstOrNull as Map<String, dynamic>?;
+      if (metadata == null) return null;
+      return fileProblem(metadata, mediaIndex);
+    } catch (error) {
+      logs.add('File check skipped: ${_briefError(error)}');
+      return null;
+    }
+  }
+
+  /// The reason a title's file cannot be played, from `checkFiles=1` metadata.
+  static String? fileProblem(Map<String, dynamic> metadata, int mediaIndex) {
+    bool isFalse(Object? flag) => flag == false || flag == 0 || flag == '0';
+    final media = metadata['Media'] as List<dynamic>? ?? const <dynamic>[];
+    if (media.isEmpty) {
+      return 'Plex has no video file for this title. It may have been deleted '
+          'or moved; refresh the library on the Plex server.';
+    }
+    final chosen = (mediaIndex >= 0 && mediaIndex < media.length
+        ? media[mediaIndex]
+        : media.first) as Map<String, dynamic>;
+    final parts = chosen['Part'] as List<dynamic>? ?? const <dynamic>[];
+    final part = parts.firstOrNull as Map<String, dynamic>?;
+    if (part == null || (part['key']?.toString() ?? '').isEmpty) {
+      return 'Plex has no video file for this title. It may have been deleted '
+          'or moved; refresh the library on the Plex server.';
+    }
+    if (isFalse(part['exists'])) {
+      return 'This video file is missing on the Plex server. It may have been '
+          'deleted or moved, or its storage is offline.';
+    }
+    if (isFalse(part['accessible'])) {
+      return 'The Plex server cannot read this video file. Check that its '
+          'storage or mount is online.';
+    }
+    return null;
   }
 
   Future<List<PlexMedia>> search(String query,
@@ -1393,6 +1481,31 @@ class PlexApi {
     }
     return error?.runtimeType.toString() ?? 'unknown error';
   }
+}
+
+/// Completes with the first non-null probe result, waiting for the others
+/// only when every success so far [isFallback]. Probes must not throw.
+Future<T?> firstVerified<T extends Object>(
+  List<Future<T?>> probes, {
+  required bool Function(T value) isFallback,
+}) {
+  if (probes.isEmpty) return Future<T?>.value();
+  final result = Completer<T?>();
+  var pending = probes.length;
+  T? fallback;
+  for (final probe in probes) {
+    probe.then((value) {
+      pending--;
+      if (result.isCompleted) return;
+      if (value != null && !isFallback(value)) {
+        result.complete(value);
+      } else {
+        if (value != null) fallback ??= value;
+        if (pending == 0) result.complete(fallback);
+      }
+    });
+  }
+  return result.future;
 }
 
 class _LegacyTrustOverrides extends HttpOverrides {

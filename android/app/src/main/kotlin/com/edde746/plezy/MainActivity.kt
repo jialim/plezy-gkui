@@ -22,6 +22,8 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getDiagnostics" -> result.success(readDiagnostics())
+                // Internal storage: private to the app and removed on uninstall.
+                "getContentCacheDirectory" -> result.success(java.io.File(filesDir, "content-cache").absolutePath)
                 "checkForAppUpdate" -> runUpdateTask(result) {
                     GkuiUpdater(applicationContext).check()
                 }
@@ -185,6 +187,7 @@ class MainActivity : FlutterActivity() {
             "renderer" to "Flutter hardware-accelerated surface",
             "player" to "ExoPlayer 2.19.1 / HLS",
             "network" to "HTTPS only",
+            "last crash" to (CrashLog.read(this) ?: "none recorded"),
         )
     }
 

@@ -74,12 +74,20 @@ jobs:
           channel: stable
           cache: true
 
+      # Same gates as gkui-checks.yml, so a release never ships past a failing
+      # Android unit test or formatting check.
       - name: Test
         if: steps.version.outputs.publish == 'true'
         run: |
           flutter pub get
-          flutter analyze lib/main_gkui.dart lib/gkui test/gkui
-          flutter test test/gkui
+          dart format --output=none --set-exit-if-changed lib test
+          flutter analyze
+          flutter test
+
+      - name: Android unit tests
+        if: steps.version.outputs.publish == 'true'
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest -Ptarget=lib/main_gkui.dart -Ptarget-platform=android-arm --no-daemon
 
       - name: Build signed APK
         if: steps.version.outputs.publish == 'true'
@@ -131,4 +139,5 @@ jobs:
           gh release create "$TAG" "$apk" \
             --target "$GITHUB_SHA" \
             --title "Plezy GKUI ${VERSION}" \
-            --notes-file notes.md
+            --notes-file notes.md \
+            --latest

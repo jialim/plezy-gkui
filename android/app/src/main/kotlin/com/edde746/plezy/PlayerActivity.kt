@@ -157,19 +157,21 @@ class PlayerActivity : Activity() {
     private var lastTimelineReportAt = 0L
     private val timelineRunnable = object : Runnable {
         override fun run() {
-            val exo = player ?: return
-            val now = SystemClock.elapsedRealtime()
-            if (exo.isPlaying && now - lastTimelineReportAt >= 10_000L) {
-                lastTimelineReportAt = now
-                reportTimeline(exo.currentPosition, "playing")
+            guarded("progress tick") {
+                val exo = player ?: return
+                val now = SystemClock.elapsedRealtime()
+                if (exo.isPlaying && now - lastTimelineReportAt >= 10_000L) {
+                    lastTimelineReportAt = now
+                    reportTimeline(exo.currentPosition, "playing")
+                }
+                updateCarControls(exo)
+                resetReconnectBudgetIfStable(exo, now)
+                updateBufferingStatus(exo, now)
+                checkStartupProgress(exo, now)
+                if (completed) return
+                updateSkipButton(exo.currentPosition)
+                timelineHandler.postDelayed(this, 500L)
             }
-            updateCarControls(exo)
-            resetReconnectBudgetIfStable(exo, now)
-            updateBufferingStatus(exo, now)
-            checkStartupProgress(exo, now)
-            if (completed) return
-            updateSkipButton(exo.currentPosition)
-            timelineHandler.postDelayed(this, 500L)
         }
     }
 
@@ -372,115 +374,130 @@ class PlayerActivity : Activity() {
 
         exo.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
-                if (!renderedFirstFrame) {
-                    lastStartupProgressAtMs = SystemClock.elapsedRealtime()
-                    if (state != Player.STATE_READY) readyWithoutFrameAtMs = 0L
-                }
-                diagnostics.add("Player state: " + when (state) {
-                    Player.STATE_IDLE -> "idle"
-                    Player.STATE_BUFFERING -> "buffering"
-                    Player.STATE_READY -> "ready"
-                    Player.STATE_ENDED -> "ended"
-                    else -> "unknown"
-                })
-                if (state != Player.STATE_READY) {
-                    recoveredAtMs = 0L
-                }
-                updateCarControls(exo)
-                when (state) {
-                    Player.STATE_BUFFERING -> if (bufferingSinceMs == 0L) {
-                        bufferingSinceMs = SystemClock.elapsedRealtime()
+                guarded("state change") {
+                    if (!renderedFirstFrame) {
+                        lastStartupProgressAtMs = SystemClock.elapsedRealtime()
+                        if (state != Player.STATE_READY) readyWithoutFrameAtMs = 0L
                     }
-                    else -> bufferingSinceMs = 0L
-                }
-                if (state == Player.STATE_READY) {
-                    if (reconnecting) {
-                        diagnostics.add("Player: reconnected")
-                        failureKind = null
+                    diagnostics.add("Player state: " + when (state) {
+                        Player.STATE_IDLE -> "idle"
+                        Player.STATE_BUFFERING -> "buffering"
+                        Player.STATE_READY -> "ready"
+                        Player.STATE_ENDED -> "ended"
+                        else -> "unknown"
+                    })
+                    if (state != Player.STATE_READY) {
+                        recoveredAtMs = 0L
                     }
-                    reconnecting = false
-                    hideStatus()
-                }
-                if (state == Player.STATE_ENDED) {
-                    // A Zurg read that is cut off can look like a clean end of
-                    // file. Resume just past it instead of closing the video.
-                    val position = exo.currentPosition
-                    val duration = exo.duration.takeIf { it > 0L } ?: mediaDurationMs
-                    if (renderedFirstFrame && StreamResilience.endedEarly(position, duration) &&
-                        scheduleReconnect("stream ended early at ${formatTime(position)}", position + 1_000L)
-                    ) {
-                        return
+                    updateCarControls(exo)
+                    when (state) {
+                        Player.STATE_BUFFERING -> if (bufferingSinceMs == 0L) {
+                            bufferingSinceMs = SystemClock.elapsedRealtime()
+                        }
+                        else -> bufferingSinceMs = 0L
                     }
-                    if (renderedFirstFrame && StreamResilience.endedEarly(position, duration)) {
-                        // Not a real ending: keep it out of watched and autoplay.
-                        failureKind = "network"
-                        playbackError = "STREAM_ENDED_EARLY: stream stopped at ${formatTime(position)}"
-                        diagnostics.add("Player failed: $playbackError")
-                        window.decorView.post { finishWithResult(playbackError) }
-                        return
+                    if (state == Player.STATE_READY) {
+                        if (reconnecting) {
+                            diagnostics.add("Player: reconnected")
+                            failureKind = null
+                        }
+                        reconnecting = false
+                        hideStatus()
                     }
-                    ended = true
-                    window.decorView.postDelayed({ finishWithResult(null) }, 350L)
+                    if (state == Player.STATE_ENDED) {
+                        // A Zurg read that is cut off can look like a clean end of
+                        // file. Resume just past it instead of closing the video.
+                        val position = exo.currentPosition
+                        val duration = exo.duration.takeIf { it > 0L } ?: mediaDurationMs
+                        if (renderedFirstFrame && StreamResilience.endedEarly(position, duration) &&
+                            scheduleReconnect("stream ended early at ${formatTime(position)}", position + 1_000L)
+                        ) {
+                            return
+                        }
+                        if (renderedFirstFrame && StreamResilience.endedEarly(position, duration)) {
+                            // Not a real ending: keep it out of watched and autoplay.
+                            failureKind = "network"
+                            playbackError = "STREAM_ENDED_EARLY: stream stopped at ${formatTime(position)}"
+                            diagnostics.add("Player failed: $playbackError")
+                            window.decorView.post { finishWithResult(playbackError) }
+                            return
+                        }
+                        ended = true
+                        window.decorView.postDelayed({ finishWithResult(null) }, 350L)
+                    }
                 }
             }
 
             override fun onTracksChanged(tracks: Tracks) {
-                val audioRequested = requestedAudioId.isNotBlank() ||
-                    requestedAudioLanguage.isNotBlank()
-                if (!initialAudioApplied && audioRequested) {
-                    initialAudioApplied = true
-                    try {
-                        applyRequestedAudio()
-                    } catch (error: LinkageError) {
-                        diagnostics.add("Audio selection fallback: ${describeLinkage(error)}")
-                    } catch (error: RuntimeException) {
-                        diagnostics.add("Audio selection fallback: ${PlaybackDiagnostics.describe(error)}")
+                guarded("track change") {
+                    val audioRequested = requestedAudioId.isNotBlank() ||
+                        requestedAudioLanguage.isNotBlank()
+                    if (!initialAudioApplied && audioRequested) {
+                        initialAudioApplied = true
+                        try {
+                            applyRequestedAudio()
+                        } catch (error: LinkageError) {
+                            diagnostics.add("Audio selection fallback: ${describeLinkage(error)}")
+                        } catch (error: RuntimeException) {
+                            diagnostics.add("Audio selection fallback: ${PlaybackDiagnostics.describe(error)}")
+                        }
                     }
-                }
-                val subtitleRequested = requestedSubtitleId.isNotBlank() ||
-                    requestedSubtitleLanguage.isNotBlank() || requestedSubtitleUrl.isNotBlank()
-                if (!initialSubtitleApplied && subtitleRequested &&
-                    requestedSubtitleId != "off" && requestedSubtitleLanguage != "off"
-                ) {
-                    initialSubtitleApplied = true
-                    try {
-                        applyRequestedSubtitle()
-                    } catch (error: LinkageError) {
-                        diagnostics.add("Subtitle selection fallback: ${describeLinkage(error)}")
-                    } catch (error: RuntimeException) {
-                        diagnostics.add("Subtitle selection fallback: ${PlaybackDiagnostics.describe(error)}")
+                    val subtitleRequested = requestedSubtitleId.isNotBlank() ||
+                        requestedSubtitleLanguage.isNotBlank() || requestedSubtitleUrl.isNotBlank()
+                    if (!initialSubtitleApplied && subtitleRequested &&
+                        requestedSubtitleId != "off" && requestedSubtitleLanguage != "off"
+                    ) {
+                        initialSubtitleApplied = true
+                        try {
+                            applyRequestedSubtitle()
+                        } catch (error: LinkageError) {
+                            diagnostics.add("Subtitle selection fallback: ${describeLinkage(error)}")
+                        } catch (error: RuntimeException) {
+                            diagnostics.add("Subtitle selection fallback: ${PlaybackDiagnostics.describe(error)}")
+                        }
                     }
+                    syncActiveTracks(tracks)
                 }
-                syncActiveTracks(tracks)
             }
 
             override fun onRenderedFirstFrame() {
-                renderedFirstFrame = true
-                firstFrameMs = SystemClock.elapsedRealtime() - playerStartedAtMs
-                videoFormat = describeVideoFormat(exo.videoFormat)
-                diagnostics.add("Player: first video frame in ${firstFrameMs}ms")
-                diagnostics.add("Startup network: ${formatNetworkBytes(startupNetworkBytes.get())}")
-                if (videoFormat != null) diagnostics.add("Video format: $videoFormat")
+                guarded("first frame") {
+                    renderedFirstFrame = true
+                    firstFrameMs = SystemClock.elapsedRealtime() - playerStartedAtMs
+                    videoFormat = describeVideoFormat(exo.videoFormat)
+                    diagnostics.add("Player: first video frame in ${firstFrameMs}ms")
+                    diagnostics.add("Startup network: ${formatNetworkBytes(startupNetworkBytes.get())}")
+                    if (videoFormat != null) diagnostics.add("Video format: $videoFormat")
+                }
             }
 
             override fun onPlayerError(error: com.google.android.exoplayer2.PlaybackException) {
-                val http = PlaybackDiagnostics.causes(error)
-                    .filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()
-                failureKind = when {
-                    PlaybackDiagnostics.isConnectionFailure(error) || error.errorCode == 2001 -> "network"
-                    http != null -> "http"
-                    error.errorCode in 4000..4999 -> "decoder"
-                    else -> "source"
+                guarded("error handling") {
+                    val http = PlaybackDiagnostics.causes(error)
+                        .filterIsInstance<HttpDataSource.InvalidResponseCodeException>().firstOrNull()
+                    failureKind = when {
+                        PlaybackDiagnostics.isConnectionFailure(error) || error.errorCode == 2001 -> "network"
+                        // Plex answers 404/410 for a file deleted or moved since the last scan.
+                        http != null && (http.responseCode == 404 || http.responseCode == 410) -> "missing"
+                        http != null -> "http"
+                        error.errorCode in 4000..4999 -> "decoder"
+                        else -> "source"
+                    }
+                    playbackError = if (failureKind == "missing") {
+                        "This video file is missing on the Plex server (HTTP ${http?.responseCode}). " +
+                            "It may have been deleted or moved, or its storage is offline."
+                    } else {
+                        "${error.errorCodeName}: ${PlaybackDiagnostics.describe(error)}" +
+                            (http?.let { "; HTTP ${it.responseCode}" } ?: "")
+                    }
+                    diagnostics.add("Player failed: $playbackError")
+                    if (StreamResilience.isReconnectable(failureKind, http?.responseCode) &&
+                        scheduleReconnect("connection lost")
+                    ) {
+                        return
+                    }
+                    window.decorView.post { finishWithResult(playbackError) }
                 }
-                playbackError = "${error.errorCodeName}: ${PlaybackDiagnostics.describe(error)}" +
-                    (http?.let { "; HTTP ${it.responseCode}" } ?: "")
-                diagnostics.add("Player failed: $playbackError")
-                if (StreamResilience.isReconnectable(failureKind, http?.responseCode) &&
-                    scheduleReconnect("connection lost")
-                ) {
-                    return
-                }
-                window.decorView.post { finishWithResult(playbackError) }
             }
         })
         val mediaItemBuilder = MediaItem.Builder().setUri(Uri.parse(url))
@@ -614,7 +631,7 @@ class PlayerActivity : Activity() {
             return button
         }
 
-        addButton("Close", "Close player") { finishWithResult(playbackError) }
+        addButton("Close", "Close player") { closeByUser() }
         addButton("−${seekBackMs / 1_000}s", "Rewind ${seekBackMs / 1_000} seconds") {
             queueSeek(-seekBackMs)
         }
@@ -1102,7 +1119,60 @@ class PlayerActivity : Activity() {
             )
     }
 
+    /**
+     * Runs a player callback so an unexpected exception ends playback with an
+     * error the app can show, instead of taking the whole app back to the
+     * launcher.
+     */
+    private inline fun guarded(callback: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (error: RuntimeException) {
+            failInternally(callback, error)
+        } catch (error: LinkageError) {
+            failInternally(callback, error)
+        }
+    }
+
+    private fun failInternally(callback: String, error: Throwable) {
+        val message = "PLAYER_INTERNAL: ${error.javaClass.simpleName} during $callback at ${CrashLog.location(error)}"
+        diagnostics.add("Player failed: $message")
+        try {
+            CrashLog.record(this, "Handled player error during $callback", error)
+        } catch (_: Exception) {
+            // The diagnostics line above still reaches the Status screen.
+        }
+        if (completed) {
+            // finishWithResult itself failed part-way; still hand back an error.
+            if (!isFinishing) {
+                setResult(Activity.RESULT_OK, Intent().apply {
+                    putExtra(RESULT_ERROR, message)
+                    putExtra(RESULT_FAILURE_KIND, "player_internal")
+                    putStringArrayListExtra(RESULT_DIAGNOSTICS, diagnostics.snapshot())
+                })
+                finish()
+            }
+            return
+        }
+        failureKind = "player_internal"
+        playbackError = message
+        window.decorView.post { guarded("closing after an error") { finishWithResult(message) } }
+    }
+
     override fun onBackPressed() {
+        closeByUser()
+    }
+
+    /**
+     * The driver chose to leave. A dropout that is still being retried is not
+     * reported as a failure, or the app would reopen the video they just closed.
+     */
+    private fun closeByUser() {
+        if (reconnecting) {
+            diagnostics.add("Player: closed while reconnecting")
+            playbackError = null
+            failureKind = null
+        }
         finishWithResult(playbackError)
     }
 
@@ -1164,7 +1234,7 @@ class PlayerActivity : Activity() {
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_STOP -> {
-                finishWithResult(playbackError)
+                closeByUser()
                 return true
             }
         }
@@ -1329,8 +1399,9 @@ class PlayerActivity : Activity() {
     private fun releaseHttpClient() {
         val client = playbackHttpClient ?: return
         playbackHttpClient = null
+        // The dispatcher is this playback's own; the connection pool is shared
+        // with other tasks and drops idle connections by itself.
         client.dispatcher().cancelAll()
-        client.connectionPool().evictAll()
         client.dispatcher().executorService().shutdown()
     }
 
