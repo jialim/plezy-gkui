@@ -22,6 +22,8 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getDiagnostics" -> result.success(readDiagnostics())
+                // Internal storage: private to the app and removed on uninstall.
+                "getContentCacheDirectory" -> result.success(java.io.File(filesDir, "content-cache").absolutePath)
                 "checkForAppUpdate" -> runUpdateTask(result) {
                     GkuiUpdater(applicationContext).check()
                 }

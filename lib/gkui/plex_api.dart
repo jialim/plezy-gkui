@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import 'content_cache.dart';
 import 'diagnostics.dart';
 
 const String plexProduct = 'Plezy GKUI';
@@ -506,11 +507,12 @@ class PlaybackRequest {
 }
 
 class PlexApi {
-  PlexApi._(this._prefs, this.logs, this.clientIdentifier)
+  PlexApi._(this._prefs, this._cache, this.logs, this.clientIdentifier)
       : _accountDio = Dio(_options()),
         _serverDio = Dio(_options());
 
   final SharedPreferences _prefs;
+  final ContentCache _cache;
   final RedactingLogStore logs;
   final String clientIdentifier;
   final Dio _accountDio;
@@ -551,7 +553,7 @@ class PlexApi {
       id = const Uuid().v4();
       await prefs.setString('gkui.clientIdentifier', id);
     }
-    final api = PlexApi._(prefs, logs, id);
+    final api = PlexApi._(prefs, await ContentCache.open(prefs), logs, id);
     api.session = PlexSession.fromStorage(<String, String?>{
       'accountToken': prefs.getString('gkui.accountToken'),
       'serverToken': prefs.getString('gkui.serverToken'),
@@ -880,23 +882,17 @@ class PlexApi {
       'baseUrl',
       'currentHomeUserUuid',
       'currentHomeUserName',
-      'cache.home',
-      'cache.sections',
-      'cache.library'
     ]) {
       await _prefs.remove('gkui.$key');
     }
+    await _cache.clear();
     session = null;
     _markerCache.clear();
     logs.add('Signed out; stored Plex tokens removed.');
   }
 
   Future<void> clearContentCache() async {
-    await Future.wait(<Future<bool>>[
-      _prefs.remove('gkui.cache.home'),
-      _prefs.remove('gkui.cache.sections'),
-      _prefs.remove('gkui.cache.library'),
-    ]);
+    await _cache.clear();
     _markerCache.clear();
   }
 
@@ -928,14 +924,14 @@ class PlexApi {
       'hubs': responses[0]?.data,
       'onDeck': responses[1]?.data,
     };
-    await _prefs.setString('gkui.cache.home', jsonEncode(cache));
+    await _cache.write('home', jsonEncode(cache));
     final shelves = _parseHome(cache);
     logs.add('Loaded ${shelves.length} home shelves.');
     return shelves;
   }
 
   List<PlexShelf> loadCachedHome() {
-    final raw = _prefs.getString('gkui.cache.home');
+    final raw = _cache.read('home');
     if (raw == null) return const <PlexShelf>[];
     try {
       return _parseHome(jsonDecode(raw) as Map<String, dynamic>);
@@ -974,12 +970,12 @@ class PlexApi {
       '${value.baseUrl}/library/sections',
       options: Options(headers: headers(value.serverToken)),
     );
-    await _prefs.setString('gkui.cache.sections', jsonEncode(response.data));
+    await _cache.write('sections', jsonEncode(response.data));
     return _parseSections(response.data);
   }
 
   List<PlexSection> loadCachedSections() {
-    final raw = _prefs.getString('gkui.cache.sections');
+    final raw = _cache.read('sections');
     if (raw == null) return const <PlexSection>[];
     try {
       return _parseSections(jsonDecode(raw) as Map<String, dynamic>);
@@ -1015,8 +1011,8 @@ class PlexApi {
       options: Options(headers: headers(value.serverToken)),
     );
     if (start == 0 && !unwatchedOnly) {
-      await _prefs.setString(
-          'gkui.cache.library',
+      await _cache.write(
+          'library',
           jsonEncode(<String, dynamic>{
             'sectionKey': sectionKey,
             'data': response.data,
@@ -1038,7 +1034,7 @@ class PlexApi {
   }
 
   List<PlexMedia> loadCachedSection(String sectionKey) {
-    final raw = _prefs.getString('gkui.cache.library');
+    final raw = _cache.read('library');
     if (raw == null) return const <PlexMedia>[];
     try {
       final cache = jsonDecode(raw) as Map<String, dynamic>;
