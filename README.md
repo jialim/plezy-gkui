@@ -148,9 +148,9 @@ environment variables. Keystores and passwords must never be committed.
 ## Validation
 
 ```powershell
-dart format lib/main_gkui.dart lib/gkui test/gkui
-flutter analyze lib/main_gkui.dart lib/gkui test/gkui
-flutter test test/gkui
+dart format lib test
+flutter analyze
+flutter test
 cd android
 ./gradlew :app:testDebugUnitTest :app:compileDebugKotlin -x compileFlutterBuildDebug
 ```
@@ -163,11 +163,11 @@ hardware gate.
 ## Project documentation
 
 - [GKUI 1.2 release notes](GKUI_1_2_RELEASE_NOTES.md)
-- [Porting plan](PORTING_PLAN.md)
-- [Risks and validation gates](RISKS_AND_GATES.md)
-- [Compatibility dependency matrix](DEPENDENCY_MATRIX.md)
-- [Playback networking report](PLAYBACK_NETWORK_FIX_REPORT.md)
-- [Legacy certificate-chain report](PLEX_CERTIFICATE_CHAIN_FIX_REPORT.md)
+- [Porting plan](docs/PORTING_PLAN.md)
+- [Risks and validation gates](docs/RISKS_AND_GATES.md)
+- [Compatibility dependency matrix](docs/DEPENDENCY_MATRIX.md)
+- [Playback networking report](docs/PLAYBACK_NETWORK_FIX_REPORT.md)
+- [Legacy certificate-chain report](docs/PLEX_CERTIFICATE_CHAIN_FIX_REPORT.md)
 - [Privacy policy](PRIVACY.md)
 
 ## Upstream and license

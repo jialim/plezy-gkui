@@ -1,3 +1,0 @@
-mixin Refreshable {
-  void refresh();
-}

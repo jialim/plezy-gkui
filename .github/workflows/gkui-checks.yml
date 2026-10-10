@@ -34,13 +34,13 @@ jobs:
         run: flutter pub get
 
       - name: Verify formatting
-        run: dart format --output=none --set-exit-if-changed lib/main_gkui.dart lib/gkui test/gkui
+        run: dart format --output=none --set-exit-if-changed lib test
 
       - name: Analyze GKUI code
-        run: flutter analyze lib/main_gkui.dart lib/gkui test/gkui
+        run: flutter analyze
 
       - name: Flutter tests
-        run: flutter test test/gkui
+        run: flutter test
 
       # Checks never see the car's signing key: they run for every branch and
       # pull request, and their APK artifact is public. Only gkui-release.yml
@@ -74,8 +74,7 @@ jobs:
 
       - name: Android unit tests
         working-directory: android
-        # -Ptarget keeps the Flutter debug compile on the GKUI entry point;
-        # the default lib/main.dart is dormant upstream code that does not build.
+        # lib/main.dart forwards to the GKUI entry point; -Ptarget keeps that explicit.
         run: ./gradlew :app:testDebugUnitTest -Ptarget=lib/main_gkui.dart -Ptarget-platform=android-arm --no-daemon
 
       - name: Upload APK (throwaway-signed, does not update the car)
