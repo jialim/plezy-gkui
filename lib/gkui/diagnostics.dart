@@ -66,12 +66,24 @@ String redactSecrets(String input) {
   var output = input;
   const keys =
       r'(?:X-Plex-Token|authToken|accessToken|Authorization|Cookie|pin)';
+  // URL credentials: https://user:password@host
+  output = output.replaceAllMapped(
+    RegExp(r'(https?://)[^/\s:@]+:[^/\s@]+@', caseSensitive: false),
+    (match) => '${match.group(1)}<redacted>@',
+  );
   output = output.replaceAllMapped(
     RegExp('([?&]$keys=)[^&\\s]+', caseSensitive: false),
     (match) => '${match.group(1)}<redacted>',
   );
+  // JSON: "authToken": "value"
   output = output.replaceAllMapped(
-    RegExp('($keys\\s*[:=]\\s*)[^,;\\s]+', caseSensitive: false),
+    RegExp('("$keys"\\s*:\\s*)"[^"]*"', caseSensitive: false),
+    (match) => '${match.group(1)}"<redacted>"',
+  );
+  // Headers and maps: Authorization: Bearer value, X-Plex-Token=value
+  output = output.replaceAllMapped(
+    RegExp('($keys\\s*[:=]\\s*)(?:(?:Bearer|Basic)\\s+)?[^,;\\s}]+',
+        caseSensitive: false),
     (match) => '${match.group(1)}<redacted>',
   );
   return output;

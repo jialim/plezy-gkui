@@ -3,6 +3,7 @@ package com.edde746.plezy
 import android.annotation.SuppressLint
 import android.content.Context
 import okhttp3.ConnectionSpec
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okhttp3.EventListener
 import okhttp3.TlsVersion
@@ -16,11 +17,30 @@ import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 
 object LegacyTls {
+    @Volatile private var shared: OkHttpClient? = null
+
+    /**
+     * A client for one playback or update task. All of them share the trust
+     * store, TLS setup and connection pool, which are slow to build on the
+     * head unit; each gets its own dispatcher, so cancelling one task's calls
+     * never touches another's.
+     */
     fun createClient(
         context: Context,
         listener: EventListener = EventListener.NONE,
         readTimeoutSeconds: Long = 20L,
-    ): OkHttpClient {
+    ): OkHttpClient = sharedClient(context).newBuilder()
+        .dispatcher(Dispatcher())
+        .eventListener(listener)
+        .readTimeout(readTimeoutSeconds, TimeUnit.SECONDS)
+        .build()
+
+    private fun sharedClient(context: Context): OkHttpClient =
+        shared ?: synchronized(this) {
+            shared ?: buildSharedClient(context.applicationContext).also { shared = it }
+        }
+
+    private fun buildSharedClient(context: Context): OkHttpClient {
         val system = trustManager(null)
         val customStore = KeyStore.getInstance(KeyStore.getDefaultType()).apply { load(null) }
         context.assets.open("flutter_assets/assets/ca/legacy-roots.pem").use { input ->
@@ -39,9 +59,8 @@ object LegacyTls {
             .connectionSpecs(listOf(ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
                 .tlsVersions(TlsVersion.TLS_1_2, TlsVersion.TLS_1_3).build()))
             .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(readTimeoutSeconds, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(12, TimeUnit.SECONDS)
-            .eventListener(listener)
             .followRedirects(false)
             .followSslRedirects(false)
             .build()

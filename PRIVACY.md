@@ -1,98 +1,63 @@
-# Privacy Policy for Plezy
+# Privacy Policy for Plezy GKUI
 
-**Last Updated: October 22, 2025**
+**Last Updated: October 10, 2026**
 
-## Introduction
+Plezy GKUI ("the app") is an unofficial Plex client for GKUI in-car head
+units. This policy describes what the app stores on the head unit and which
+services it contacts. The app has no backend of its own: nothing is sent to
+servers run by the Plezy GKUI developer.
 
-Plezy ("we", "our", or "the app") is a third-party Plex client that allows you to access and stream content from your Plex Media Server. This privacy policy explains how we handle your information when you use our app.
+## What the app stores on the head unit
 
-## Information We Collect
+All of the following stays in the app's private storage on the head unit and
+is removed when you uninstall the app:
 
-### Authentication Information
-When you sign in to Plezy using your Plex account, we collect and process:
-- Plex authentication tokens
-- Plex account username
-- Plex server connection information
+- **Plex sign-in tokens**: the Plex account token and the token for the
+  selected Plex Media Server, plus the server's name, ID and address. They are
+  kept in the app's Android shared preferences, which other apps cannot read.
+  They are not encrypted, because Android 4.4 head units have no dependable
+  hardware-backed key storage; anyone with root or debugging access to the head
+  unit could read them. Signing out deletes them.
+- **A random client identifier** that Plex uses to recognize this head unit.
+- **Settings and remembered choices**: seek intervals, skip and autoplay
+  settings, and the media version, audio track and subtitle you chose per
+  title or show (up to 200 titles).
+- **Cached Plex content**: Home shelves, library lists and poster images, so
+  the app can start quickly and stay usable offline. Signing out or switching
+  Plex Home profile clears the cached lists.
+- **Diagnostics**: a bounded in-memory log for the Status screen, and the last
+  crash report (exception types and code locations only). Tokens, passwords
+  and URL credentials are removed from log lines, and crash reports never
+  contain messages or addresses.
+- **Downloaded app updates**, until the update is installed.
 
-### Local Network Information
-To connect to your Plex Media Server on your local network, we may access:
-- Local network device discovery information
-- IP addresses of Plex servers on your network
+Android backups are disabled for the app, so this data is not copied to a
+backup.
 
-### Usage Information
-The app stores locally on your device:
-- Your authentication session
-- App preferences and settings
-- Recently accessed content history
+## Services the app contacts
 
-## How We Use Your Information
+- **Plex** (`plex.tv`, `clients.plex.tv`): PIN sign-in, the list of your Plex
+  Media Servers, and Plex Home profile switching. Plex's privacy policy
+  applies: https://www.plex.tv/about/privacy-legal/
+- **Your Plex Media Server**: library browsing, artwork, playback and playback
+  progress, over HTTPS only.
+- **GitHub** (`api.github.com`, `github.com`, GitHub's release-download hosts):
+  the app checks this project's public release list for a newer Plezy GKUI
+  version and, if you choose to install it, downloads the APK. GitHub sees the
+  head unit's IP address and a `Plezy-GKUI/<version>` user agent. GitHub's
+  privacy statement applies:
+  https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement
 
-We use the collected information solely to:
-- Authenticate you with your Plex account
-- Connect to and communicate with your Plex Media Server
-- Display your media library and stream content
-- Maintain your session and app preferences
+The app does not use analytics, advertising or crash-reporting services, and
+does not share your information with anyone else.
 
-## Data Storage and Security
+## Your choices
 
-- **Authentication tokens** are stored securely on your device using platform-specific secure storage mechanisms
-- **App preferences** are stored locally on your device
-- **No data** is transmitted to our servers - all communication is directly between your device and your Plex Media Server or Plex's authentication services
+- **Sign out** in the app to delete the stored Plex tokens and cached content.
+- **Uninstall the app** to delete everything it stored.
+- Manage your Plex account and authorized devices at https://app.plex.tv.
 
-## Third-Party Services
+## Changes to this policy
 
-### Plex
-Plezy uses Plex's authentication and media services. When you use this app:
-- You authenticate directly with Plex's servers
-- Your media streaming occurs between your device and your Plex Media Server
-- Plex's own privacy policy applies to their services: https://www.plex.tv/about/privacy-legal/
-
-We do not control and are not responsible for Plex's data practices.
-
-## Data Sharing
-
-We do not:
-- Sell your personal information
-- Share your information with third parties for marketing purposes
-- Transmit your data to our own servers
-- Track your viewing habits outside of local app functionality
-
-Your data is only shared with:
-- **Plex services** for authentication and media server communication (as required for the app to function)
-
-## Your Rights and Choices
-
-You can:
-- **Sign out** at any time to remove your authentication session from the device
-- **Uninstall the app** to remove all locally stored data
-- **Manage your Plex account** directly through Plex's services
-
-## Children's Privacy
-
-Plezy does not knowingly collect personal information from children under 13. The app relies on Plex account authentication, and users must comply with Plex's terms of service and age requirements.
-
-## Changes to This Privacy Policy
-
-We may update this privacy policy from time to time. We will notify users of any material changes by updating the "Last Updated" date at the top of this policy.
-
-## Data Retention
-
-- Authentication tokens are retained on your device until you sign out or uninstall the app
-- Local preferences and settings are retained until you uninstall the app
-- No data is retained on our servers as we do not operate any backend services
-
-## International Data Transfers
-
-As we do not operate backend servers, there are no international data transfers from our side. Any data transfers occur directly between your device and Plex's services, subject to Plex's privacy policy.
-
-## Legal Compliance
-
-This app complies with:
-- General Data Protection Regulation (GDPR)
-- California Consumer Privacy Act (CCPA)
-- Children's Online Privacy Protection Act (COPPA)
-- Other applicable privacy laws
-
-## Your Consent
-
-By using Plezy, you consent to this privacy policy and the processing of your information as described herein.
+Changes are published in this file in the project repository, with the date
+at the top updated.

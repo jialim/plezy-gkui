@@ -14,6 +14,10 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 - A car switching between day and night mode no longer restarts the player.
 - Remembered audio/subtitle choices keep the most recently played titles when the 200-title limit is reached.
 - The updater picks the newest stable GKUI release from the release list (the XGIMI build shares the repository), keeps working if the GitHub account is renamed, and deletes the downloaded APK once it is installed.
+- Cached Home and library data now lives in files instead of Android shared preferences, so settings changes and the 5-minute Home refresh no longer rewrite hundreds of KB on the head unit. The cache from 1.2.9 is moved over automatically.
+- The native player and updater share one TLS setup and connection pool instead of rebuilding the certificate store for every video.
+- The update check runs again when the head unit wakes up (at most every 12 hours), not only when the app starts.
+- Diagnostics also hide tokens written as JSON, Bearer values and passwords in addresses. The privacy policy now describes exactly what Plezy GKUI stores and contacts.
 - Pull-request and branch CI builds are signed with a throwaway key; only the release job uses the car's certificate, and it now runs the formatting check and Android unit tests before publishing.
 
 ## 1.2.9 start over and in-app updates

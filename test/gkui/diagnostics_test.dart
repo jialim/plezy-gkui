@@ -14,6 +14,17 @@ void main() {
     expect(output, contains('authToken=<redacted>'));
   });
 
+  test('redacts JSON tokens, bearer values and URL credentials', () {
+    final output = redactSecrets('{"authToken":"json-secret","name":"Car"} '
+        'Authorization: Bearer bearer-secret '
+        'https://user:pass-secret@host.example/path');
+
+    expect(output, isNot(contains('secret')));
+    expect(output, contains('"authToken":"<redacted>"'));
+    expect(output, contains('"name":"Car"'));
+    expect(output, contains('https://<redacted>@host.example/path'));
+  });
+
   test('bounded log drops oldest entries', () {
     final logs = RedactingLogStore(capacity: 2)
       ..add('first', at: DateTime.utc(2026))

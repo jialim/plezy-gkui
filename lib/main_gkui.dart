@@ -199,6 +199,11 @@ class GkuiUpdateInfo {
       );
 }
 
+const Duration updateRecheckInterval = Duration(hours: 12);
+
+bool shouldRecheckForUpdate(DateTime? lastCheck, DateTime now) =>
+    lastCheck == null || now.difference(lastCheck) >= updateRecheckInterval;
+
 String formatUpdateSize(int bytes) => bytes >= 1024 * 1024
     ? '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MiB'
     : '${bytes ~/ 1024} KiB';
@@ -1344,16 +1349,25 @@ class _GkuiRootState extends State<GkuiRoot> with WidgetsBindingObserver {
   final GkuiController controller = GkuiController();
   Timer? updateCheckTimer;
   bool appActive = true;
+  DateTime? lastUpdateCheck;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     controller.initialize();
-    updateCheckTimer = Timer(const Duration(seconds: 10), () {
-      if (mounted && appActive && controller.clockValid) {
-        unawaited(offerGkuiUpdate(context, controller, silent: true));
-      }
-    });
+    updateCheckTimer =
+        Timer(const Duration(seconds: 10), checkForUpdateQuietly);
+  }
+
+  /// The head unit usually sleeps rather than restarting the app, so the
+  /// startup check alone could go days without running. Resuming checks again
+  /// once [updateRecheckInterval] has passed, and also covers a startup check
+  /// skipped because the car clock had not synced yet.
+  void checkForUpdateQuietly() {
+    if (!mounted || !appActive || !controller.clockValid) return;
+    if (!shouldRecheckForUpdate(lastUpdateCheck, DateTime.now())) return;
+    lastUpdateCheck = DateTime.now();
+    unawaited(offerGkuiUpdate(context, controller, silent: true));
   }
 
   @override
@@ -1361,6 +1375,9 @@ class _GkuiRootState extends State<GkuiRoot> with WidgetsBindingObserver {
     appActive = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.resumed) {
       unawaited(controller.reconnectAfterResume());
+      updateCheckTimer?.cancel();
+      updateCheckTimer =
+          Timer(const Duration(seconds: 10), checkForUpdateQuietly);
     }
   }
 

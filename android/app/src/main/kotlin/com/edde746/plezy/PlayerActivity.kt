@@ -1399,8 +1399,9 @@ class PlayerActivity : Activity() {
     private fun releaseHttpClient() {
         val client = playbackHttpClient ?: return
         playbackHttpClient = null
+        // The dispatcher is this playback's own; the connection pool is shared
+        // with other tasks and drops idle connections by itself.
         client.dispatcher().cancelAll()
-        client.connectionPool().evictAll()
         client.dispatcher().executorService().shutdown()
     }
 
