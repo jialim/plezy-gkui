@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.BinaryMessenger
@@ -14,6 +16,7 @@ import java.io.File
 class XgimiUpdateInstaller(private val activity: FlutterActivity) {
   companion object {
     private const val CHANNEL = "com.plezy/xgimi_update"
+    private const val TAG = "XgimiUpdateInstaller"
   }
 
   private var pendingApk: File? = null
@@ -29,6 +32,7 @@ class XgimiUpdateInstaller(private val activity: FlutterActivity) {
         val path = call.argument<String>("path")
           ?: throw IllegalArgumentException("APK path is required")
         val apk = validatedCacheApk(path)
+        XgimiApkVerifier.verify(activity.packageManager, activity.packageName, apk)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
           !activity.packageManager.canRequestPackageInstalls()
         ) {
@@ -51,17 +55,30 @@ class XgimiUpdateInstaller(private val activity: FlutterActivity) {
     }
   }
 
+  /**
+   * Called from MainActivity.onResume. The first resume after the settings
+   * screen settles the request either way: a later, unrelated resume must not
+   * pop an installer the viewer has forgotten about, and nothing here may
+   * throw out of onResume.
+   */
   fun onResume() {
     if (!waitingForUnknownSourcesPermission) return
+    val apk = pendingApk
+    pendingApk = null
+    waitingForUnknownSourcesPermission = false
+    if (apk == null || !apk.isFile) return
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
       !activity.packageManager.canRequestPackageInstalls()
     ) {
       return
     }
-    val apk = pendingApk ?: return
-    pendingApk = null
-    waitingForUnknownSourcesPermission = false
-    launchInstaller(apk)
+    try {
+      launchInstaller(apk)
+    } catch (error: Exception) {
+      Log.w(TAG, "Could not open the package installer", error)
+      Toast.makeText(activity, "Android could not open the installer. Try the update again.", Toast.LENGTH_LONG)
+        .show()
+    }
   }
 
   private fun validatedCacheApk(path: String): File {

@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../i18n/strings.g.dart';
 import '../services/update_service.dart';
 import '../widgets/dialog_action_button.dart';
+import 'app_logger.dart';
 import 'dialogs.dart';
 
 Future<void> showUpdateAvailableDialog(
@@ -122,7 +123,8 @@ class _XgimiUpdateProgressDialogState extends State<_XgimiUpdateProgressDialog> 
       } else {
         Navigator.pop(context);
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      appLogger.w('XGIMI update failed', error: error, stackTrace: stackTrace);
       if (!mounted) return;
       setState(() {
         _running = false;
@@ -159,17 +161,8 @@ class _XgimiUpdateProgressDialogState extends State<_XgimiUpdateProgressDialog> 
           ],
         ),
         actions: [
-          if (canClose)
-            DialogActionButton(
-              onPressed: () => Navigator.pop(context),
-              label: t.common.close,
-            ),
-          if (_failed)
-            DialogActionButton(
-              onPressed: _start,
-              label: t.common.retry,
-              isPrimary: true,
-            ),
+          if (canClose) DialogActionButton(onPressed: () => Navigator.pop(context), label: t.common.close),
+          if (_failed) DialogActionButton(onPressed: _start, label: t.common.retry, isPrimary: true),
         ],
       ),
     );

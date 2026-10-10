@@ -18,7 +18,6 @@ permissions:
 
 env:
   FLUTTER_VERSION: '3.47.1'
-  XGIMI_VERSION: '2.22.0'
   # SHA-256 of the permanent XGIMI Lite signing certificate (Test 4 onward).
   # Publishing is refused for any APK signed with something else, so every
   # release installs over the previous one without an uninstall.
@@ -33,6 +32,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # The release tag, file names and the in-app updater all key off this,
+      # so it comes from pubspec.yaml instead of a second hand-kept copy.
+      - name: Read XGIMI version
+        shell: bash
+        run: |
+          full=$(sed -n 's/^version: *//p' pubspec.yaml)
+          echo "XGIMI_VERSION=${full%%+*}" >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
         with:
@@ -69,16 +76,18 @@ jobs:
           test/services/family_projector_ui_test.dart
           --dart-define=FAMILY_PROJECTOR_MODE=true
 
-      # Branch releases must use the permanent key so every build from Test 4
-      # onward updates in place. Pull requests can use an isolated throwaway
-      # key because repository secrets are intentionally unavailable to forks.
+      # Branch releases and manual builds use the permanent key so every build
+      # updates in place. Pull requests and tag pushes build unreviewed code and
+      # publish a public artifact, so they never receive the key: even a
+      # same-repository pull request gets an isolated throwaway key.
       - name: Configure APK signing
         shell: bash
         env:
-          XGIMI_KEYSTORE_BASE64: ${{ secrets.XGIMI_KEYSTORE_BASE64 }}
-          XGIMI_KEYSTORE_PASSWORD: ${{ secrets.XGIMI_KEYSTORE_PASSWORD }}
-          XGIMI_KEY_ALIAS: ${{ secrets.XGIMI_KEY_ALIAS }}
-          XGIMI_KEY_PASSWORD: ${{ secrets.XGIMI_KEY_PASSWORD }}
+          USE_PERMANENT_KEY: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/plezy-xgimi-lite') || github.event_name == 'workflow_dispatch' }}
+          XGIMI_KEYSTORE_BASE64: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/plezy-xgimi-lite') || github.event_name == 'workflow_dispatch') && secrets.XGIMI_KEYSTORE_BASE64 || '' }}
+          XGIMI_KEYSTORE_PASSWORD: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/plezy-xgimi-lite') || github.event_name == 'workflow_dispatch') && secrets.XGIMI_KEYSTORE_PASSWORD || '' }}
+          XGIMI_KEY_ALIAS: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/plezy-xgimi-lite') || github.event_name == 'workflow_dispatch') && secrets.XGIMI_KEY_ALIAS || '' }}
+          XGIMI_KEY_PASSWORD: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/plezy-xgimi-lite') || github.event_name == 'workflow_dispatch') && secrets.XGIMI_KEY_PASSWORD || '' }}
         run: |
           set -euo pipefail
           if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/plezy-xgimi-lite" ]; then
@@ -100,7 +109,7 @@ jobs:
             key_alias="$XGIMI_KEY_ALIAS"
             key_password="${XGIMI_KEY_PASSWORD:-$XGIMI_KEYSTORE_PASSWORD}"
           else
-            echo "::warning::XGIMI_KEYSTORE_BASE64 is not set; signing with a throwaway key. Uninstall the previous build before installing this one."
+            echo "::notice::Signing with a throwaway key (USE_PERMANENT_KEY=$USE_PERMANENT_KEY). This APK cannot update an installed XGIMI Lite."
             store_password=android
             key_alias=xgimi-test
             key_password=android
@@ -143,6 +152,11 @@ jobs:
           cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "plezy-xgimi-lite-${XGIMI_VERSION}-${label}-armeabi-v7a.apk"
           tar -czf "plezy-xgimi-lite-${XGIMI_VERSION}-${label}-arm64-v8a.tar.gz" "plezy-xgimi-lite-${XGIMI_VERSION}-${label}-arm64-v8a.apk"
           tar -czf "plezy-xgimi-lite-${XGIMI_VERSION}-${label}-armeabi-v7a.tar.gz" "plezy-xgimi-lite-${XGIMI_VERSION}-${label}-armeabi-v7a.apk"
+          # Confirm the package identity, so a regression to upstream's
+          # com.edde746.plezy cannot ship and collide with official Plezy.
+          aapt=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          "$aapt" dump badging "plezy-xgimi-lite-${XGIMI_VERSION}-${label}-arm64-v8a.apk" | grep -q "package: name='app.plezylite.xgimi'" \
+            || { echo "::error::The APK does not use the app.plezylite.xgimi package ID."; exit 1; }
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -165,6 +179,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+
+      - name: Read XGIMI version
+        shell: bash
+        run: |
+          full=$(sed -n 's/^version: *//p' pubspec.yaml)
+          echo "XGIMI_VERSION=${full%%+*}" >> "$GITHUB_ENV"
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -205,7 +225,7 @@ jobs:
             changes=$(git log -1 --format='- %s')
           fi
           if [ "$SIGNED_WITH_STABLE_KEY" = true ]; then
-            signing="Signed with the permanent XGIMI Lite key. In-place updates are supported from Test 4 onward; Tests 1-3 used unrelated disposable keys."
+            signing="Signed with the permanent XGIMI Lite key as package app.plezylite.xgimi. Builds that used com.edde746.plezy install this as a separate app once; later builds update in place."
           else
             signing="Signed with a throwaway test key. Uninstall the previous Plezy build before installing this one."
           fi

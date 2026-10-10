@@ -239,13 +239,20 @@ android {
   // by FEATURE_AUTOMOTIVE and the manifest declares `uses-library android.car required=false`.
   useLibrary("android.car")
 
+  buildFeatures {
+    // BuildConfig.APPLICATION_ID names the content-provider authorities.
+    buildConfig = true
+  }
+
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
   }
 
   defaultConfig {
-    applicationId = "com.edde746.plezy"
+    // XGIMI Lite has its own identity so it installs beside official Plezy.
+    // Provider authorities derive from it (see AndroidManifest.xml).
+    applicationId = "app.plezylite.xgimi"
     minSdk = 25 // Fire OS 6.x (API 25); :libmpv shares the same floor
     targetSdk = flutter.targetSdkVersion
     versionCode = flutter.versionCode

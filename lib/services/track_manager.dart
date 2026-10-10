@@ -7,6 +7,7 @@ import '../mpv/mpv.dart';
 import '../media/media_item.dart';
 import '../media/media_server_user_profile.dart';
 import '../media/media_source_info.dart';
+import '../services/family_projector_profile.dart';
 import '../services/scoped_player_prefs.dart';
 import '../services/settings_service.dart';
 import '../services/subtitle_preference.dart';
@@ -467,6 +468,7 @@ class TrackManager {
   /// selection for the same reason as [onAudioTrackSelectedByUser].
   Future<void> onSubtitleTrackSelectedByUser(SubtitleTrack track, {int? sourceStreamId}) async {
     await invalidatePendingSelection();
+    await FamilyProjectorSubtitleMemory.record(FamilyProjectorSubtitleMemory.keyFor(metadata), track);
     await onSubtitleTrackChanged(track, sourceStreamId: sourceStreamId);
   }
 

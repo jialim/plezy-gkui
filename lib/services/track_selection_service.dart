@@ -1165,6 +1165,19 @@ class TrackSelectionService {
         appLogger.d('Subtitle intent declined: $intent');
     }
 
+    // Family profile: a subtitle someone chose for this show or movie (or Off)
+    // sticks to every episode until changed, ahead of Plex's per-file memory.
+    if (FamilyProjectorProfile.enabled) {
+      final remembered = FamilyProjectorSubtitleMemory.choiceFor(FamilyProjectorSubtitleMemory.keyFor(metadata));
+      if (remembered != null && remembered.id == SubtitleTrack.off.id) {
+        return TrackSelectionResult(SubtitleTrack.off, TrackSelectionPriority.profile);
+      }
+      if (remembered != null && availableTracks.isNotEmpty) {
+        final match = findBestSubtitleMatch(availableTracks, remembered);
+        if (match != null) return TrackSelectionResult(match, TrackSelectionPriority.profile);
+      }
+    }
+
     // Priority 2: Trust the server's selected track. Plex computes this from
     // account/show/per-item prefs; MediaBrowser exposes DefaultSubtitleStreamIndex.
     final info = plexMediaInfo;

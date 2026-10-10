@@ -27,7 +27,7 @@ Both APKs contain exactly one native ABI. Release assets also include compressed
 3. Install the APK and complete Plex, Jellyfin, or Emby sign-in.
 4. Open **Settings → Advanced → View logs** and save the diagnostics header before testing playback.
 
-Test 4 established the permanent signing identity for XGIMI Lite. Test 4 and later update in place while preserving sign-in and settings. Tests 1-3 used unrelated disposable keys and must be uninstalled before installing the current line.
+Test 4 established the permanent signing identity for XGIMI Lite. Starting with the next test build, XGIMI Lite also has its own package ID, `app.plezylite.xgimi`, so it installs beside official Plezy instead of colliding with `com.edde746.plezy`. That build installs as a new app once: sign in to Plex in it, then uninstall the older "Plezy" test build. Every build after it updates in place while preserving sign-in and settings.
 
 ### Updating without USB
 
