@@ -32,6 +32,7 @@ class XgimiUpdateInstaller(private val activity: FlutterActivity) {
         val path = call.argument<String>("path")
           ?: throw IllegalArgumentException("APK path is required")
         val apk = validatedCacheApk(path)
+        XgimiApkVerifier.verify(activity.packageManager, activity.packageName, apk)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
           !activity.packageManager.canRequestPackageInstalls()
         ) {
