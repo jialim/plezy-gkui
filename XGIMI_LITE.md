@@ -44,7 +44,11 @@ Strictly refusing all video transcoding is not enabled in test 1. Direct Play se
 
 ## Chinese subtitles
 
-Explicit manual choices and server-selected tracks remain authoritative. Plex reports "subtitles off" by selecting no stream, so when nothing is selected the profile turns subtitles on only if a Chinese track exists and the audio is not already Chinese. English-only or Chinese-audio titles keep subtitles off. When the profile does pick a track, it ranks them as:
+Chinese subtitles are on by default for movies and for shows, drama and anime alike: when nobody has chosen a subtitle, the profile turns one on if a Chinese track exists and the audio is not already Chinese. English-only or Chinese-audio titles keep subtitles off.
+
+A subtitle someone picks in the player (a specific track, or Off) is remembered on the projector for that show or movie and reused for every later episode, across restarts, until someone picks again. Plex itself only remembers per episode file and stores Off the same way as "never chosen", so this local memory takes precedence over Plex's per-file selection. A track is carried to another episode by language and title, so Simplified/Traditional or commentary choices stay distinct.
+
+When the profile picks a track itself, it ranks them as:
 
 1. Simplified Chinese (`zh-CN`, `zh-SG`, `zh-Hans`, `chs`)
 2. Traditional Chinese (`zh-TW`, `zh-HK`, `zh-MO`, `zh-Hant`, `cht`)
@@ -74,9 +78,11 @@ The existing performance overlay continues to expose live playback information. 
 
 Every push to `plezy-xgimi-lite` that passes the checks is published as the next GitHub pre-release, `xgimi-lite-v<version>-test<N>`, with both APKs, the tarballs, their SHA-256 and the commits since the previous test release.
 
-Branch releases are signed with the permanent key in the `XGIMI_KEYSTORE_BASE64`, `XGIMI_KEYSTORE_PASSWORD`, `XGIMI_KEY_ALIAS` and `XGIMI_KEY_PASSWORD` repository secrets, so Test 4 and later install over one another and keep the projector's sign-in and settings. The release workflow fails closed when any signing secret is missing; only pull-request checks may fall back to a throwaway key. Tests 1-3 used unrelated disposable keys and cannot be updated in place to Test 4. The key file is deleted before artifact packaging.
+Branch releases are signed with the permanent key in the `XGIMI_KEYSTORE_BASE64`, `XGIMI_KEYSTORE_PASSWORD`, `XGIMI_KEY_ALIAS` and `XGIMI_KEY_PASSWORD` repository secrets, so Test 4 and later install over one another and keep the projector's sign-in and settings. The release workflow fails closed when any signing secret is missing; only pull-request checks may fall back to a throwaway key. Tests 1-3 used unrelated disposable keys and cannot be updated in place to Test 4. Pull requests and tag pushes never receive the key, even from this repository, because their APK artifacts are public; they sign with a throwaway key. The key file is deleted before artifact packaging.
 
-Test 6 adds the XGIMI updater. It selects the newest `xgimi-lite-v2.22.0-test<N>` release, chooses the APK for the running process ABI, streams it to the app cache, verifies the SHA-256 digest supplied by GitHub, and opens Android's package installer. Android's install confirmation remains mandatory. On first use Android may also require **Allow from this source**; returning to Plezy resumes the pending install automatically. The stable Test 4+ certificate is Android's final protection against an unrelated APK replacing the app.
+XGIMI Lite uses the package ID `app.plezylite.xgimi` (earlier test builds used upstream's `com.edde746.plezy`). Content-provider authorities derive from it, so it can be installed next to official Plezy. The build moving to the new ID installs as a separate app once; later builds update it in place. CI refuses to publish an APK with any other package ID.
+
+Test 6 adds the XGIMI updater. It selects the newest `xgimi-lite-v<version>` or `xgimi-lite-v<version>-test<N>` release (a stable build sorts after the tests of the same version, and the version is read from `pubspec.yaml` by CI), chooses the APK for the running process ABI, streams it to the app cache, verifies the SHA-256 digest supplied by GitHub, and opens Android's package installer. Android's install confirmation remains mandatory. On first use Android may also require **Allow from this source**; returning to Plezy resumes the pending install automatically. The stable Test 4+ certificate is Android's final protection against an unrelated APK replacing the app.
 
 Partially watched movies and episodes also expose a separate, labeled **Play from beginning** action in the projector detail screen. It sends an explicit zero start position through the normal playback path, leaving the ordinary Resume action and stored server progress intact.
 

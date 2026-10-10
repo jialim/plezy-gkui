@@ -1073,6 +1073,7 @@ class SettingsService extends BaseSharedPreferencesService {
   /// explicit preferences.
   Future<void> _seedFamilyProjectorDefaults() async {
     if (!FamilyProjectorProfile.enabled) return;
+    FamilyProjectorSubtitleMemory.load(prefs);
 
     Future<void> setStringIfMissing(Pref<Object?> pref, String value) async {
       if (!prefs.containsKey(pref.key)) await prefs.setString(pref.key, value);

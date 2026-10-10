@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -96,11 +97,7 @@ void main() {
   test('XGIMI release selection chooses the newest valid APK for the process ABI', () {
     final digest = List.filled(64, 'a').join();
 
-    Map<String, Object?> release(
-      int number, {
-      bool draft = false,
-      bool includeDigest = true,
-    }) => {
+    Map<String, Object?> release(int number, {bool draft = false, bool includeDigest = true}) => {
       'tag_name': 'xgimi-lite-v2.22.0-test$number',
       'name': 'Test $number',
       'draft': draft,
@@ -127,6 +124,56 @@ void main() {
     final armv7 = UpdateService.selectXgimiRelease(releases, is64Bit: false);
     expect(armv7?['testNumber'], 7);
     expect(armv7?['installFileName'], endsWith('-armeabi-v7a.apk'));
+  });
+
+  test('XGIMI release selection follows version bumps and prefers stable builds', () {
+    final digest = List.filled(64, 'b').join();
+    Map<String, Object?> release(String tag) => {
+      'tag_name': tag,
+      'draft': false,
+      'target_commitish': 'commit-$tag',
+      'html_url': 'https://example.com/$tag',
+      'assets': [
+        {
+          'name': 'plezy-$tag-arm64-v8a.apk',
+          'browser_download_url': 'https://example.com/$tag.apk',
+          'digest': 'sha256:$digest',
+        },
+      ],
+    };
+
+    // Installed apps used to look only for 2.22.0 test tags and would never
+    // have seen the 2.23.0 build.
+    final bumped = UpdateService.selectXgimiRelease([
+      release('xgimi-lite-v2.22.0-test9'),
+      release('xgimi-lite-v2.23.0-test1'),
+      release('gkui-v1.2.10'),
+    ], is64Bit: true);
+    expect(bumped?['tag'], 'xgimi-lite-v2.23.0-test1');
+    expect(bumped?['versionLabel'], '2.23.0 Test 1');
+
+    final stable = UpdateService.selectXgimiRelease([
+      release('xgimi-lite-v2.23.0-test4'),
+      release('xgimi-lite-v2.23.0'),
+      release('xgimi-lite-v2.23.0-beta'),
+    ], is64Bit: true);
+    expect(stable?['tag'], 'xgimi-lite-v2.23.0');
+    expect(stable?['versionLabel'], '2.23.0');
+  });
+
+  test('old XGIMI update downloads are removed before a new one', () async {
+    final directory = await Directory.systemTemp.createTemp('xgimi-update-test');
+    addTearDown(() => directory.delete(recursive: true));
+    final oldApk = File('${directory.path}/plezy-xgimi-lite-2.22.0-test5-arm64-v8a.apk')..writeAsStringSync('old');
+    final partial = File('${directory.path}/plezy-xgimi-lite-2.22.0-test6-arm64-v8a.apk.partial')
+      ..writeAsStringSync('partial');
+    final unrelated = File('${directory.path}/poster.jpg')..writeAsStringSync('keep');
+
+    await UpdateService.removeStaleXgimiDownloads(directory);
+
+    expect(oldApk.existsSync(), isFalse);
+    expect(partial.existsSync(), isFalse);
+    expect(unrelated.existsSync(), isTrue);
   });
 
   for (final failure in failedResponses.entries) {

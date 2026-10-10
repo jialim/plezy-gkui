@@ -25,7 +25,11 @@ class UpdateService {
   static const String _githubRepo = 'edde746/plezy';
   static const String _xgimiGithubRepo = 'jialim/plezy-gkui';
   static const String _feedUrl = 'https://cdn.jsdelivr.net/gh/edde746/plezy@appcast/appcast.xml';
-  static const String _xgimiTagPrefix = 'xgimi-lite-v2.22.0-test';
+
+  /// `xgimi-lite-v<version>` or `xgimi-lite-v<version>-test<N>`. The version
+  /// is parsed rather than pinned so installs keep finding releases after the
+  /// fork moves to a newer upstream version or publishes a stable build.
+  static final RegExp _xgimiTagPattern = RegExp(r'^xgimi-lite-v(\d+)\.(\d+)\.(\d+)(?:-test(\d+))?$');
   static const String _gitCommit = String.fromEnvironment('GIT_COMMIT');
   static const MethodChannel _xgimiInstallerChannel = MethodChannel('com.plezy/xgimi_update');
   static const int _maximumXgimiApkBytes = 160 * 1024 * 1024;
@@ -44,6 +48,11 @@ class UpdateService {
   }
 
   static bool get _useXgimiUpdater => FamilyProjectorProfile.enabled && Platform.isAndroid;
+
+  /// The running VM's own ABI (`... on "android_arm"` vs `"android_arm64"`),
+  /// used when device diagnostics are not loaded yet. Guessing 64-bit would
+  /// download an APK a 32-bit-only projector cannot install.
+  static bool get _dartVmIs64Bit => Platform.version.contains('_arm64') || Platform.version.contains('_x64');
 
   /// Whether any in-app update path applies to this install.
   /// False inside a packaged (MSIX/Store) install: the Store owns updates and
@@ -231,7 +240,7 @@ class UpdateService {
 
     final selected = selectXgimiRelease(
       response.data as List<dynamic>,
-      is64Bit: DevicePerformance.is64BitProcess ?? true,
+      is64Bit: DevicePerformance.is64BitProcess ?? _dartVmIs64Bit,
     );
     if (selected == null) return null;
 
@@ -245,7 +254,7 @@ class UpdateService {
     return {
       'hasUpdate': true,
       'currentVersion': '${packageInfo.version}+${packageInfo.buildNumber} ($shortCommit)',
-      'latestVersion': 'Test ${selected['testNumber']}',
+      'latestVersion': selected['versionLabel'],
       'skipVersionKey': tag,
       'releaseUrl': selected['releaseUrl'],
       'releaseName': selected['releaseName'],
@@ -262,18 +271,28 @@ class UpdateService {
   /// app process. Kept pure so release payload edge cases are unit-testable.
   @visibleForTesting
   static Map<String, dynamic>? selectXgimiRelease(List<dynamic> releases, {required bool is64Bit}) {
-    final candidates = <({int number, Map<String, dynamic> release})>[];
+    final candidates = <({List<int> order, int? number, String version, Map<String, dynamic> release})>[];
     for (final raw in releases) {
       if (raw is! Map) continue;
       final release = Map<String, dynamic>.from(raw);
       if (release['draft'] == true) continue;
       final tag = release['tag_name'];
-      if (tag is! String || !tag.startsWith(_xgimiTagPrefix)) continue;
-      final number = int.tryParse(tag.substring(_xgimiTagPrefix.length));
-      if (number == null) continue;
-      candidates.add((number: number, release: release));
+      final match = tag is String ? _xgimiTagPattern.firstMatch(tag) : null;
+      if (match == null) continue;
+      final parts = [for (var group = 1; group <= 3; group++) int.parse(match.group(group)!)];
+      final number = match.group(4) == null ? null : int.parse(match.group(4)!);
+      // A stable build of a version sorts after every test build of it.
+      final order = [...parts, number == null ? 1 : 0, number ?? 0];
+      candidates.add((order: order, number: number, version: parts.join('.'), release: release));
     }
-    candidates.sort((a, b) => b.number.compareTo(a.number));
+    int compareOrder(List<int> a, List<int> b) {
+      for (var i = 0; i < a.length; i++) {
+        if (a[i] != b[i]) return a[i].compareTo(b[i]);
+      }
+      return 0;
+    }
+
+    candidates.sort((a, b) => compareOrder(b.order, a.order));
 
     final abiSuffix = is64Bit ? '-arm64-v8a.apk' : '-armeabi-v7a.apk';
     for (final candidate in candidates) {
@@ -299,12 +318,14 @@ class UpdateService {
           targetCommit.isEmpty) {
         continue;
       }
+      final label = candidate.number == null ? candidate.version : '${candidate.version} Test ${candidate.number}';
       return {
         'testNumber': candidate.number,
+        'versionLabel': label,
         'tag': release['tag_name'],
         'targetCommit': targetCommit,
         'releaseUrl': release['html_url'],
-        'releaseName': release['name'] ?? 'Plezy XGIMI Lite Test ${candidate.number}',
+        'releaseName': release['name'] ?? 'Plezy XGIMI Lite $label',
         'releaseNotes': release['body'] ?? '',
         'publishedAt': release['published_at'] ?? '',
         'installUrl': installUrl,
@@ -338,7 +359,7 @@ class UpdateService {
     final directory = await getTemporaryDirectory();
     final finalFile = File(p.join(directory.path, fileName));
     final partialFile = File('${finalFile.path}.partial');
-    if (await partialFile.exists()) await partialFile.delete();
+    await removeStaleXgimiDownloads(directory);
 
     final request = http.Request('GET', url)..headers['Accept'] = 'application/vnd.android.package-archive';
     final response = await httpClient.inner.send(request).timeout(const Duration(seconds: 30));
@@ -388,6 +409,25 @@ class UpdateService {
       throw StateError('Android could not open the package installer.');
     }
     return result!;
+  }
+
+  /// Each update APK is ~95 MB and named per build, so earlier downloads would
+  /// otherwise pile up in the projector's cache.
+  @visibleForTesting
+  static Future<void> removeStaleXgimiDownloads(Directory directory) async {
+    if (!await directory.exists()) return;
+    await for (final entry in directory.list()) {
+      final name = p.basename(entry.path);
+      if (entry is File &&
+          name.startsWith('plezy-xgimi-lite-') &&
+          (name.endsWith('.apk') || name.endsWith('.apk.partial'))) {
+        try {
+          await entry.delete();
+        } on FileSystemException {
+          // A file Android's installer still holds open is removed next time.
+        }
+      }
+    }
   }
 
   @visibleForTesting
