@@ -37,7 +37,7 @@
         </activity>
         <activity
             android:name=".PlayerActivity"
-            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:configChanges="orientation|keyboardHidden|keyboard|navigation|screenSize|smallestScreenSize|screenLayout|uiMode|density|fontScale|locale|layoutDirection"
             android:exported="false"
             android:hardwareAccelerated="true"
             android:screenOrientation="sensorLandscape"

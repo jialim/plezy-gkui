@@ -614,7 +614,7 @@ class PlayerActivity : Activity() {
             return button
         }
 
-        addButton("Close", "Close player") { finishWithResult(playbackError) }
+        addButton("Close", "Close player") { closeByUser() }
         addButton("−${seekBackMs / 1_000}s", "Rewind ${seekBackMs / 1_000} seconds") {
             queueSeek(-seekBackMs)
         }
@@ -1103,6 +1103,19 @@ class PlayerActivity : Activity() {
     }
 
     override fun onBackPressed() {
+        closeByUser()
+    }
+
+    /**
+     * The driver chose to leave. A dropout that is still being retried is not
+     * reported as a failure, or the app would reopen the video they just closed.
+     */
+    private fun closeByUser() {
+        if (reconnecting) {
+            diagnostics.add("Player: closed while reconnecting")
+            playbackError = null
+            failureKind = null
+        }
         finishWithResult(playbackError)
     }
 
@@ -1164,7 +1177,7 @@ class PlayerActivity : Activity() {
                 return true
             }
             KeyEvent.KEYCODE_MEDIA_STOP -> {
-                finishWithResult(playbackError)
+                closeByUser()
                 return true
             }
         }

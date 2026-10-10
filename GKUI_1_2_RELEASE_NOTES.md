@@ -1,6 +1,18 @@
-# Plezy GKUI 1.2.9 — Start Over and In-App Updates (2026-10-03)
+# Plezy GKUI 1.2.10 — Connection Recovery (unreleased)
 
 This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit. Phone remote and mirroring are intentionally excluded.
+
+## 1.2.10 connection recovery
+
+- If the saved Plex address stops answering (for example the home Wi-Fi address once the car is on 4G), Plezy looks up the server's addresses again and switches to one that works, instead of failing every request.
+- Server addresses are now tested all at once, so an unreachable home address no longer adds about 12 seconds per attempt; a Plex relay is used only when no direct address answers.
+- When a refresh fails, saved Home and library content stays on screen with an "Offline" notice; pull down to retry. Only a rejected Plex token returns to the sign-in screen.
+- A metadata or connection error before the player opens no longer runs the 720p/480p fallback ladder; those fallbacks are kept for real playback failures.
+- Closing the player while it shows "Reconnecting to Plex" closes it, instead of reopening the video.
+- A car switching between day and night mode no longer restarts the player.
+- Remembered audio/subtitle choices keep the most recently played titles when the 200-title limit is reached.
+- The updater picks the newest stable GKUI release from the release list (the XGIMI build shares the repository), keeps working if the GitHub account is renamed, and deletes the downloaded APK once it is installed.
+- Pull-request and branch CI builds are signed with a throwaway key; only the release job uses the car's certificate, and it now runs the formatting check and Android unit tests before publishing.
 
 ## 1.2.9 start over and in-app updates
 

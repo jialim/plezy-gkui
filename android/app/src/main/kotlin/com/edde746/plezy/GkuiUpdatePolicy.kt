@@ -10,9 +10,18 @@ internal data class GkuiRelease(
     val releaseUrl: String,
 )
 
+internal data class ReleaseSummary(
+    val index: Int,
+    val tag: String,
+    val draft: Boolean,
+    val prerelease: Boolean,
+)
+
 internal object GkuiUpdatePolicy {
     private val versionPattern = Regex("^[0-9]+(?:\\.[0-9]+){2}$")
     private val sha256Pattern = Regex("^[0-9a-f]{64}$")
+    private val assetUrlPattern =
+        Regex("^https://github\\.com/[A-Za-z0-9-]+/plezy-gkui/releases/download/([^/]+)/([^/]+)$")
 
     fun versionFromTag(tag: String): String? {
         val version = tag.removePrefix("gkui-v")
@@ -21,6 +30,12 @@ internal object GkuiUpdatePolicy {
 
     fun expectedAssetName(version: String): String =
         "plezy-gkui-$version-armeabi-v7a.apk"
+
+    /** The version in a finished download's file name, or null for anything else. */
+    fun versionFromAssetName(name: String): String? {
+        val version = name.removePrefix("plezy-gkui-").removeSuffix("-armeabi-v7a.apk")
+        return version.takeIf { expectedAssetName(it) == name && versionPattern.matches(it) }
+    }
 
     fun isNewer(candidate: String, current: String): Boolean {
         val candidateParts = versionParts(candidate) ?: return false
@@ -38,10 +53,31 @@ internal object GkuiUpdatePolicy {
         return digest.takeIf(sha256Pattern::matches)
     }
 
+    /**
+     * The owner segment is not pinned: GitHub redirects a renamed account, and
+     * an install must keep updating after it. The installed signing
+     * certificate, checked before the installer opens, is the real trust anchor.
+     */
     fun isTrustedAssetUrl(url: String, tag: String, assetName: String): Boolean {
-        val prefix = "https://github.com/jialim/plezy-gkui/releases/download/$tag/"
-        return url == prefix + assetName
+        val match = assetUrlPattern.matchEntire(url) ?: return false
+        return match.groupValues[1] == tag && match.groupValues[2] == assetName
     }
+
+    /** API redirects (a renamed owner or repository) stay on api.github.com. */
+    fun isTrustedApiRedirect(scheme: String, host: String): Boolean =
+        scheme == "https" && host == "api.github.com"
+
+    /**
+     * Picks the newest stable GKUI release from the repository's release list.
+     * The XGIMI build publishes to the same repository, so GitHub's single
+     * "latest" release is not necessarily a GKUI one.
+     */
+    fun newestStableIndex(releases: List<ReleaseSummary>): Int? = releases
+        .filter { !it.draft && !it.prerelease && versionFromTag(it.tag) != null }
+        .reduceOrNull { best, next ->
+            if (isNewer(versionFromTag(next.tag)!!, versionFromTag(best.tag)!!)) next else best
+        }
+        ?.index
 
     fun isTrustedDownloadHost(scheme: String, host: String): Boolean =
         scheme == "https" && (

@@ -42,41 +42,26 @@ jobs:
       - name: Flutter tests
         run: flutter test test/gkui
 
-      - name: Configure APK signing
+      # Checks never see the car's signing key: they run for every branch and
+      # pull request, and their APK artifact is public. Only gkui-release.yml
+      # signs with the real certificate.
+      - name: Configure throwaway APK signing
         shell: bash
-        env:
-          GKUI_KEYSTORE_BASE64: ${{ secrets.GKUI_KEYSTORE_BASE64 }}
-          SECRET_STORE_PASSWORD: ${{ secrets.GKUI_KEYSTORE_PASSWORD }}
-          SECRET_KEY_ALIAS: ${{ secrets.GKUI_KEY_ALIAS }}
-          SECRET_KEY_PASSWORD: ${{ secrets.GKUI_KEY_PASSWORD }}
         run: |
-          key_path="$RUNNER_TEMP/gkui-release.jks"
-          if [ -n "$GKUI_KEYSTORE_BASE64" ]; then
-            : "${SECRET_STORE_PASSWORD:?GKUI_KEYSTORE_PASSWORD is required}"
-            : "${SECRET_KEY_ALIAS:?GKUI_KEY_ALIAS is required}"
-            printf '%s' "$GKUI_KEYSTORE_BASE64" | base64 -d > "$key_path"
-            store_password="$SECRET_STORE_PASSWORD"
-            key_alias="$SECRET_KEY_ALIAS"
-            key_password="${SECRET_KEY_PASSWORD:-$SECRET_STORE_PASSWORD}"
-          else
-            echo "::warning::GKUI signing secrets are unavailable; using a throwaway CI key."
-            store_password=android
-            key_alias=gkui-ci
-            key_password=android
-            keytool -genkeypair -noprompt \
-              -keystore "$key_path" \
-              -storepass "$store_password" \
-              -alias "$key_alias" \
-              -keypass "$key_password" \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname 'CN=Plezy GKUI CI,O=Plezy,C=MY'
-          fi
+          key_path="$RUNNER_TEMP/gkui-ci.jks"
+          keytool -genkeypair -noprompt \
+            -keystore "$key_path" \
+            -storepass android \
+            -alias gkui-ci \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname 'CN=Plezy GKUI CI,O=Plezy,C=MY'
           echo "GKUI_KEYSTORE_PATH=$key_path" >> "$GITHUB_ENV"
-          echo "GKUI_KEYSTORE_PASSWORD=$store_password" >> "$GITHUB_ENV"
-          echo "GKUI_KEY_ALIAS=$key_alias" >> "$GITHUB_ENV"
-          echo "GKUI_KEY_PASSWORD=$key_password" >> "$GITHUB_ENV"
+          echo "GKUI_KEYSTORE_PASSWORD=android" >> "$GITHUB_ENV"
+          echo "GKUI_KEY_ALIAS=gkui-ci" >> "$GITHUB_ENV"
+          echo "GKUI_KEY_PASSWORD=android" >> "$GITHUB_ENV"
 
       # The release build runs lintVitalRelease, where NewApi is fatal, so an
       # API 20+ framework call fails here instead of on the head unit.
@@ -93,9 +78,9 @@ jobs:
         # the default lib/main.dart is dormant upstream code that does not build.
         run: ./gradlew :app:testDebugUnitTest -Ptarget=lib/main_gkui.dart -Ptarget-platform=android-arm --no-daemon
 
-      - name: Upload APK
+      - name: Upload APK (throwaway-signed, does not update the car)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: plezy-gkui-apk
+          name: plezy-gkui-apk-ci-signed
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 14

@@ -10,6 +10,7 @@ import androidx.core.content.FileProvider
 import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -31,6 +32,7 @@ internal class GkuiUpdater(private val context: Context) {
 
     fun check(): Map<String, Any> {
         val current = currentVersion()
+        removeInstalledDownloads(current)
         val release = fetchLatestRelease()
         return releaseMap(current, release)
     }
@@ -48,57 +50,89 @@ internal class GkuiUpdater(private val context: Context) {
     }
 
     private fun fetchLatestRelease(): GkuiRelease {
-        val request = Request.Builder()
-            .url(LATEST_RELEASE_API)
-            .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "Plezy-GKUI/${currentVersion()}")
-            .build()
-        client.newCall(request).execute().use { response ->
-            if (response.code() != 200) {
-                throw UpdateException("UPDATE_CHECK_FAILED", "GitHub returned HTTP ${response.code()}.")
-            }
-            val text = response.body()?.string()
-                ?: throw UpdateException("UPDATE_CHECK_FAILED", "GitHub returned an empty response.")
-            val json = JSONObject(text)
-            if (json.optBoolean("draft") || json.optBoolean("prerelease")) {
-                throw UpdateException("UPDATE_INVALID_RELEASE", "The latest release is not a stable GKUI build.")
-            }
-            val tag = json.optString("tag_name")
-            val version = GkuiUpdatePolicy.versionFromTag(tag)
-                ?: throw UpdateException("UPDATE_INVALID_RELEASE", "The latest release tag is not a GKUI version.")
-            val expectedName = GkuiUpdatePolicy.expectedAssetName(version)
-            val assets = json.optJSONArray("assets")
-                ?: throw UpdateException("UPDATE_INVALID_RELEASE", "The release contains no APK.")
-            var asset: JSONObject? = null
-            for (index in 0 until assets.length()) {
-                val candidate = assets.optJSONObject(index) ?: continue
-                if (candidate.optString("name") == expectedName) {
-                    asset = candidate
-                    break
-                }
-            }
-            val selected = asset
-                ?: throw UpdateException("UPDATE_INVALID_RELEASE", "The ARMv7 GKUI APK is missing.")
-            val assetUrl = selected.optString("browser_download_url")
-            if (!GkuiUpdatePolicy.isTrustedAssetUrl(assetUrl, tag, expectedName)) {
-                throw UpdateException("UPDATE_INVALID_RELEASE", "The release APK address is not trusted.")
-            }
-            val digest = GkuiUpdatePolicy.normalizedDigest(selected.optString("digest"))
-                ?: throw UpdateException("UPDATE_INVALID_RELEASE", "The release APK has no valid SHA-256 digest.")
-            val size = selected.optLong("size", -1L)
-            if (size !in 1..MAX_APK_BYTES) {
-                throw UpdateException("UPDATE_INVALID_RELEASE", "The release APK size is invalid.")
-            }
-            return GkuiRelease(
-                version = version,
-                tag = tag,
-                assetName = expectedName,
-                assetUrl = assetUrl,
-                assetSize = size,
-                sha256 = digest,
-                releaseUrl = json.optString("html_url"),
+        val releases = JSONArray(fetchReleaseList())
+        val summaries = (0 until releases.length()).mapNotNull { index ->
+            val release = releases.optJSONObject(index) ?: return@mapNotNull null
+            ReleaseSummary(
+                index = index,
+                tag = release.optString("tag_name"),
+                draft = release.optBoolean("draft"),
+                prerelease = release.optBoolean("prerelease"),
             )
         }
+        val newest = GkuiUpdatePolicy.newestStableIndex(summaries)
+            ?: throw UpdateException("UPDATE_INVALID_RELEASE", "No stable GKUI release was found.")
+        return parseRelease(releases.getJSONObject(newest))
+    }
+
+    /** Reads the release list, following GitHub's redirect for a renamed owner. */
+    private fun fetchReleaseList(): String {
+        var url = RELEASES_API
+        for (redirect in 0..MAX_REDIRECTS) {
+            val parsed = HttpUrl.parse(url)
+                ?: throw UpdateException("UPDATE_CHECK_FAILED", "GitHub returned an invalid address.")
+            if (!GkuiUpdatePolicy.isTrustedApiRedirect(parsed.scheme(), parsed.host())) {
+                throw UpdateException("UPDATE_CHECK_FAILED", "GitHub redirected to an untrusted address.")
+            }
+            val request = Request.Builder()
+                .url(parsed)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", "Plezy-GKUI/${currentVersion()}")
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (response.code() in 300..399) {
+                    val location = response.header("Location")
+                        ?: throw UpdateException("UPDATE_CHECK_FAILED", "GitHub returned an empty redirect.")
+                    url = response.request().url().resolve(location)?.toString()
+                        ?: throw UpdateException("UPDATE_CHECK_FAILED", "GitHub returned an invalid redirect.")
+                    return@use
+                }
+                if (response.code() != 200) {
+                    throw UpdateException("UPDATE_CHECK_FAILED", "GitHub returned HTTP ${response.code()}.")
+                }
+                return response.body()?.string()
+                    ?: throw UpdateException("UPDATE_CHECK_FAILED", "GitHub returned an empty response.")
+            }
+        }
+        throw UpdateException("UPDATE_CHECK_FAILED", "GitHub returned too many redirects.")
+    }
+
+    private fun parseRelease(json: JSONObject): GkuiRelease {
+        val tag = json.optString("tag_name")
+        val version = GkuiUpdatePolicy.versionFromTag(tag)
+            ?: throw UpdateException("UPDATE_INVALID_RELEASE", "The latest release tag is not a GKUI version.")
+        val expectedName = GkuiUpdatePolicy.expectedAssetName(version)
+        val assets = json.optJSONArray("assets")
+            ?: throw UpdateException("UPDATE_INVALID_RELEASE", "The release contains no APK.")
+        var asset: JSONObject? = null
+        for (index in 0 until assets.length()) {
+            val candidate = assets.optJSONObject(index) ?: continue
+            if (candidate.optString("name") == expectedName) {
+                asset = candidate
+                break
+            }
+        }
+        val selected = asset
+            ?: throw UpdateException("UPDATE_INVALID_RELEASE", "The ARMv7 GKUI APK is missing.")
+        val assetUrl = selected.optString("browser_download_url")
+        if (!GkuiUpdatePolicy.isTrustedAssetUrl(assetUrl, tag, expectedName)) {
+            throw UpdateException("UPDATE_INVALID_RELEASE", "The release APK address is not trusted.")
+        }
+        val digest = GkuiUpdatePolicy.normalizedDigest(selected.optString("digest"))
+            ?: throw UpdateException("UPDATE_INVALID_RELEASE", "The release APK has no valid SHA-256 digest.")
+        val size = selected.optLong("size", -1L)
+        if (size !in 1..MAX_APK_BYTES) {
+            throw UpdateException("UPDATE_INVALID_RELEASE", "The release APK size is invalid.")
+        }
+        return GkuiRelease(
+            version = version,
+            tag = tag,
+            assetName = expectedName,
+            assetUrl = assetUrl,
+            assetSize = size,
+            sha256 = digest,
+            releaseUrl = json.optString("html_url"),
+        )
     }
 
     private fun download(release: GkuiRelease): File {
@@ -185,6 +219,17 @@ internal class GkuiUpdater(private val context: Context) {
         throw UpdateException("UPDATE_DOWNLOAD_FAILED", "GitHub returned too many redirects.")
     }
 
+    /** Frees the ~15 MB APK once that version (or a newer one) is installed. */
+    private fun removeInstalledDownloads(current: String) {
+        val roots = listOfNotNull(context.externalCacheDir, context.cacheDir)
+        for (root in roots) {
+            File(root, "updates").listFiles()?.forEach { file ->
+                val version = GkuiUpdatePolicy.versionFromAssetName(file.name)
+                if (version == null || !GkuiUpdatePolicy.isNewer(version, current)) file.delete()
+            }
+        }
+    }
+
     @Suppress("DEPRECATION")
     private fun verifyArchive(apk: File, release: GkuiRelease) {
         val archive = context.packageManager.getPackageArchiveInfo(
@@ -256,8 +301,8 @@ internal class GkuiUpdater(private val context: Context) {
     )
 
     companion object {
-        private const val LATEST_RELEASE_API =
-            "https://api.github.com/repos/jialim/plezy-gkui/releases/latest"
+        private const val RELEASES_API =
+            "https://api.github.com/repos/jialim/plezy-gkui/releases?per_page=30"
         private const val APK_MIME = "application/vnd.android.package-archive"
         private const val MAX_APK_BYTES = 100L * 1024L * 1024L
         private const val MAX_REDIRECTS = 5

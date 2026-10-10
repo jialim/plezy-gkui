@@ -10,7 +10,7 @@ import 'package:uuid/uuid.dart';
 import 'diagnostics.dart';
 
 const String plexProduct = 'Plezy GKUI';
-const String plexVersion = '1.2.9';
+const String plexVersion = '1.2.10';
 
 class PlexPin {
   const PlexPin({required this.id, required this.code});
@@ -635,6 +635,9 @@ class PlexApi {
     } catch (_) {
       all = <String, dynamic>{};
     }
+    // Removing first moves this title to the newest end, so the bound below
+    // drops the least recently played titles rather than the first ever saved.
+    all.remove(_choiceKey(item));
     all[_choiceKey(item)] = <String, dynamic>{
       if (choice.mediaIndex != null) 'mediaIndex': choice.mediaIndex,
       if (choice.audioTrackId != null) 'audioTrackId': choice.audioTrackId,
@@ -770,20 +773,19 @@ class PlexApi {
     return servers;
   }
 
+  /// Tests every address at once and keeps the first verified one. Probing in
+  /// turn cost ~12 s per unreachable home-LAN address once the car was on
+  /// mobile data; a relay is used only when no direct address answers.
   Future<PlexSession> connect(
       String accountToken, PlexServerResource server) async {
-    final candidates = List<PlexConnection>.from(server.connections)
-      ..sort((a, b) {
-        final aScore = (a.local ? 0 : 2) + (a.relay ? 2 : 0);
-        final bScore = (b.local ? 0 : 2) + (b.relay ? 2 : 0);
-        return aScore.compareTo(bScore);
-      });
+    final cancel = CancelToken();
     Object? lastError;
-    for (final candidate in candidates) {
+    Future<PlexConnection?> probe(PlexConnection candidate) async {
       try {
         logs.add('Testing secure endpoint ${_safeHost(candidate.uri)}.');
         final response = await _serverDio.get<Map<String, dynamic>>(
           '${candidate.uri}/identity',
+          cancelToken: cancel,
           options: Options(
             headers: headers(server.token),
             receiveTimeout: const Duration(seconds: 7),
@@ -793,38 +795,75 @@ class PlexApi {
         final returnedId = identity['machineIdentifier']?.toString() ??
             response.data?['machineIdentifier']?.toString() ??
             '';
-        if (response.statusCode == 200 && returnedId == server.id) {
-          // /identity can be public. Verify the profile-specific resource token
-          // against a protected endpoint before persisting this route.
-          await _serverDio.get<Map<String, dynamic>>(
-            '${candidate.uri}/library/sections',
-            options: Options(
-              headers: headers(server.token),
-              receiveTimeout: const Duration(seconds: 7),
-            ),
-          );
-          final connected = PlexSession(
-            accountToken: accountToken,
-            serverToken: server.token,
-            serverName: server.name,
-            serverId: server.id,
-            baseUrl: candidate.uri,
-          );
-          await _saveSession(connected);
-          session = connected;
-          logs.add('Connected securely to ${server.name}.');
-          return connected;
-        } else if (returnedId.isNotEmpty && returnedId != server.id) {
-          logs.add('Rejected endpoint with a different server identity.');
+        if (response.statusCode != 200 || returnedId != server.id) {
+          if (returnedId.isNotEmpty) {
+            logs.add('Rejected endpoint with a different server identity.');
+          }
+          return null;
         }
+        // /identity can be public. Verify the profile-specific resource token
+        // against a protected endpoint before persisting this route.
+        await _serverDio.get<Map<String, dynamic>>(
+          '${candidate.uri}/library/sections',
+          cancelToken: cancel,
+          options: Options(
+            headers: headers(server.token),
+            receiveTimeout: const Duration(seconds: 7),
+          ),
+        );
+        return candidate;
       } catch (error) {
-        lastError = error;
-        logs.add('Endpoint ${_safeHost(candidate.uri)} did not respond.');
+        if (!cancel.isCancelled) {
+          lastError = error;
+          logs.add('Endpoint ${_safeHost(candidate.uri)} did not respond.');
+        }
+        return null;
       }
     }
-    throw StateError(
-        'No secure endpoint reached ${server.name}: ${_briefError(lastError)}');
+
+    final winner = await firstVerified<PlexConnection>(
+      server.connections.map(probe).toList(),
+      isFallback: (connection) => connection.relay,
+    );
+    cancel.cancel('A verified endpoint was found.');
+    if (winner == null) {
+      throw StateError(
+          'No secure endpoint reached ${server.name}: ${_briefError(lastError)}');
+    }
+    final connected = PlexSession(
+      accountToken: accountToken,
+      serverToken: server.token,
+      serverName: server.name,
+      serverId: server.id,
+      baseUrl: winner.uri,
+    );
+    await _saveSession(connected);
+    session = connected;
+    logs.add('Connected securely to ${server.name} '
+        '(${winner.relay ? 'relay' : winner.local ? 'local' : 'remote'}).');
+    return connected;
   }
+
+  /// Picks a working address again for the signed-in server. The saved
+  /// address can stop answering when the car leaves the home Wi-Fi, so a
+  /// failed refresh calls this before showing an error.
+  Future<PlexSession> reconnect() async {
+    final value = _requireSession();
+    logs.add('Saved endpoint failed; looking for another route.');
+    final servers = await fetchServers(value.accountToken);
+    final server = servers.where((item) => item.id == value.serverId);
+    if (server.isEmpty) {
+      throw StateError('${value.serverName} is no longer available.');
+    }
+    return connect(value.accountToken, server.first);
+  }
+
+  /// Whether [error] means the server could not be reached at all, as opposed
+  /// to Plex answering with an error such as an expired token.
+  static bool isUnreachable(Object error) =>
+      error is DioException &&
+      error.response == null &&
+      error.type != DioExceptionType.cancel;
 
   Future<void> _saveSession(PlexSession value) async {
     for (final entry in value.toStorage().entries) {
@@ -1393,6 +1432,31 @@ class PlexApi {
     }
     return error?.runtimeType.toString() ?? 'unknown error';
   }
+}
+
+/// Completes with the first non-null probe result, waiting for the others
+/// only when every success so far [isFallback]. Probes must not throw.
+Future<T?> firstVerified<T extends Object>(
+  List<Future<T?>> probes, {
+  required bool Function(T value) isFallback,
+}) {
+  if (probes.isEmpty) return Future<T?>.value();
+  final result = Completer<T?>();
+  var pending = probes.length;
+  T? fallback;
+  for (final probe in probes) {
+    probe.then((value) {
+      pending--;
+      if (result.isCompleted) return;
+      if (value != null && !isFallback(value)) {
+        result.complete(value);
+      } else {
+        if (value != null) fallback ??= value;
+        if (pending == 0) result.complete(fallback);
+      }
+    });
+  }
+  return result.future;
 }
 
 class _LegacyTrustOverrides extends HttpOverrides {

@@ -9,7 +9,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'gkui/diagnostics.dart';
 import 'gkui/plex_api.dart';
 
-const String buildLabel = 'Plezy GKUI 1.2.9 / start-over and in-app updates';
+const String buildLabel = 'Plezy GKUI 1.2.10 / connection recovery';
 const String sourceLabel = 'Plezy 1.8.1 / GKUI compatibility fork';
 const String toolchainLabel = 'Flutter 3.19.6 / ExoPlayer 2.19.1 / API 19';
 const MethodChannel nativeChannel =
@@ -142,6 +142,11 @@ PlaybackMode? playbackFallback(PlaybackMode mode, String? failureKind) {
     PlaybackMode.transcode480 => null,
   };
 }
+
+/// A failed refresh leaves already-shown content in place unless Plex
+/// rejected the token, which needs a new sign-in.
+bool keepsCachedContent({required bool hasContent, required Object error}) =>
+    hasContent && !(error is DioException && error.response?.statusCode == 401);
 
 /// A playing stream that dropped gets one automatic resume from where it
 /// stopped; a video that never started keeps the normal failure dialog.
@@ -484,10 +489,23 @@ class GkuiController extends ChangeNotifier {
     error = null;
     notifySafely();
     try {
-      final results = await Future.wait<dynamic>(<Future<dynamic>>[
-        api!.loadHome(),
-        api!.loadSections(),
-      ]);
+      List<dynamic> results;
+      try {
+        results = await Future.wait<dynamic>(<Future<dynamic>>[
+          api!.loadHome(),
+          api!.loadSections(),
+        ]);
+      } catch (caught) {
+        // The saved address may be the home LAN while the car is on 4G, so
+        // pick a working route once before treating the server as down.
+        if (!PlexApi.isUnreachable(caught)) rethrow;
+        await api!.reconnect();
+        if (generation != contentGeneration || disposed) return;
+        results = await Future.wait<dynamic>(<Future<dynamic>>[
+          api!.loadHome(),
+          api!.loadSections(),
+        ]);
+      }
       if (generation != contentGeneration || disposed) return;
       shelves = results[0] as List<PlexShelf>;
       sections = results[1] as List<PlexSection>;
@@ -511,7 +529,18 @@ class GkuiController extends ChangeNotifier {
       _ensurePeriodicRefresh();
     } catch (caught) {
       if (generation == contentGeneration && !disposed) {
-        fail('Could not load Plex content', caught);
+        if (keepsCachedContent(
+            hasContent: shelves.isNotEmpty || sections.isNotEmpty,
+            error: caught)) {
+          // Keep the cached library browsable; Home shows the banner and
+          // pull-to-refresh retries. Only a rejected token needs sign-in.
+          error = message('Offline: showing saved Plex content', caught);
+          logs.add(error!);
+          phase = AppPhase.ready;
+          _ensurePeriodicRefresh();
+        } else {
+          fail('Could not load Plex content', caught);
+        }
       }
     } finally {
       if (generation == contentGeneration && !disposed) {
@@ -838,6 +867,9 @@ class GkuiController extends ChangeNotifier {
       bool autoResumed = false,
       bool allowAutoNext = true}) async {
     String? failureKind;
+    // Only a failure the native player reported may change video profile;
+    // a metadata or channel error before it opened is not a codec problem.
+    var playerReportedFailure = false;
     var renderedFrame = false;
     int? resumeAtMs = startMs;
     PlaybackRequest? activeRequest;
@@ -1089,8 +1121,10 @@ class GkuiController extends ChangeNotifier {
       await api!.stopPlaybackSession(request);
       activeRequest = null;
       final playerError = raw?['error']?.toString();
-      if (playerError != null && playerError.isNotEmpty)
+      if (playerError != null && playerError.isNotEmpty) {
+        playerReportedFailure = true;
         throw StateError(playerError);
+      }
       if (ended && settings.autoPlayNext && allowAutoNext) {
         final next = await api!.loadNextEpisode(item);
         if (next != null && context.mounted) {
@@ -1116,8 +1150,10 @@ class GkuiController extends ChangeNotifier {
         final connectionFailed = failureKind == 'network' ||
             failureKind == 'http' ||
             failureKind == 'initialization';
-        final fallback = playbackFallback(mode, failureKind);
+        final fallback =
+            playerReportedFailure ? playbackFallback(mode, failureKind) : null;
         if (fallback == null &&
+            playerReportedFailure &&
             shouldAutoResume(
                 renderedFrame: renderedFrame,
                 failureKind: failureKind,
