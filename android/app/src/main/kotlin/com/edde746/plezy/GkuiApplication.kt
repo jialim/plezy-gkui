@@ -9,4 +9,9 @@ class GkuiApplication : Application() {
         super.attachBaseContext(base)
         MultiDex.install(this)
     }
+
+    override fun onCreate() {
+        super.onCreate()
+        CrashLog.install(this)
+    }
 }

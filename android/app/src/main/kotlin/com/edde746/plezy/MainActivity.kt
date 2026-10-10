@@ -185,6 +185,7 @@ class MainActivity : FlutterActivity() {
             "renderer" to "Flutter hardware-accelerated surface",
             "player" to "ExoPlayer 2.19.1 / HLS",
             "network" to "HTTPS only",
+            "last crash" to (CrashLog.read(this) ?: "none recorded"),
         )
     }
 

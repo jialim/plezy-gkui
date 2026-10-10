@@ -131,8 +131,10 @@ PlaybackChoice? playerTrackChoice(
 }
 
 PlaybackMode? playbackFallback(PlaybackMode mode, String? failureKind) {
+  // A transcode of a missing file fails the same way, so none is attempted.
   if (failureKind == 'network' ||
       failureKind == 'http' ||
+      failureKind == 'missing' ||
       failureKind == 'initialization') {
     return null;
   }
@@ -910,6 +912,14 @@ class GkuiController extends ChangeNotifier {
                       .any((version) => version.index == rememberedIndex)
               ? rememberedIndex
               : PlexMediaVersion.preferredIndex(item.versions));
+      // Plex knows when a file is gone; say so instead of opening a player
+      // that can only fail on it.
+      final missingReason =
+          await api!.missingFileReason(item.ratingKey, selectedIndex);
+      if (missingReason != null) {
+        failureKind = 'missing';
+        throw StateError(missingReason);
+      }
       final selectedVersion = item.versions
           .where((version) => version.index == selectedIndex)
           .firstOrNull;
@@ -1196,11 +1206,13 @@ class GkuiController extends ChangeNotifier {
         final retry = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
-                  title: Text(connectionFailed
-                      ? 'Player connection failed'
-                      : failureKind == 'startup_timeout'
-                          ? 'Video could not start'
-                          : 'Playback failed'),
+                  title: Text(failureKind == 'missing'
+                      ? 'Video file missing'
+                      : connectionFailed
+                          ? 'Player connection failed'
+                          : failureKind == 'startup_timeout'
+                              ? 'Video could not start'
+                              : 'Playback failed'),
                   content: SingleChildScrollView(
                       child: Text(<String>[
                     compact(caught),

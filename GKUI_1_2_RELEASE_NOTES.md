@@ -4,6 +4,8 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 
 ## 1.2.10 connection recovery
 
+- Titles whose video file is missing on the Plex server now show "Video file missing" instead of closing the app. Plezy asks Plex whether the file exists before opening the player, and a 404 from the server is reported the same way without trying the 720p/480p fallbacks.
+- An unexpected error inside the player now ends playback with an error message instead of returning to the launcher. If the app does crash, the Status screen shows the last crash (code locations only, no addresses or tokens).
 - If the saved Plex address stops answering (for example the home Wi-Fi address once the car is on 4G), Plezy looks up the server's addresses again and switches to one that works, instead of failing every request.
 - Server addresses are now tested all at once, so an unreachable home address no longer adds about 12 seconds per attempt; a Plex relay is used only when no direct address answers.
 - When a refresh fails, saved Home and library content stays on screen with an "Offline" notice; pull down to retry. Only a rejected Plex token returns to the sign-in screen.

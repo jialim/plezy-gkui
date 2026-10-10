@@ -1080,6 +1080,59 @@ class PlexApi {
     return items.first;
   }
 
+  /// Asks Plex whether the chosen file is still on disk before the player
+  /// opens it. Returns a viewer-facing reason when Plex reports it missing or
+  /// unreadable, and null when it is present or the check itself fails (a slow
+  /// mount must not block playback).
+  Future<String?> missingFileReason(String ratingKey, int mediaIndex) async {
+    final value = _requireSession();
+    try {
+      final response = await _serverDio.get<Map<String, dynamic>>(
+        '${value.baseUrl}/library/metadata/$ratingKey',
+        queryParameters: const <String, dynamic>{'checkFiles': 1},
+        options: Options(
+          headers: headers(value.serverToken),
+          receiveTimeout: const Duration(seconds: 8),
+        ),
+      );
+      final metadata = (_container(response.data)['Metadata'] as List<dynamic>?)
+          ?.firstOrNull as Map<String, dynamic>?;
+      if (metadata == null) return null;
+      return fileProblem(metadata, mediaIndex);
+    } catch (error) {
+      logs.add('File check skipped: ${_briefError(error)}');
+      return null;
+    }
+  }
+
+  /// The reason a title's file cannot be played, from `checkFiles=1` metadata.
+  static String? fileProblem(Map<String, dynamic> metadata, int mediaIndex) {
+    bool isFalse(Object? flag) => flag == false || flag == 0 || flag == '0';
+    final media = metadata['Media'] as List<dynamic>? ?? const <dynamic>[];
+    if (media.isEmpty) {
+      return 'Plex has no video file for this title. It may have been deleted '
+          'or moved; refresh the library on the Plex server.';
+    }
+    final chosen = (mediaIndex >= 0 && mediaIndex < media.length
+        ? media[mediaIndex]
+        : media.first) as Map<String, dynamic>;
+    final parts = chosen['Part'] as List<dynamic>? ?? const <dynamic>[];
+    final part = parts.firstOrNull as Map<String, dynamic>?;
+    if (part == null || (part['key']?.toString() ?? '').isEmpty) {
+      return 'Plex has no video file for this title. It may have been deleted '
+          'or moved; refresh the library on the Plex server.';
+    }
+    if (isFalse(part['exists'])) {
+      return 'This video file is missing on the Plex server. It may have been '
+          'deleted or moved, or its storage is offline.';
+    }
+    if (isFalse(part['accessible'])) {
+      return 'The Plex server cannot read this video file. Check that its '
+          'storage or mount is online.';
+    }
+    return null;
+  }
+
   Future<List<PlexMedia>> search(String query,
       {int limit = 60,
       SearchMediaFilter filter = SearchMediaFilter.all}) async {
