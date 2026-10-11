@@ -68,7 +68,7 @@ class GkuiController extends ChangeNotifier {
       return;
     }
     try {
-      api = await PlexApi.create(logs);
+      api ??= await PlexApi.create(logs);
       settings = api!.loadSettings();
       if (api!.session == null) {
         phase = AppPhase.signedOut;
@@ -76,9 +76,12 @@ class GkuiController extends ChangeNotifier {
         shelves = api!.loadCachedHome();
         sections = api!.loadCachedSections();
         selectedSection = sections.isEmpty ? null : sections.first;
-        libraryItems = selectedSection == null
-            ? const <PlexMedia>[]
-            : api!.loadCachedSection(selectedSection!.key);
+        final cachedPage = selectedSection == null
+            ? null
+            : api!.loadCachedSectionPage(selectedSection!.key);
+        libraryItems = cachedPage?.items ?? const <PlexMedia>[];
+        libraryNextStart = cachedPage?.nextStart ?? 0;
+        libraryHasMore = cachedPage?.hasMore ?? false;
         if (shelves.isNotEmpty || sections.isNotEmpty) {
           phase = AppPhase.ready;
           logs.add('Showing cached Plex content while refreshing.');

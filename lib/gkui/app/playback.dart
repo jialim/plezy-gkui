@@ -72,40 +72,15 @@ extension GkuiPlayback on GkuiController {
       final versionAudio = selectedVersion?.audioTracks ?? const <PlexTrack>[];
       final versionSubtitles =
           selectedVersion?.subtitleTracks ?? const <PlexTrack>[];
-      // Stream IDs are per episode, so a show-level choice falls back to its
-      // remembered language on the next episode.
-      final selectedAudio = trackForPreference(
-            versionAudio,
-            id: audioTrackId ?? remembered.audioTrackId,
-            language: audioTrackId == null ? remembered.audioLanguage : null,
-            title: audioTrackId == null ? remembered.audioTitle : null,
-            ordinal: audioTrackId == null ? remembered.audioOrdinal : null,
-          ) ??
-          versionAudio.where((track) => track.selected).firstOrNull;
-      final subtitlesOff = subtitleTrackId == 'off' ||
-          (subtitleTrackId == null &&
-              (remembered.subtitleTrackId == 'off' ||
-                  remembered.subtitleLanguage == 'off'));
-      final requestedSubtitleId =
-          subtitlesOff ? 'off' : subtitleTrackId ?? remembered.subtitleTrackId;
-      final selectedSubtitle = subtitlesOff
-          ? null
-          : trackForPreference(
-                versionSubtitles,
-                id: requestedSubtitleId,
-                language: subtitleTrackId == null
-                    ? remembered.subtitleLanguage
-                    : null,
-                title:
-                    subtitleTrackId == null ? remembered.subtitleTitle : null,
-                ordinal:
-                    subtitleTrackId == null ? remembered.subtitleOrdinal : null,
-              ) ??
-              defaultSubtitleTrack(versionSubtitles);
+      final tracks = resolvePlaybackTracks(selectedVersion,
+          remembered: remembered,
+          settings: settings,
+          audioTrackId: audioTrackId,
+          subtitleTrackId: subtitleTrackId);
+      final selectedAudio = tracks.audio;
+      final selectedSubtitle = tracks.subtitle;
       final resolvedAudioTrackId = selectedAudio?.id;
-      final resolvedSubtitleTrackId = requestedSubtitleId == 'off'
-          ? 'off'
-          : selectedSubtitle?.id ?? remembered.subtitleTrackId;
+      final resolvedSubtitleTrackId = tracks.subtitleId;
       await api!.savePlaybackChoice(
           item,
           PlaybackChoice(
@@ -130,11 +105,6 @@ extension GkuiPlayback on GkuiController {
       final markers = settings.skipMode != SkipMode.off
           ? api!.cachedMarkers(item.ratingKey)
           : const <PlexMarker>[];
-      if (settings.skipMode != SkipMode.off && markers.isEmpty) {
-        unawaited(api!
-            .loadMarkers(item.ratingKey)
-            .catchError((Object _) => const <PlexMarker>[]));
-      }
       final bitrate = mode == PlaybackMode.transcode480 ? 1500 : 3000;
       final request = api!.playback(
         item,
@@ -199,8 +169,25 @@ extension GkuiPlayback on GkuiController {
                 })
             .toList(),
       });
+      // Cold marker requests can arrive after PlayerActivity has started.
+      // The native session ID prevents a late response updating a later video.
+      if (settings.skipMode != SkipMode.off && markers.isEmpty) {
+        unawaited(api!.loadMarkers(item.ratingKey).then<void>((loaded) async {
+          if (loaded.isEmpty || disposed) return;
+          await nativeChannel.invokeMethod<bool>('updatePlaybackMarkers', {
+            'sessionId': request.sessionId,
+            'markers': loaded
+                .map((marker) => <String, dynamic>{
+                      'type': marker.type,
+                      'startMs': marker.startMs,
+                      'endMs': marker.endMs,
+                    })
+                .toList(),
+          });
+        }).catchError((Object _) {}));
+      }
       // Telemetry must never delay the native player opening.
-      unawaited(api!.reportProgress(item, item.viewOffsetMs, 'playing',
+      unawaited(api!.reportProgress(item, startAt, 'playing',
           sessionId: request.sessionId));
       final raw = await playerFuture;
       for (final line in (raw?['diagnostics'] as List<dynamic>? ?? const [])) {
@@ -266,11 +253,14 @@ extension GkuiPlayback on GkuiController {
         if (ended) _locallyWatched.add(item.ratingKey);
       }
       notifySafely();
-      if (renderedFrame) {
-        await api!.reportProgress(item, position, ended ? 'stopped' : 'paused',
-            sessionId: request.sessionId);
-      }
-      await api!.stopPlaybackSession(request);
+      // Both calls have short total budgets, and neither holds up Retry,
+      // a codec fallback or the next episode when mobile data disappears.
+      unawaited(Future.wait<void>([
+        if (renderedFrame)
+          api!.reportProgress(item, position, ended ? 'stopped' : 'paused',
+              sessionId: request.sessionId),
+        api!.stopPlaybackSession(request),
+      ]));
       activeRequest = null;
       final playerError = raw?['error']?.toString();
       if (playerError != null && playerError.isNotEmpty) {

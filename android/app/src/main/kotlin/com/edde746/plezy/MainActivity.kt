@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : FlutterActivity() {
     private var pendingPlaybackResult: MethodChannel.Result? = null
+    private var pendingPlaybackSessionId: String? = null
     private val updateInProgress = AtomicBoolean(false)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -29,6 +30,16 @@ class MainActivity : FlutterActivity() {
                 }
                 "downloadAndInstallUpdate" -> runUpdateTask(result) {
                     GkuiUpdater(applicationContext).downloadAndOpenInstaller()
+                }
+                "updatePlaybackMarkers" -> {
+                    val id = call.argument<String>("sessionId").orEmpty()
+                    val values = (call.argument<List<*>>("markers") ?: emptyList<Any>()).mapNotNull { raw ->
+                        val marker = raw as? Map<*, *> ?: return@mapNotNull null
+                        PlaybackMarker(marker["type"] as? String ?: "marker",
+                            (marker["startMs"] as? Number)?.toLong() ?: -1L,
+                            (marker["endMs"] as? Number)?.toLong() ?: -1L)
+                    }
+                    result.success(id == pendingPlaybackSessionId && PlayerActivity.receiveMarkers(id, values))
                 }
                 "playVideo" -> {
                     if (pendingPlaybackResult != null) {
@@ -83,6 +94,8 @@ class MainActivity : FlutterActivity() {
                         putExtra(PlayerActivity.EXTRA_MARKER_ENDS, markerEnds.toLongArray())
                     }
                     pendingPlaybackResult = result
+                    pendingPlaybackSessionId = arguments["sessionId"] as? String ?: ""
+                    PlayerActivity.beginMarkerSession(pendingPlaybackSessionId!!)
                     startActivityForResult(intent, PLAYER_REQUEST)
                 }
                 else -> result.notImplemented()
@@ -121,6 +134,8 @@ class MainActivity : FlutterActivity() {
         }
         pendingPlaybackResult?.success(payload)
         pendingPlaybackResult = null
+        pendingPlaybackSessionId?.let { PlayerActivity.endMarkerSession(it) }
+        pendingPlaybackSessionId = null
     }
 
     private fun stringList(value: Any?): Array<String> =

@@ -32,8 +32,6 @@ class _DetailsScreenState extends State<DetailsScreen> {
                     .any((version) => version.index == remembered.mediaIndex)
             ? remembered.mediaIndex
             : PlexMediaVersion.preferredIndex(item.versions);
-        selectedAudioTrackId ??= remembered.audioTrackId;
-        selectedSubtitleTrackId ??= remembered.subtitleTrackId;
         if (widget.controller.settings.skipMode != SkipMode.off) {
           unawaited(widget.controller.api!
               .loadMarkers(item.ratingKey)
@@ -201,24 +199,22 @@ class _DetailsScreenState extends State<DetailsScreen> {
   }
 
   String selectedAudioLabel(PlexMedia media) {
-    final tracks = currentVersion(media)?.audioTracks ?? const <PlexTrack>[];
-    final selected =
-        tracks.where((track) => track.id == selectedAudioTrackId).firstOrNull;
-    return selected?.displayLabel ??
-        tracks.where((track) => track.selected).firstOrNull?.displayLabel ??
-        'Automatic';
+    return resolvedTracks(media).audio?.displayLabel ?? 'Automatic';
   }
 
   String selectedSubtitleLabel(PlexMedia media) {
-    if (selectedSubtitleTrackId == 'off') return 'Off';
-    final tracks = currentVersion(media)?.subtitleTracks ?? const <PlexTrack>[];
-    final selected = tracks
-        .where((track) => track.id == selectedSubtitleTrackId)
-        .firstOrNull;
-    return selected?.displayLabel ??
-        tracks.where((track) => track.selected).firstOrNull?.displayLabel ??
-        'Automatic';
+    final tracks = resolvedTracks(media);
+    return tracks.subtitlesOff
+        ? 'Off'
+        : tracks.subtitle?.displayLabel ?? 'Automatic';
   }
+
+  PlaybackTracks resolvedTracks(PlexMedia media) =>
+      resolvePlaybackTracks(currentVersion(media),
+          remembered: widget.controller.api!.loadPlaybackChoice(media),
+          settings: widget.controller.settings,
+          audioTrackId: selectedAudioTrackId,
+          subtitleTrackId: selectedSubtitleTrackId);
 
   Future<void> chooseVersion(PlexMedia media) async {
     final choice = await showDialog<int>(
@@ -251,6 +247,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
 
   Future<void> chooseAudioTrack(PlexMedia media) async {
     final tracks = currentVersion(media)?.audioTracks ?? const <PlexTrack>[];
+    final resolvedId = resolvedTracks(media).audio?.id ?? '';
     final choice = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
@@ -258,13 +255,13 @@ class _DetailsScreenState extends State<DetailsScreen> {
         children: <Widget>[
           RadioListTile<String>(
             value: '',
-            groupValue: selectedAudioTrackId ?? '',
+            groupValue: resolvedId,
             title: const Text('Automatic'),
             onChanged: (value) => Navigator.pop(context, value),
           ),
           ...tracks.map((track) => RadioListTile<String>(
                 value: track.id,
-                groupValue: selectedAudioTrackId ?? '',
+                groupValue: resolvedId,
                 title: Text(track.displayLabel),
                 onChanged: (value) => Navigator.pop(context, value),
               )),
@@ -278,6 +275,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
 
   Future<void> chooseSubtitleTrack(PlexMedia media) async {
     final tracks = currentVersion(media)?.subtitleTracks ?? const <PlexTrack>[];
+    final resolvedId = resolvedTracks(media).subtitleId ?? '';
     final choice = await showDialog<String>(
       context: context,
       builder: (context) => SimpleDialog(
@@ -285,19 +283,19 @@ class _DetailsScreenState extends State<DetailsScreen> {
         children: <Widget>[
           RadioListTile<String>(
             value: '',
-            groupValue: selectedSubtitleTrackId ?? '',
+            groupValue: resolvedId,
             title: const Text('Automatic'),
             onChanged: (value) => Navigator.pop(context, value),
           ),
           RadioListTile<String>(
             value: 'off',
-            groupValue: selectedSubtitleTrackId ?? '',
+            groupValue: resolvedId,
             title: const Text('Off'),
             onChanged: (value) => Navigator.pop(context, value),
           ),
           ...tracks.map((track) => RadioListTile<String>(
                 value: track.id,
-                groupValue: selectedSubtitleTrackId ?? '',
+                groupValue: resolvedId,
                 title: Text(track.displayLabel),
                 onChanged: (value) => Navigator.pop(context, value),
               )),

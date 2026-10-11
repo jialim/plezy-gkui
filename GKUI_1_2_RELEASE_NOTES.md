@@ -1,6 +1,18 @@
-# Plezy GKUI 1.2.10 — Connection Recovery (unreleased)
+# Plezy GKUI 1.2.11 — Playback and Profile Fixes (2026-10-11)
 
 This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit. Phone remote and mirroring are intentionally excluded.
+
+## 1.2.11 playback and profile fixes
+
+- Cached Home, sections and library pages are identified by server and Plex Home profile. Responses from before a profile change or sign-out cannot overwrite the current cache. Older unscoped caches refresh from Plex once after upgrading; sign-in and playback settings remain saved.
+- Playback pauses whenever the player leaves the foreground, including while buffering or reconnecting. Sleep/wake preserves the intention to play, while a manual pause stays paused. Pending reconnects wait until the player resumes and are cancelled when it closes.
+- Audio and subtitles use explicit current-track selections first, then remembered title/show choices, configured language preferences and Plex defaults. Remembered choices survive new track IDs on the next episode; Details and its track pickers display the same resolved selection as playback.
+- Cached library startup restores the next-page offset and Load more state, keeping titles beyond the first page accessible.
+- The optional missing-file check has a 1.5-second total startup budget. Progress reports and transcode cleanup have two-second total budgets, run independently of recovery/autoplay and cancel stalled requests.
+- External subtitle URLs must keep the verified Plex origin (scheme, host and port) and cannot contain embedded user credentials. The native player also checks the subtitle origin before attaching authenticated requests.
+- Skip Intro/Credits markers that arrive after playback starts are delivered to that running video. Session matching prevents old marker responses from affecting the next episode, and markers arriving before the native activity opens are queued for it.
+- Play from beginning reports zero to Plex from the first progress update, instead of the saved resume position.
+- Regression coverage includes stale profile and sign-out responses, pagination, language precedence, startup/telemetry budgets, subtitle origins, start-over progress, delayed marker delivery and native sleep/wake behavior.
 
 ## 1.2.10 connection recovery
 
@@ -108,9 +120,9 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 
 ## Verified off-car
 
-- Flutter static analysis and the GKUI Flutter test suite pass.
-- Android unit tests, Kotlin/ExoPlayer compilation, and fatal API-19 `NewApi` lint pass.
-- The release APK is version 1.2.9 (15), minimum API 19, target API 34, and ARMv7 only.
+- Flutter static analysis and all 65 GKUI Flutter tests pass.
+- All 36 Android unit tests, Kotlin/ExoPlayer compilation, and fatal API-19 `NewApi` lint pass.
+- The release APK is version 1.2.11 (17), minimum API 19, target API 34, and ARMv7 only.
 - APK v1/v2 signatures, certificate continuity, manifest, ABI, and SHA-256 are verified before publishing; the checksum is recorded on the GitHub release.
 
 ## One-pass M5 check
@@ -124,7 +136,9 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 7. Play one 720p-compatible transcode and one 480p-safe transcode.
 8. Verify Skip Intro/Credits and the Play Next countdown on an episode that has Plex markers.
 9. Reopen a partly watched title; test both Resume and Play from beginning.
-10. In Settings, tap Check now. On 1.2.9 it should report current; use this path for the next release instead of USB.
+10. In Settings, tap Check now. On 1.2.11 it should report current; use this path for the next release instead of USB.
+11. After upgrading, let the first online refresh rebuild the scoped content cache. Reopen the app and check Load more in a library with more than one page.
+12. While a video is buffering or reconnecting, press Pause or put the unit to sleep. Confirm it stays paused in the background and follows your previous play/pause choice after waking.
 11. Open Status and photograph both columns if anything fails; include the startup network-byte and last-failure rows.
 
 Physical ECARX/M5 playback remains the final hardware gate because its Android 4.4 decoder and vehicle firmware cannot be reproduced by desktop tests.

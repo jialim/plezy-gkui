@@ -11,7 +11,7 @@ import 'content_cache.dart';
 import 'diagnostics.dart';
 
 const String plexProduct = 'Plezy GKUI';
-const String plexVersion = '1.2.10';
+const String plexVersion = '1.2.11';
 
 class PlexPin {
   const PlexPin({required this.id, required this.code});
@@ -416,6 +416,58 @@ PlexTrack? trackForPreference(
 PlexTrack? defaultSubtitleTrack(List<PlexTrack> tracks) =>
     tracks.where((track) => track.selected).firstOrNull ?? tracks.firstOrNull;
 
+class PlaybackTracks {
+  const PlaybackTracks(this.audio, this.subtitle, this.subtitlesOff);
+  final PlexTrack? audio;
+  final PlexTrack? subtitle;
+  final bool subtitlesOff;
+  String? get subtitleId => subtitlesOff ? 'off' : subtitle?.id;
+}
+
+/// Explicit choices apply only when their ID exists in this version. Remembered
+/// show choices use language/title/order when the next episode has new IDs.
+PlaybackTracks resolvePlaybackTracks(
+  PlexMediaVersion? version, {
+  required PlaybackChoice remembered,
+  required GkuiSettings settings,
+  String? audioTrackId,
+  String? subtitleTrackId,
+}) {
+  final audio = version?.audioTracks ?? const <PlexTrack>[];
+  final subtitles = version?.subtitleTracks ?? const <PlexTrack>[];
+  final selectedAudio =
+      audio.where((track) => track.id == audioTrackId).firstOrNull ??
+          trackForPreference(audio,
+              id: remembered.audioTrackId,
+              language: remembered.audioLanguage,
+              title: remembered.audioTitle,
+              ordinal: remembered.audioOrdinal) ??
+          trackForLanguage(audio, settings.audioLanguage) ??
+          audio.where((track) => track.selected).firstOrNull;
+  final explicitSubtitle =
+      subtitles.where((track) => track.id == subtitleTrackId).firstOrNull;
+  final rememberedSubtitle = trackForPreference(subtitles,
+      id: remembered.subtitleTrackId,
+      language: remembered.subtitleLanguage,
+      title: remembered.subtitleTitle,
+      ordinal: remembered.subtitleOrdinal);
+  final subtitlesOff = subtitleTrackId == 'off' ||
+      (explicitSubtitle == null &&
+          (remembered.subtitleTrackId == 'off' ||
+              remembered.subtitleLanguage == 'off' ||
+              (rememberedSubtitle == null &&
+                  settings.subtitleLanguage == 'off')));
+  return PlaybackTracks(
+      selectedAudio,
+      subtitlesOff
+          ? null
+          : explicitSubtitle ??
+              rememberedSubtitle ??
+              trackForLanguage(subtitles, settings.subtitleLanguage) ??
+              defaultSubtitleTrack(subtitles),
+      subtitlesOff);
+}
+
 class PlexMedia {
   const PlexMedia({
     required this.ratingKey,
@@ -519,7 +571,53 @@ class PlexApi {
   final Dio _serverDio;
   final Map<String, List<PlexMarker>> _markerCache =
       <String, List<PlexMarker>>{};
-  PlexSession? session;
+  PlexSession? _session;
+  String? _sessionCacheIdentity;
+  int _sessionGeneration = 0;
+  PlexSession? get session => _session;
+  set session(PlexSession? value) {
+    _sessionGeneration++;
+    _markerCache.clear();
+    _session = value;
+    // Distinguish accounts even when they share the same server and have no
+    // Home UUID. Cache files contain this fingerprint, never the credentials.
+    _sessionCacheIdentity = value == null
+        ? null
+        : const Uuid().v5(
+            Namespace.url.value, '${value.accountToken}:${value.serverToken}');
+  }
+
+  String? get _cacheScope => session == null
+      ? null
+      : '${session!.serverId}:${currentHomeUserUuid ?? 'account'}:$_sessionCacheIdentity';
+
+  Map<String, dynamic>? _readCachedDocument(String name) {
+    final raw = _cache.read(name);
+    if (raw == null || _cacheScope == null) return null;
+    try {
+      final document = jsonDecode(raw) as Map<String, dynamic>;
+      // Older unscoped caches cannot prove which profile they belong to.
+      if (document['scope'] != _cacheScope) return null;
+      return document['data'] as Map<String, dynamic>?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _writeCachedDocument(
+      String name, Map<String, dynamic>? data, int generation, String? scope) {
+    if (generation != _sessionGeneration ||
+        scope != _cacheScope ||
+        scope == null) {
+      return Future<void>.value();
+    }
+    return _cache.write(
+        name,
+        jsonEncode(<String, dynamic>{
+          'scope': scope,
+          'data': data,
+        }));
+  }
 
   String get safeEndpoint {
     final uri = Uri.tryParse(session?.baseUrl ?? '');
@@ -546,7 +644,9 @@ class PlexApi {
         headers: const <String, String>{'Accept': 'application/json'},
       );
 
-  static Future<PlexApi> create(RedactingLogStore logs) async {
+  static Future<PlexApi> create(RedactingLogStore logs,
+      {HttpClientAdapter? serverAdapter,
+      HttpClientAdapter? accountAdapter}) async {
     final prefs = await SharedPreferences.getInstance();
     var id = prefs.getString('gkui.clientIdentifier');
     if (id == null || id.isEmpty) {
@@ -554,6 +654,9 @@ class PlexApi {
       await prefs.setString('gkui.clientIdentifier', id);
     }
     final api = PlexApi._(prefs, await ContentCache.open(prefs), logs, id);
+    if (serverAdapter != null) api._serverDio.httpClientAdapter = serverAdapter;
+    if (accountAdapter != null)
+      api._accountDio.httpClientAdapter = accountAdapter;
     api.session = PlexSession.fromStorage(<String, String?>{
       'accountToken': prefs.getString('gkui.accountToken'),
       'serverToken': prefs.getString('gkui.serverToken'),
@@ -874,6 +977,7 @@ class PlexApi {
   }
 
   Future<void> signOut() async {
+    session = null;
     for (final key in <String>[
       'accountToken',
       'serverToken',
@@ -892,12 +996,15 @@ class PlexApi {
   }
 
   Future<void> clearContentCache() async {
+    _sessionGeneration++;
     await _cache.clear();
     _markerCache.clear();
   }
 
   Future<List<PlexShelf>> loadHome() async {
     final value = _requireSession();
+    final generation = _sessionGeneration;
+    final scope = _cacheScope;
     final responses = await Future.wait<Response<Map<String, dynamic>>?>([
       _serverDio.get<Map<String, dynamic>>(
         '${value.baseUrl}/hubs',
@@ -924,17 +1031,16 @@ class PlexApi {
       'hubs': responses[0]?.data,
       'onDeck': responses[1]?.data,
     };
-    await _cache.write('home', jsonEncode(cache));
+    await _writeCachedDocument('home', cache, generation, scope);
     final shelves = _parseHome(cache);
     logs.add('Loaded ${shelves.length} home shelves.');
     return shelves;
   }
 
   List<PlexShelf> loadCachedHome() {
-    final raw = _cache.read('home');
-    if (raw == null) return const <PlexShelf>[];
     try {
-      return _parseHome(jsonDecode(raw) as Map<String, dynamic>);
+      final data = _readCachedDocument('home');
+      return data == null ? const <PlexShelf>[] : _parseHome(data);
     } catch (_) {
       return const <PlexShelf>[];
     }
@@ -966,19 +1072,19 @@ class PlexApi {
 
   Future<List<PlexSection>> loadSections() async {
     final value = _requireSession();
+    final generation = _sessionGeneration;
+    final scope = _cacheScope;
     final response = await _serverDio.get<Map<String, dynamic>>(
       '${value.baseUrl}/library/sections',
       options: Options(headers: headers(value.serverToken)),
     );
-    await _cache.write('sections', jsonEncode(response.data));
+    await _writeCachedDocument('sections', response.data, generation, scope);
     return _parseSections(response.data);
   }
 
   List<PlexSection> loadCachedSections() {
-    final raw = _cache.read('sections');
-    if (raw == null) return const <PlexSection>[];
     try {
-      return _parseSections(jsonDecode(raw) as Map<String, dynamic>);
+      return _parseSections(_readCachedDocument('sections'));
     } catch (_) {
       return const <PlexSection>[];
     }
@@ -1000,6 +1106,8 @@ class PlexApi {
   Future<PlexPage> loadSectionPage(String sectionKey,
       {int start = 0, int size = 60, bool unwatchedOnly = false}) async {
     final value = _requireSession();
+    final generation = _sessionGeneration;
+    final scope = _cacheScope;
     final response = await _serverDio.get<Map<String, dynamic>>(
       '${value.baseUrl}/library/sections/$sectionKey/all',
       queryParameters: <String, dynamic>{
@@ -1011,12 +1119,14 @@ class PlexApi {
       options: Options(headers: headers(value.serverToken)),
     );
     if (start == 0 && !unwatchedOnly) {
-      await _cache.write(
+      await _writeCachedDocument(
           'library',
-          jsonEncode(<String, dynamic>{
+          <String, dynamic>{
             'sectionKey': sectionKey,
             'data': response.data,
-          }));
+          },
+          generation,
+          scope);
     }
     final container = _container(response.data);
     final items = _parseItems(container['Metadata']);
@@ -1033,18 +1143,24 @@ class PlexApi {
     return page.items;
   }
 
-  List<PlexMedia> loadCachedSection(String sectionKey) {
-    final raw = _cache.read('library');
-    if (raw == null) return const <PlexMedia>[];
+  List<PlexMedia> loadCachedSection(String sectionKey) =>
+      loadCachedSectionPage(sectionKey)?.items ?? const <PlexMedia>[];
+
+  PlexPage? loadCachedSectionPage(String sectionKey) {
+    final cache = _readCachedDocument('library');
+    if (cache == null) return null;
     try {
-      final cache = jsonDecode(raw) as Map<String, dynamic>;
       if (cache['sectionKey']?.toString() != sectionKey) {
-        return const <PlexMedia>[];
+        return null;
       }
-      return _parseItems(
-          _container(cache['data'] as Map<String, dynamic>?)['Metadata']);
+      final container = _container(cache['data'] as Map<String, dynamic>?);
+      final items = _parseItems(container['Metadata']);
+      return PlexPage(
+          items: items,
+          start: 0,
+          total: (container['totalSize'] as num?)?.toInt() ?? items.length);
     } catch (_) {
-      return const <PlexMedia>[];
+      return null;
     }
   }
 
@@ -1080,17 +1196,22 @@ class PlexApi {
   /// opens it. Returns a viewer-facing reason when Plex reports it missing or
   /// unreadable, and null when it is present or the check itself fails (a slow
   /// mount must not block playback).
-  Future<String?> missingFileReason(String ratingKey, int mediaIndex) async {
+  Future<String?> missingFileReason(String ratingKey, int mediaIndex,
+      {Duration budget = const Duration(milliseconds: 1500)}) async {
     final value = _requireSession();
+    final cancel = CancelToken();
     try {
-      final response = await _serverDio.get<Map<String, dynamic>>(
-        '${value.baseUrl}/library/metadata/$ratingKey',
-        queryParameters: const <String, dynamic>{'checkFiles': 1},
-        options: Options(
-          headers: headers(value.serverToken),
-          receiveTimeout: const Duration(seconds: 8),
-        ),
-      );
+      final response = await _serverDio
+          .get<Map<String, dynamic>>(
+            '${value.baseUrl}/library/metadata/$ratingKey',
+            cancelToken: cancel,
+            queryParameters: const <String, dynamic>{'checkFiles': 1},
+            options: Options(
+              headers: headers(value.serverToken),
+              receiveTimeout: const Duration(seconds: 8),
+            ),
+          )
+          .timeout(budget);
       final metadata = (_container(response.data)['Metadata'] as List<dynamic>?)
           ?.firstOrNull as Map<String, dynamic>?;
       if (metadata == null) return null;
@@ -1098,6 +1219,8 @@ class PlexApi {
     } catch (error) {
       logs.add('File check skipped: ${_briefError(error)}');
       return null;
+    } finally {
+      cancel.cancel('File check completed or reached its startup budget.');
     }
   }
 
@@ -1187,6 +1310,7 @@ class PlexApi {
     final cached = _markerCache[ratingKey];
     if (cached != null) return cached;
     final value = _requireSession();
+    final generation = _sessionGeneration;
     final response = await _serverDio.get<Map<String, dynamic>>(
       '${value.baseUrl}/library/metadata/$ratingKey',
       queryParameters: const <String, dynamic>{'includeMarkers': 1},
@@ -1204,7 +1328,7 @@ class PlexApi {
               endMs: (map['endTimeOffset'] as num).toInt(),
             ))
         .toList();
-    _markerCache[ratingKey] = markers;
+    if (generation == _sessionGeneration) _markerCache[ratingKey] = markers;
     return markers;
   }
 
@@ -1337,7 +1461,15 @@ class PlexApi {
   String? streamUrl(String? path) {
     final value = session;
     if (value == null || path == null || !path.startsWith('/')) return null;
-    return Uri.parse(value.baseUrl).resolve(path).toString();
+    final base = Uri.parse(value.baseUrl);
+    final relative = Uri.tryParse(path);
+    if (relative == null) return null;
+    final target = base.resolveUri(relative);
+    if (target.scheme != base.scheme ||
+        target.host != base.host ||
+        target.port != base.port ||
+        target.userInfo.isNotEmpty) return null;
+    return target.toString();
   }
 
   Map<String, String> get imageHeaders {
@@ -1421,42 +1553,57 @@ class PlexApi {
   }
 
   Future<void> reportProgress(PlexMedia item, int positionMs, String state,
-      {String? sessionId}) async {
-    final value = _requireSession();
+      {String? sessionId, Duration budget = const Duration(seconds: 2)}) async {
+    final value = session;
+    if (value == null) return;
+    final cancel = CancelToken();
     try {
-      await _serverDio.get<dynamic>(
-        '${value.baseUrl}/:/timeline',
-        queryParameters: <String, dynamic>{
-          'ratingKey': item.ratingKey,
-          'key': '/library/metadata/${item.ratingKey}',
-          'state': state,
-          'time': positionMs,
-          'duration': item.durationMs,
-        },
-        options: Options(headers: <String, String>{
-          ...headers(value.serverToken),
-          if (sessionId != null) 'X-Plex-Session-Identifier': sessionId,
-        }),
-      );
+      await _serverDio
+          .get<dynamic>(
+            '${value.baseUrl}/:/timeline',
+            cancelToken: cancel,
+            queryParameters: <String, dynamic>{
+              'ratingKey': item.ratingKey,
+              'key': '/library/metadata/${item.ratingKey}',
+              'state': state,
+              'time': positionMs,
+              'duration': item.durationMs,
+            },
+            options: Options(headers: <String, String>{
+              ...headers(value.serverToken),
+              if (sessionId != null) 'X-Plex-Session-Identifier': sessionId,
+            }),
+          )
+          .timeout(budget);
     } catch (error) {
       logs.add('Progress update failed: ${_briefError(error)}');
+    } finally {
+      cancel.cancel('Progress report completed or timed out.');
     }
   }
 
-  Future<void> stopPlaybackSession(PlaybackRequest request) async {
+  Future<void> stopPlaybackSession(PlaybackRequest request,
+      {Duration budget = const Duration(seconds: 2)}) async {
     if (!request.transcoding) return;
-    final value = _requireSession();
+    final value = session;
+    if (value == null) return;
+    final cancel = CancelToken();
     try {
-      await _serverDio.get<dynamic>(
-        '${value.baseUrl}/video/:/transcode/universal/stop',
-        queryParameters: <String, dynamic>{'session': request.sessionId},
-        options: Options(headers: <String, String>{
-          ...headers(value.serverToken),
-          'X-Plex-Session-Identifier': request.sessionId,
-        }),
-      );
+      await _serverDio
+          .get<dynamic>(
+            '${value.baseUrl}/video/:/transcode/universal/stop',
+            cancelToken: cancel,
+            queryParameters: <String, dynamic>{'session': request.sessionId},
+            options: Options(headers: <String, String>{
+              ...headers(value.serverToken),
+              'X-Plex-Session-Identifier': request.sessionId,
+            }),
+          )
+          .timeout(budget);
     } catch (error) {
       logs.add('Transcode cleanup failed: ${_briefError(error)}');
+    } finally {
+      cancel.cancel('Transcode cleanup completed or timed out.');
     }
   }
 

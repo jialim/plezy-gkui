@@ -25,6 +25,9 @@ is removed when you uninstall the app:
 - **Cached Plex content**: Home shelves, library lists and poster images, so
   the app can start quickly and stay usable offline. Signing out or switching
   Plex Home profile clears the cached lists.
+  Cached lists carry a server/profile identifier and a credential fingerprint
+  so another account's content is not restored; the fingerprint is not a token
+  and cannot authenticate to Plex.
 - **Diagnostics**: a bounded in-memory log for the Status screen, and the last
   crash report (exception types and code locations only). Tokens, passwords
   and URL credentials are removed from log lines, and crash reports never

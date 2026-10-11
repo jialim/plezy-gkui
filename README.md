@@ -18,7 +18,7 @@ not the App Store, Google Play, desktop, or current upstream Plezy build.
 
 ## Download
 
-The current release is **Plezy GKUI 1.2.10**:
+The current release is **Plezy GKUI 1.2.11**:
 
 - [Download the latest API 19 ARMv7 APK](https://github.com/jialim/plezy-gkui/releases/latest)
 - [Release notes](GKUI_1_2_RELEASE_NOTES.md)
@@ -155,7 +155,7 @@ cd android
 ./gradlew :app:testDebugUnitTest :app:compileDebugKotlin -x compileFlutterBuildDebug
 ```
 
-The 1.2.10 release passes Flutter analysis, the GKUI Flutter and Android test
+The 1.2.11 release passes Flutter analysis, the GKUI Flutter and Android test
 suites, native Kotlin compilation, API-19 lint, APK signature verification,
 and manifest/ABI inspection. Physical in-car playback remains the final
 hardware gate.

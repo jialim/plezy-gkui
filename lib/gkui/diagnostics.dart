@@ -42,11 +42,13 @@ class RedactingLogStore extends ChangeNotifier {
 
   final int capacity;
   final List<DiagnosticLogEntry> _entries = <DiagnosticLogEntry>[];
+  bool _disposed = false;
 
   UnmodifiableListView<DiagnosticLogEntry> get entries =>
       UnmodifiableListView<DiagnosticLogEntry>(_entries);
 
   void add(String message, {DateTime? at}) {
+    if (_disposed) return;
     _entries.add(
       DiagnosticLogEntry(
         timestamp: at ?? DateTime.now(),
@@ -60,6 +62,12 @@ class RedactingLogStore extends ChangeNotifier {
   }
 
   String exportText() => _entries.map((entry) => entry.line).join('\n');
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 }
 
 String redactSecrets(String input) {

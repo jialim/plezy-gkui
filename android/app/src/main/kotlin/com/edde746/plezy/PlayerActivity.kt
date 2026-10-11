@@ -43,9 +43,9 @@ import com.google.android.exoplayer2.upstream.TransferListener
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.atomic.AtomicLong
+import java.lang.ref.WeakReference
 
 class PlayerActivity : Activity() {
-    private data class Marker(val type: String, val startMs: Long, val endMs: Long)
     private data class NativeSubtitleTrack(
         val rendererIndex: Int,
         val groupIndex: Int,
@@ -73,8 +73,8 @@ class PlayerActivity : Activity() {
     private var videoFormat: String? = null
     private var playerStartedAtMs = 0L
     private var automaticRetries = 0
-    private var wasPlayingBeforePause = false
-    private var activityPaused = false
+    private val lifecycle = PlaybackLifecycle()
+    private var reconnectRunnable: Runnable? = null
     private var playerView: StyledPlayerView? = null
     private var trackSelector: DefaultTrackSelector? = null
     private var skipButton: Button? = null
@@ -108,7 +108,7 @@ class PlayerActivity : Activity() {
     private var userSubtitleChoice: NativeSubtitleTrack? = null
     private var userChangedSubtitle = false
     private var recoveredAtMs = 0L
-    private var markers: List<Marker> = emptyList()
+    private var markers: List<PlaybackMarker> = emptyList()
     private var skipMode = "button"
     private val skippedMarkerIndexes = mutableSetOf<Int>()
     private var seekBackMs = 10_000L
@@ -158,6 +158,7 @@ class PlayerActivity : Activity() {
     private val timelineRunnable = object : Runnable {
         override fun run() {
             guarded("progress tick") {
+                if (completed || lifecycle.paused) return
                 val exo = player ?: return
                 val now = SystemClock.elapsedRealtime()
                 if (exo.isPlaying && now - lastTimelineReportAt >= 10_000L) {
@@ -203,8 +204,10 @@ class PlayerActivity : Activity() {
         val markerStarts = intent.getLongArrayExtra(EXTRA_MARKER_STARTS) ?: longArrayOf()
         val markerEnds = intent.getLongArrayExtra(EXTRA_MARKER_ENDS) ?: longArrayOf()
         markers = (0 until minOf(markerTypes.size, markerStarts.size, markerEnds.size)).map {
-            Marker(markerTypes[it], markerStarts[it], markerEnds[it])
+            PlaybackMarker(markerTypes[it], markerStarts[it], markerEnds[it])
         }
+        markers = markerUpdates.take(sessionId) ?: markers
+        activePlayer = WeakReference(this)
 
         try {
             initializePlayer(url, headers)
@@ -503,11 +506,14 @@ class PlayerActivity : Activity() {
         val mediaItemBuilder = MediaItem.Builder().setUri(Uri.parse(url))
         if (requestedSubtitleUrl.isNotBlank()) {
             val subtitleUri = Uri.parse(requestedSubtitleUrl)
+            val playbackUri = Uri.parse(url)
             val mimeType = MediaTrackSelectionPolicy.subtitleMimeType(
                 requestedSubtitleCodec,
                 requestedSubtitleUrl,
             )
-            if (subtitleUri.scheme == "https" && mimeType != null) {
+            if (subtitleUri.scheme == "https" && subtitleUri.host == playbackUri.host &&
+                subtitleUri.port == playbackUri.port && subtitleUri.userInfo.isNullOrEmpty() && mimeType != null
+            ) {
                 val sideloadedId = requestedSubtitleId.ifBlank { "plex-external" }
                 sideloadedSubtitleId = sideloadedId
                 val subtitleBuilder = MediaItem.SubtitleConfiguration.Builder(subtitleUri)
@@ -637,7 +643,7 @@ class PlayerActivity : Activity() {
         }
         playPauseButton = addButton("Pause", "Play or pause") {
             val exo = player
-            if (exo?.isPlaying == true) exo.pause() else exo?.play()
+            if (exo?.playWhenReady == true) exo.pause() else exo?.play()
             exo?.let(::updateCarControls)
         }
         addButton("+${seekForwardMs / 1_000}s", "Forward ${seekForwardMs / 1_000} seconds") {
@@ -691,8 +697,8 @@ class PlayerActivity : Activity() {
     }
 
     private fun updateCarControls(exo: ExoPlayer) {
-        playPauseButton?.text = if (exo.isPlaying) "Pause" else "Play"
-        playPauseButton?.contentDescription = if (exo.isPlaying) "Pause video" else "Play video"
+        playPauseButton?.text = if (exo.playWhenReady) "Pause" else "Play"
+        playPauseButton?.contentDescription = if (exo.playWhenReady) "Pause video" else "Play video"
         if (userSeeking) return
         val duration = exo.duration.takeIf { it > 0L }
         val position = exo.currentPosition.coerceAtLeast(0L)
@@ -1036,7 +1042,12 @@ class PlayerActivity : Activity() {
         diagnostics.add("Player: $reason; reconnect $attempt of $total")
         reconnecting = true
         showStatus("Reconnecting to Plex ($attempt of $total)…")
-        window.decorView.postDelayed({
+        reconnectRunnable?.let { timelineHandler.removeCallbacks(it) }
+        val retry = Runnable {
+            // Keep the pending task for onResume, without loading or playing
+            // behind a call, navigation or the head unit's sleeping screen.
+            if (lifecycle.paused) return@Runnable
+            reconnectRunnable = null
             if (!completed && player === exo) {
                 playbackError = null
                 val retryStartedAt = SystemClock.elapsedRealtime()
@@ -1047,9 +1058,12 @@ class PlayerActivity : Activity() {
                 recoveredAtMs = 0L
                 if (resumeAtMs != null) exo.seekTo(resumeAtMs)
                 exo.prepare()
-                exo.playWhenReady = true
+                // prepare preserves playWhenReady, including a manual pause
+                // made while waiting for this reconnect.
             }
-        }, StreamResilience.reconnectDelayMs(attempt))
+        }
+        reconnectRunnable = retry
+        timelineHandler.postDelayed(retry, StreamResilience.reconnectDelayMs(attempt))
         return true
     }
 
@@ -1178,24 +1192,29 @@ class PlayerActivity : Activity() {
 
     override fun onPause() {
         val exo = player
-        activityPaused = true
-        wasPlayingBeforePause = exo?.isPlaying == true
-        if (!completed && wasPlayingBeforePause) exo?.pause()
+        lifecycle.pause(exo?.playWhenReady == true)
+        if (!completed) exo?.pause()
+        timelineHandler.removeCallbacks(timelineRunnable)
+        reconnectRunnable?.let { timelineHandler.removeCallbacks(it) }
         showControls()
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
-        activityPaused = false
+        val resumeRequested = lifecycle.resume()
         if (!completed && !renderedFirstFrame) {
             val now = SystemClock.elapsedRealtime()
             startupAttemptStartedAtMs = now
             lastStartupProgressAtMs = now
             readyWithoutFrameAtMs = 0L
         }
-        if (!completed && wasPlayingBeforePause) player?.play()
-        wasPlayingBeforePause = false
+        if (!completed && resumeRequested) player?.play()
+        if (!completed && player != null) {
+            reconnectRunnable?.let { timelineHandler.post(it) }
+            timelineHandler.removeCallbacks(timelineRunnable)
+            timelineHandler.post(timelineRunnable)
+        }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -1218,7 +1237,7 @@ class PlayerActivity : Activity() {
             KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                if (exo?.isPlaying == true) exo.pause() else exo?.play()
+                if (exo?.playWhenReady == true) exo.pause() else exo?.play()
                 showControls()
                 return true
             }
@@ -1241,7 +1260,7 @@ class PlayerActivity : Activity() {
         return super.onKeyDown(keyCode, event)
     }
 
-    private fun activeMarker(positionMs: Long): Marker? = markers.firstOrNull {
+    private fun activeMarker(positionMs: Long): PlaybackMarker? = markers.firstOrNull {
         positionMs >= it.startMs && positionMs < it.endMs
     }
 
@@ -1255,7 +1274,14 @@ class PlayerActivity : Activity() {
     }
 
     private fun checkStartupProgress(exo: ExoPlayer, now: Long) {
-        if (renderedFirstFrame || completed || activityPaused) return
+        if (renderedFirstFrame || completed || lifecycle.paused) return
+        if (!exo.playWhenReady) {
+            // A manual pause while buffering must not consume startup limits.
+            startupAttemptStartedAtMs = now
+            lastStartupProgressAtMs = now
+            readyWithoutFrameAtMs = 0L
+            return
+        }
 
         val buffered = exo.bufferedPosition.coerceAtLeast(0L)
         if (buffered >= lastBufferedPositionMs + 250L) {
@@ -1337,6 +1363,9 @@ class PlayerActivity : Activity() {
     private fun finishWithResult(error: String?) {
         if (completed) return
         completed = true
+        reconnectRunnable?.let { timelineHandler.removeCallbacks(it) }
+        reconnectRunnable = null
+        markerUpdates.end(sessionId)
         val exo = player
         val position = exo?.currentPosition ?: intent.getLongExtra(EXTRA_START_MS, 0L)
         val duration = exo?.duration?.takeIf { it > 0L } ?: 0L
@@ -1386,6 +1415,10 @@ class PlayerActivity : Activity() {
     }
 
     override fun onDestroy() {
+        reconnectRunnable?.let { timelineHandler.removeCallbacks(it) }
+        reconnectRunnable = null
+        markerUpdates.end(sessionId)
+        if (activePlayer.get() === this) activePlayer.clear()
         timelineHandler.removeCallbacks(timelineRunnable)
         timelineHandler.removeCallbacks(seekRunnable)
         timelineHandler.removeCallbacks(hideControlsRunnable)
@@ -1428,6 +1461,30 @@ class PlayerActivity : Activity() {
     }
 
     companion object {
+        private var activePlayer = WeakReference<PlayerActivity>(null)
+        private val markerUpdates = PlaybackMarkerMailbox()
+
+        internal fun beginMarkerSession(id: String) = markerUpdates.begin(id)
+
+        internal fun endMarkerSession(id: String) = markerUpdates.end(id)
+
+        internal fun receiveMarkers(id: String, values: List<PlaybackMarker>): Boolean {
+            if (!markerUpdates.post(id, values)) return false
+            val activity = activePlayer.get()
+            if (activity != null && !activity.completed && activity.sessionId == id) {
+                activity.guarded("marker update") {
+                    val loaded = markerUpdates.take(id) ?: return@guarded
+                    activity.markers = loaded
+                    activity.skippedMarkerIndexes.clear()
+                    activity.diagnostics.add("Player: received ${loaded.size} skip markers")
+                    if (!activity.lifecycle.paused) {
+                        activity.updateSkipButton(activity.player?.currentPosition ?: 0L)
+                    }
+                }
+            }
+            return true
+        }
+
         const val EXTRA_URL = "url"
         const val EXTRA_TITLE = "title"
         const val EXTRA_START_MS = "startMs"
