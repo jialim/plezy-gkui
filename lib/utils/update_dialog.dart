@@ -7,12 +7,20 @@ import '../widgets/dialog_action_button.dart';
 import 'app_logger.dart';
 import 'dialogs.dart';
 
+typedef XgimiUpdateDownloader =
+    Future<String> Function(
+      Map<String, dynamic> info, {
+      ValueChanged<double?>? onProgress,
+      XgimiUpdateCancellation? cancellation,
+    });
+
 Future<void> showUpdateAvailableDialog(
   BuildContext context,
   Map<String, dynamic> updateInfo, {
   required String title,
   required String dismissLabel,
   bool showSkipVersion = false,
+  XgimiUpdateDownloader? xgimiDownloader,
 }) {
   return showScopedDialog<void>(
     context: context,
@@ -55,7 +63,10 @@ Future<void> showUpdateAvailableDialog(
                 await showScopedDialog<void>(
                   context: context,
                   barrierDismissible: false,
-                  builder: (_) => _XgimiUpdateProgressDialog(updateInfo: updateInfo),
+                  builder: (_) => _XgimiUpdateProgressDialog(
+                    updateInfo: updateInfo,
+                    download: xgimiDownloader ?? UpdateService.downloadAndInstallXgimiUpdate,
+                  ),
                 );
                 return;
               }
@@ -75,9 +86,10 @@ Future<void> showUpdateAvailableDialog(
 }
 
 class _XgimiUpdateProgressDialog extends StatefulWidget {
-  const _XgimiUpdateProgressDialog({required this.updateInfo});
+  const _XgimiUpdateProgressDialog({required this.updateInfo, required this.download});
 
   final Map<String, dynamic> updateInfo;
+  final XgimiUpdateDownloader download;
 
   @override
   State<_XgimiUpdateProgressDialog> createState() => _XgimiUpdateProgressDialogState();
@@ -88,6 +100,26 @@ class _XgimiUpdateProgressDialogState extends State<_XgimiUpdateProgressDialog> 
   bool _permissionRequested = false;
   bool _failed = false;
   bool _running = false;
+  bool _closing = false;
+  XgimiUpdateFailure? _failure;
+  XgimiUpdateCancellation? _cancellation;
+
+  @override
+  void dispose() {
+    _cancellation?.cancel();
+    super.dispose();
+  }
+
+  void _cancelAndClose() {
+    _cancellation?.cancel();
+    _close();
+  }
+
+  void _close() {
+    if (_closing || !mounted) return;
+    _closing = true;
+    Navigator.pop(context);
+  }
 
   @override
   void initState() {
@@ -96,18 +128,22 @@ class _XgimiUpdateProgressDialogState extends State<_XgimiUpdateProgressDialog> 
   }
 
   Future<void> _start() async {
-    if (_running) return;
+    if (_running || _closing || !mounted) return;
+    final cancellation = XgimiUpdateCancellation();
+    _cancellation = cancellation;
     setState(() {
       _running = true;
       _failed = false;
+      _failure = null;
       _permissionRequested = false;
       _progress = null;
     });
     try {
-      final result = await UpdateService.downloadAndInstallXgimiUpdate(
+      final result = await widget.download(
         widget.updateInfo,
+        cancellation: cancellation,
         onProgress: (value) {
-          if (!mounted) return;
+          if (!mounted || _closing) return;
           final previous = _progress;
           if (value == null || previous == null || value >= 1 || value - previous >= 0.01) {
             setState(() => _progress = value);
@@ -121,14 +157,17 @@ class _XgimiUpdateProgressDialogState extends State<_XgimiUpdateProgressDialog> 
           _permissionRequested = true;
         });
       } else {
-        Navigator.pop(context);
+        _close();
       }
+    } on XgimiUpdateCancelled {
+      _close();
     } catch (error, stackTrace) {
       appLogger.w('XGIMI update failed', error: error, stackTrace: stackTrace);
       if (!mounted) return;
       setState(() {
         _running = false;
         _failed = true;
+        _failure = error is XgimiUpdateException ? error.failure : XgimiUpdateFailure.network;
       });
     }
   }
@@ -139,6 +178,9 @@ class _XgimiUpdateProgressDialogState extends State<_XgimiUpdateProgressDialog> 
     final canClose = _failed || _permissionRequested;
     return PopScope(
       canPop: canClose,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _running) _cancelAndClose();
+      },
       child: AlertDialog(
         title: Text(t.update.downloading(version: version)),
         content: Column(
@@ -148,7 +190,13 @@ class _XgimiUpdateProgressDialogState extends State<_XgimiUpdateProgressDialog> 
             if (_permissionRequested)
               Text(t.update.allowInstall)
             else if (_failed)
-              Text(t.update.downloadFailed)
+              Text(switch (_failure) {
+                XgimiUpdateFailure.storage => t.update.storageFailed,
+                XgimiUpdateFailure.verification => t.update.verificationFailed,
+                XgimiUpdateFailure.installer => t.update.installerFailed,
+                XgimiUpdateFailure.busy => t.update.downloadBusy,
+                _ => t.update.downloadFailed,
+              })
             else ...[
               LinearProgressIndicator(value: _progress),
               const SizedBox(height: 12),
@@ -161,6 +209,7 @@ class _XgimiUpdateProgressDialogState extends State<_XgimiUpdateProgressDialog> 
           ],
         ),
         actions: [
+          if (_running) DialogActionButton(onPressed: _cancelAndClose, label: t.common.cancel),
           if (canClose) DialogActionButton(onPressed: () => Navigator.pop(context), label: t.common.close),
           if (_failed) DialogActionButton(onPressed: _start, label: t.common.retry, isPrimary: true),
         ],

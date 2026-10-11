@@ -164,6 +164,7 @@ class PlaybackSubtitleResolver {
 
   static PlaybackSubtitleSelection resolve({
     required MediaItem metadata,
+    String? profileId,
     required MediaSourceInfo? mediaInfo,
     required List<PlaybackSubtitleSidecar> sidecars,
     MediaServerUserProfile? profileSettings,
@@ -203,6 +204,7 @@ class PlaybackSubtitleResolver {
       profileSettings: profileSettings,
       metadata: metadata,
       plexMediaInfo: mediaInfo,
+      profileId: profileId,
     );
     final selectedAudio = service.selectAudioTrack(audioTracksForSource(mediaInfo), preferredAudioTrack)?.track;
     final primaryPreference = _sourceBackedPreference(

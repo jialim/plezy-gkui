@@ -11,12 +11,12 @@ This branch is intentionally separate from **Plezy GKUI**. GKUI is a compact API
 
 ## Download
 
-Download the APKs from [Plezy XGIMI Lite 2.22.0 Test 6](https://github.com/jialim/plezy-gkui/releases/tag/xgimi-lite-v2.22.0-test6).
+Download the APKs from [Plezy XGIMI Lite 2.22.0 Test 8](https://github.com/jialim/plezy-gkui/releases/tag/xgimi-lite-v2.22.0-test8).
 
 | APK | Use it when |
 | --- | --- |
-| `arm64-v8a` | Try this first on modern XGIMI Android TV projectors. |
-| `armeabi-v7a` | Use this only if Android rejects the ARM64 APK or diagnostics show a 32-bit userspace. |
+| `armeabi-v7a` | **Use this for our confirmed 32-bit XGIMI projector.** |
+| `arm64-v8a` | For other devices with confirmed 64-bit userspace. |
 
 Both APKs contain exactly one native ABI. Release assets also include compressed `.tar.gz` copies for easier transfer; extract the APK before sideloading.
 
@@ -27,11 +27,21 @@ Both APKs contain exactly one native ABI. Release assets also include compressed
 3. Install the APK and complete Plex, Jellyfin, or Emby sign-in.
 4. Open **Settings → Advanced → View logs** and save the diagnostics header before testing playback.
 
-Test 4 established the permanent signing identity for XGIMI Lite. Starting with the next test build, XGIMI Lite also has its own package ID, `app.plezylite.xgimi`, so it installs beside official Plezy instead of colliding with `com.edde746.plezy`. That build installs as a new app once: sign in to Plex in it, then uninstall the older "Plezy" test build. Every build after it updates in place while preserving sign-in and settings.
+Test 7 introduced the permanent package ID `app.plezylite.xgimi`. Test 8 and later update Test 7 in place and preserve sign-in and settings. The permanent signing key established in Test 4 is unchanged.
+
+If you are moving from Test 6 or earlier, this is a **one-time move to a separate app**. The new launcher entry is **Plezy XGIMI Lite**; the older app is called **Plezy**. You must sign in again. To keep your app preferences, use **Export Settings** in the old app and **Import Settings** in the new app. Server watch history remains on Plex/Jellyfin/Emby. Keep the old app until the new one is working; uninstalling it is optional and is not required to install XGIMI Lite. No further package-ID changes are planned.
 
 ### Updating without USB
 
 From Test 6 onward, XGIMI Lite checks this repository's pre-releases and can download the APK that matches the installed ABI. Choose **Download and install** in the update prompt. Android still asks for confirmation; the first time, enable **Allow from this source** for Plezy and return to the app, which continues to the installer automatically. The APK is streamed to cache and its GitHub SHA-256 digest is verified before Android opens it.
+
+Test 8 adds **Cancel**, a bounded download duration, separate connection/storage/verification messages, and checks against downgrades. Release version codes must increase before CI will publish. A cancelled or failed partial download is removed.
+
+### Readability and subtitle memory
+
+Choose **Settings → Appearance → Projector interface size**: Normal (1.2×), Large (1.4×), or Extra-large (1.6×). Controls update immediately, and the detail action row scrolls with D-pad focus when space is tight. Unfocused actions stay at 85% brightness.
+
+Subtitle choices are remembered by viewer and show/movie, using language, title and subtitle type across episodes. **Settings → Playback → Reset remembered subtitles** clears only the current viewer's choices. Earlier unscoped Test 7 choices are not inherited because their owner cannot be identified; select a subtitle once to save it for your viewer.
 
 ## Projector-focused defaults
 
@@ -51,6 +61,10 @@ The `FAMILY_PROJECTOR_MODE` build profile seeds settings only when the user has 
 
 Manual settings, explicit media-version choices, and server-selected tracks remain authoritative.
 
+### Compared with official Plezy
+
+This fork is based directly on official **2.22.0** and retains its playback engine, supported backends and upstream playback fixes. The projector changes are mostly defaults and accessibility: larger controls, stronger focus contrast, Chinese subtitle memory, start-over and an APK updater. Reduced animations, stereo output, hidden Explore and preference for an available 1080p SDR version are adjustable; 4K/HDR and surround support are not removed. The full mpv/FFmpeg stack remains, so the v7a APK is still about 91 MB. Future official releases need to be merged into this fork before their new fixes are included.
+
 The projector palette keeps a black background for dark-room viewing but avoids near-black cards that disappear on a low-contrast projection surface. Amber focus is reinforced by a 4 px outline and a larger focused-state scale, so navigation does not rely on colour alone.
 
 ## Chinese subtitle priority
@@ -60,8 +74,8 @@ When no manual or server choice exists, text subtitles are ranked as:
 1. Simplified Chinese (`zh-CN`, `zh-SG`, `zh-Hans`)
 2. Traditional Chinese (`zh-TW`, `zh-HK`, `zh-MO`, `zh-Hant`)
 3. Generic Chinese (`zh`, `zho`, `chi`)
-4. English
-5. Off
+
+Without a Chinese track, or when the audio is already Chinese, the projector default leaves subtitles off. Manual or server-selected English subtitles remain available.
 
 `简`, `繁`, `CHS`, `CHT`, `SC`, and `TC` title hints are consulted only when proper language metadata is absent or generic.
 

@@ -112,6 +112,7 @@ extension _VideoPlayerOpenMethods on VideoPlayerScreenState {
 
     return PlaybackSubtitleResolver.resolve(
       metadata: metadata,
+      profileId: context.read<ActiveProfileProvider?>()?.activeId,
       mediaInfo: result.mediaInfo,
       sidecars: result.subtitleSidecars,
       profileSettings: context.read<AccountPreferencesController>().activePreferences,
@@ -690,6 +691,7 @@ extension _VideoPlayerOpenMethods on VideoPlayerScreenState {
   }) {
     return TrackManager(
       player: forPlayer,
+      profileId: context.read<ActiveProfileProvider?>()?.activeId,
       isActive: () => mounted && player == forPlayer,
       // Plex writes track changes immediately. MediaBrowser persists selected
       // indexes through playback progress reports and only needs the account

@@ -59,6 +59,10 @@ class _ExternalPlayerLaunchResult {
 }
 
 class ExternalPlayerService {
+  @visibleForTesting
+  static int externalStartPositionMs(int? resumeMs, Duration? requested) =>
+      (requested?.inMilliseconds ?? resumeMs ?? 0).clamp(0, 0x7fffffff);
+
   /// Launch an external player with either a pre-resolved [videoUrl] (the
   /// local file of a downloaded copy) or by asking [client] to resolve the
   /// stream for [metadata]. Each backend implements `resolveExternalPlayback`
@@ -73,6 +77,7 @@ class ExternalPlayerService {
     int mediaIndex = 0,
     String? mediaSourceId,
     String? videoUrl,
+    Duration? initialPosition,
     bool Function()? isLaunchCurrent,
     VoidCallback? onHandoffPending,
     VoidCallback? onLaunched,
@@ -136,6 +141,7 @@ class ExternalPlayerService {
           context,
           metadata: metadata,
           subtitles: subtitles,
+          initialPosition: initialPosition,
         );
         if (launchResult.launched && current()) onLaunched?.call();
         if (launchResult.launched && metadata != null && current()) {
@@ -199,13 +205,14 @@ class ExternalPlayerService {
     BuildContext context, {
     MediaItem? metadata,
     List<SubtitleTrack> subtitles = const [],
+    Duration? initialPosition,
   }) async {
     try {
       final packages = player.id == 'system_default' ? const <String>[] : KnownPlayers.androidPackageCandidates(player);
       final result = await _externalPlayerChannel.invokeMapMethod<String, Object?>('openVideo', {
         'filePath': url,
         if (metadata?.title?.trim().isNotEmpty == true) 'title': metadata!.title!.trim(),
-        if ((metadata?.viewOffsetMs ?? 0) > 0) 'startPositionMs': metadata!.viewOffsetMs,
+        'startPositionMs': externalStartPositionMs(metadata?.viewOffsetMs, initialPosition),
         if (packages.isNotEmpty) 'packages': packages,
         if (subtitles.isNotEmpty) 'subtitles': [for (final track in subtitles) ?_subtitleArgument(track)],
       });

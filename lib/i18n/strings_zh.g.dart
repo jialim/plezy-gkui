@@ -218,7 +218,11 @@ class Translations$update$zh extends Translations$update$en {
 	@override String get downloadAndInstall => '下载并安装';
 	@override String downloading({required Object version}) => '正在下载 ${version}…';
 	@override String get allowInstall => '请允许 Plezy 安装应用。返回后会自动继续安装。';
-	@override String get downloadFailed => '无法下载或验证更新。请检查网络后重试。';
+	@override String get downloadFailed => '更新下载已中断。请检查网络后重试。';
+	@override String get storageFailed => '没有足够的可用存储空间。请清理空间后重试。';
+	@override String get verificationFailed => '无法验证此更新，或它不比已安装的版本新。请确认最新发布版本后再重试。';
+	@override String get installerFailed => '无法打开 Android 安装程序。请确认已允许 Plezy XGIMI Lite 安装应用。';
+	@override String get downloadBusy => '另一个更新下载正在结束，请稍后重试。';
 	@override String get latestVersion => '当前已是最新版本';
 	@override String get checkFailed => '无法检查更新';
 }
@@ -255,6 +259,13 @@ class Translations$settings$zh extends Translations$settings$en {
 	@override String get oledTheme => 'OLED';
 	@override String get libraryDensity => '媒体库密度';
 	@override String get displayScale => '界面缩放';
+	@override String get projectorUiSize => '投影仪界面大小';
+	@override String get projectorNormal => '标准（1.2 倍）';
+	@override String get projectorLarge => '大（1.4 倍）';
+	@override String get projectorExtraLarge => '特大（1.6 倍）';
+	@override String get resetProjectorSubtitles => '重置记住的字幕';
+	@override String get resetProjectorSubtitlesDescription => '清除当前观看者的字幕选择，其他观看者不受影响。下次播放时重新使用中文字幕默认设置。';
+	@override String get projectorSubtitlesReset => '已重置当前观看者记住的字幕';
 	@override String get compact => '紧凑';
 	@override String get comfortable => '舒适';
 	@override String get gridSpacing => '网格间距';
@@ -3134,7 +3145,11 @@ extension on TranslationsZh {
 			'update.downloadAndInstall' => '下载并安装',
 			'update.downloading' => ({required Object version}) => '正在下载 ${version}…',
 			'update.allowInstall' => '请允许 Plezy 安装应用。返回后会自动继续安装。',
-			'update.downloadFailed' => '无法下载或验证更新。请检查网络后重试。',
+			'update.downloadFailed' => '更新下载已中断。请检查网络后重试。',
+			'update.storageFailed' => '没有足够的可用存储空间。请清理空间后重试。',
+			'update.verificationFailed' => '无法验证此更新，或它不比已安装的版本新。请确认最新发布版本后再重试。',
+			'update.installerFailed' => '无法打开 Android 安装程序。请确认已允许 Plezy XGIMI Lite 安装应用。',
+			'update.downloadBusy' => '另一个更新下载正在结束，请稍后重试。',
 			'update.latestVersion' => '当前已是最新版本',
 			'update.checkFailed' => '无法检查更新',
 			'settings.title' => '设置',
@@ -3162,6 +3177,13 @@ extension on TranslationsZh {
 			'settings.oledTheme' => 'OLED',
 			'settings.libraryDensity' => '媒体库密度',
 			'settings.displayScale' => '界面缩放',
+			'settings.projectorUiSize' => '投影仪界面大小',
+			'settings.projectorNormal' => '标准（1.2 倍）',
+			'settings.projectorLarge' => '大（1.4 倍）',
+			'settings.projectorExtraLarge' => '特大（1.6 倍）',
+			'settings.resetProjectorSubtitles' => '重置记住的字幕',
+			'settings.resetProjectorSubtitlesDescription' => '清除当前观看者的字幕选择，其他观看者不受影响。下次播放时重新使用中文字幕默认设置。',
+			'settings.projectorSubtitlesReset' => '已重置当前观看者记住的字幕',
 			'settings.compact' => '紧凑',
 			'settings.comfortable' => '舒适',
 			'settings.gridSpacing' => '网格间距',
@@ -3531,6 +3553,8 @@ extension on TranslationsZh {
 			'fileInfo.interlaced' => '隔行扫描',
 			'fileInfo.anamorphic' => '变形宽银幕',
 			'fileInfo.referenceFrames' => '参考帧',
+			_ => null,
+		} ?? switch (path) {
 			'fileInfo.dynamicRange' => '动态范围',
 			'fileInfo.dolbyVision' => 'Dolby Vision',
 			'fileInfo.dolbyVisionLevel' => 'Dolby Vision 级别',
@@ -3547,8 +3571,6 @@ extension on TranslationsZh {
 			'fileInfo.languageCode' => '语言代码',
 			'fileInfo.streamTitle' => '轨道标题',
 			'fileInfo.channels' => '声道',
-			_ => null,
-		} ?? switch (path) {
 			'fileInfo.sampleRate' => '采样率',
 			'fileInfo.spatialAudio' => '空间音频',
 			'fileInfo.textBased' => '基于文本',
@@ -4045,6 +4067,8 @@ extension on TranslationsZh {
 			'errors.failedToRate' => '无法更新评分',
 			'errors.reasonTimedOut' => '连接超时',
 			'errors.reasonUnreachable' => '无法连接到服务器',
+			_ => null,
+		} ?? switch (path) {
 			'errors.reasonRefused' => '服务器拒绝了此请求',
 			'errors.reasonNotFound' => '该项目已不在服务器上',
 			'errors.reasonServerError' => '服务器报告了一个错误',
@@ -4061,8 +4085,6 @@ extension on TranslationsZh {
 			'libraries.emptyingTrash' => ({required Object title}) => '正在清空“${title}”的回收站…',
 			'libraries.trashEmptied' => ({required Object title}) => '已清空“${title}”的回收站',
 			'libraries.failedToEmptyTrash' => ({required Object error}) => '无法清空回收站：${error}',
-			_ => null,
-		} ?? switch (path) {
 			'libraries.analyzing' => ({required Object title}) => '正在分析“${title}”…',
 			'libraries.analysisStarted' => ({required Object title}) => '已开始分析“${title}”',
 			'libraries.failedToAnalyze' => ({required Object error}) => '无法分析媒体库：${error}',
@@ -4559,6 +4581,8 @@ extension on TranslationsZh {
 			'watchTogether.joinCurrentPlaybackDescription' => '加入主持人当前正在观看的内容',
 			'watchTogether.failedToOpenCurrentPlayback' => '无法打开当前播放',
 			'watchTogether.participantJoined' => ({required Object name}) => '${name} 已加入',
+			_ => null,
+		} ?? switch (path) {
 			'watchTogether.participantLeft' => ({required Object name}) => '${name} 已离开',
 			'watchTogether.participantPaused' => ({required Object name}) => '${name} 暂停了播放',
 			'watchTogether.participantResumed' => ({required Object name}) => '${name} 恢复了播放',
@@ -4575,8 +4599,6 @@ extension on TranslationsZh {
 			'watchTogether.guestSwitchUnavailable' => '无法切换 — 服务器不可用于同步',
 			'watchTogether.guestSwitchFailed' => '无法切换 — 在此服务器上未找到内容',
 			'watchTogether.defaultDisplayName' => '用户',
-			_ => null,
-		} ?? switch (path) {
 			'watchTogether.errors.timedOut' => '中继服务器未及时响应',
 			'watchTogether.errors.connectionLost' => '会话准备就绪前连接已断开',
 			'watchTogether.errors.invalidRelayResponse' => '中继服务器返回了意外的响应',
@@ -5073,6 +5095,8 @@ extension on TranslationsZh {
 			'addServer.signInFailed' => ({required Object error}) => '登录失败：${error}',
 			'addServer.quickConnectFailed' => ({required Object error}) => 'Quick Connect 失败：${error}',
 			'addServer.addPlexTitle' => '使用 Plex 登录',
+			_ => null,
+		} ?? switch (path) {
 			'addServer.pinExpired' => 'PIN 在登录前已过期。请重试。',
 			'addServer.failedToRegisterAccount' => ({required Object error}) => '注册账户失败：${error}',
 			'addServer.enterMediaBrowserUrlError' => ({required Object product}) => '请输入你的 ${product} 服务器 URL',
@@ -5089,8 +5113,6 @@ extension on TranslationsZh {
 			'addServer.invalidCredentials' => '用户名或密码无效',
 			'addServer.authResponseNotJson' => '身份验证响应不是有效的 JSON',
 			'addServer.authResponseIncomplete' => '服务器返回的登录响应不完整',
-			_ => null,
-		} ?? switch (path) {
 			'addServer.quickConnectRejected' => '服务器拒绝了 Quick Connect',
 			'addServer.quickConnectNotJson' => 'Quick Connect 响应不是有效的 JSON',
 			'addServer.quickConnectMissingFields' => 'Quick Connect 响应中缺少代码或密钥',

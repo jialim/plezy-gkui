@@ -743,8 +743,15 @@ class TrackSelectionService {
   final MediaServerUserProfile? profileSettings;
   final MediaItem metadata;
   final MediaSourceInfo? plexMediaInfo;
+  final String? profileId;
 
-  TrackSelectionService({this.player, this.profileSettings, required this.metadata, this.plexMediaInfo});
+  TrackSelectionService({
+    this.player,
+    this.profileSettings,
+    required this.metadata,
+    this.plexMediaInfo,
+    this.profileId,
+  });
 
   /// The profile's preferred language for one track kind, or null when unset.
   static String? _preferredLanguage(MediaServerUserProfile profile, {required bool isAudio}) {
@@ -1168,12 +1175,14 @@ class TrackSelectionService {
     // Family profile: a subtitle someone chose for this show or movie (or Off)
     // sticks to every episode until changed, ahead of Plex's per-file memory.
     if (FamilyProjectorProfile.enabled) {
-      final remembered = FamilyProjectorSubtitleMemory.choiceFor(FamilyProjectorSubtitleMemory.keyFor(metadata));
-      if (remembered != null && remembered.id == SubtitleTrack.off.id) {
+      final remembered = FamilyProjectorSubtitleMemory.choiceFor(
+        FamilyProjectorSubtitleMemory.keyFor(metadata, profileId: profileId),
+      );
+      if (remembered is SubtitleOffPreference) {
         return TrackSelectionResult(SubtitleTrack.off, TrackSelectionPriority.profile);
       }
-      if (remembered != null && availableTracks.isNotEmpty) {
-        final match = findBestSubtitleMatch(availableTracks, remembered);
+      if (remembered is SubtitleIntentPreference && availableTracks.isNotEmpty) {
+        final match = findNativeTrackForIntent(remembered.intent, availableTracks);
         if (match != null) return TrackSelectionResult(match, TrackSelectionPriority.profile);
       }
     }

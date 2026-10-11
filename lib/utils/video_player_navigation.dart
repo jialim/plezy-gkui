@@ -422,6 +422,7 @@ Future<bool?> navigateToVideoPlayer(
               mediaIndex: mediaIndex,
               mediaSourceId: mediaSourceId,
               isLaunchCurrent: launchCurrent,
+              initialPosition: initialPosition,
               onHandoffPending: () => launchObserver?.mark('blocked', blocker: 'externalHandoffPending'),
               onLaunched: () => launchObserver?.mark('externalLaunched'),
             );

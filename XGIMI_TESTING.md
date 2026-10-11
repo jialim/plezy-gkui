@@ -4,7 +4,8 @@ Record the APK filename, backend, and the diagnostics header from **Settings →
 
 ## Install and browse
 
-- [ ] Install `arm64-v8a`; if Android rejects it, install `armeabi-v7a`
+- [ ] Install `armeabi-v7a` for the confirmed 32-bit projector; update Test 7 in place
+- [ ] For Test 6/earlier, confirm the new Plezy XGIMI Lite launcher is distinct from Plezy, sign in again and import exported app settings if needed
 - [ ] Launch without a crash or blank screen
 - [ ] Complete Plex sign-in and select the expected Plex Home user
 - [ ] Confirm the initial UI is Simplified Chinese
@@ -13,6 +14,7 @@ Record the APK filename, backend, and the diagnostics header from **Settings →
 - [ ] Confirm approximately 4–5 comfortable cards across the 1080p screen
 - [ ] Test Up/Down/Left/Right, OK, and Back in Home, grids, details, settings, and dialogs
 - [ ] Confirm focus never disappears and the focus indication is obvious
+- [ ] Try Normal, Large and Extra-large; use D-pad to reach the last detail action at each size
 
 ## Playback
 
@@ -23,6 +25,7 @@ Record the APK filename, backend, and the diagnostics header from **Settings →
 - [ ] Confirm a 10–30 Mbps compatible 1080p file is not rejected only for bitrate
 - [ ] Confirm the playback overlay reports Direct Play or Direct Stream rather than video Transcode
 - [ ] Test seek forward/back and resume from a saved position
+- [ ] Test Play from beginning in both the built-in player and the selected Android external player
 - [ ] Play for at least 30 minutes and note dropped frames, A/V drift, or thermal slowdown
 - [ ] Return Home and confirm navigation remains responsive
 
@@ -32,9 +35,19 @@ Record the APK filename, backend, and the diagnostics header from **Settings →
 - [ ] Remove Simplified Chinese and confirm Traditional Chinese is selected
 - [ ] Confirm proper Plex language metadata beats misleading title/filename text
 - [ ] Confirm manual subtitle selection and subtitle search remain usable
+- [ ] Choose Traditional in one episode, restart and open the next; confirm it survives different stream IDs and language-code aliases
+- [ ] Choose Off for one viewer and Chinese for another; switch back and confirm the choices stay separate
+- [ ] Reset remembered subtitles for one viewer and confirm the other viewer is unaffected
 - [ ] Test SRT and a representative Chinese ASS subtitle
 - [ ] Confirm projector-speaker audio is present and intelligible in stereo
 - [ ] Confirm a lossless/multichannel source does not cause video transcoding solely for audio
+
+## In-app updates
+
+- [ ] Cancel a download and confirm the dialog closes and no partial APK is installed
+- [ ] Confirm storage and verification failures give the correct message
+- [ ] Allow installation from this source once, return and confirm the installer opens
+- [ ] Confirm an equal/older APK is rejected and the next signed release updates in place
 
 ## Backend comparison
 

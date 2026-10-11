@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:plezy/utils/media_server_http_client.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,6 +25,88 @@ void main() {
     buildNumber: '1',
     buildSignature: '',
   );
+
+  group('verified cancellable APK downloads', () {
+    late Directory directory;
+    var installerCalls = 0;
+    final bytes = utf8.encode('test APK bytes');
+    Map<String, dynamic> info({String? digest}) => {
+      'installUrl': 'https://github.com/jialim/plezy-gkui/releases/download/test/update.apk',
+      'installFileName': 'plezy-xgimi-lite-test-armeabi-v7a.apk',
+      'installSha256': digest ?? sha256.convert(bytes).toString(),
+    };
+    setUp(() async {
+      directory = await Directory.systemTemp.createTemp('xgimi-download');
+      installerCalls = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('com.plezy/xgimi_update'),
+        (call) async {
+          installerCalls++;
+          final path = (call.arguments as Map)['path'] as String;
+          expect(await File(path).readAsBytes(), bytes);
+          return 'installer_started';
+        },
+      );
+    });
+    tearDown(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('com.plezy/xgimi_update'),
+        null,
+      );
+      await directory.delete(recursive: true);
+    });
+    test('only a complete checksum-matching download reaches the installer', () async {
+      final client = MockClient((_) async => http.Response.bytes(bytes, 200));
+      addTearDown(client.close);
+      expect(
+        await UpdateService.debugDownloadAndInstallXgimiUpdate(info(), client: client, directory: directory),
+        'installer_started',
+      );
+      expect(installerCalls, 1);
+    });
+    test('checksum mismatch removes the partial and does not install', () async {
+      final client = MockClient((_) async => http.Response.bytes(bytes, 200));
+      addTearDown(client.close);
+      await expectLater(
+        UpdateService.debugDownloadAndInstallXgimiUpdate(
+          info(digest: List.filled(64, '0').join()),
+          client: client,
+          directory: directory,
+        ),
+        throwsA(isA<XgimiUpdateException>().having((e) => e.failure, 'failure', XgimiUpdateFailure.verification)),
+      );
+      expect(installerCalls, 0);
+      expect(await directory.list().toList(), isEmpty);
+    });
+    test('cancellation aborts a live response and leaves no APK', () async {
+      final token = XgimiUpdateCancellation();
+      final stream = StreamController<List<int>>();
+      final client = MockClient.streaming((request, _) async {
+        expect(request, isA<http.AbortableRequest>());
+        (request as http.AbortableRequest).abortTrigger!.then((_) {
+          if (!stream.isClosed) {
+            stream.addError(http.RequestAbortedException(request.url));
+            stream.close().ignore();
+          }
+        }).ignore();
+        stream.add(bytes.sublist(0, 3));
+        return http.StreamedResponse(stream.stream, 200, contentLength: bytes.length);
+      });
+      addTearDown(client.close);
+      await expectLater(
+        UpdateService.debugDownloadAndInstallXgimiUpdate(
+          info(),
+          client: client,
+          directory: directory,
+          cancellation: token,
+          onProgress: (_) => token.cancel(),
+        ),
+        throwsA(isA<XgimiUpdateCancelled>()),
+      );
+      expect(installerCalls, 0);
+      expect(await directory.list().toList(), isEmpty);
+    });
+  });
 
   test('malformed cooldown state fails open and removes the invalid value', () async {
     final prefs = await BaseSharedPreferencesService.sharedCache();
@@ -104,6 +188,7 @@ void main() {
       'target_commitish': 'commit-$number',
       'html_url': 'https://example.com/test$number',
       'published_at': '2026-10-0$number',
+      'body': '- armv7 APK version code: 1155\n- arm64 APK version code: 2155\n',
       'assets': [
         for (final abi in ['arm64-v8a', 'armeabi-v7a'])
           {
@@ -120,10 +205,26 @@ void main() {
     expect(arm64?['testNumber'], 7);
     expect(arm64?['installFileName'], endsWith('-arm64-v8a.apk'));
     expect(arm64?['installSha256'], digest);
+    expect(arm64?['installVersionCode'], 2155);
 
     final armv7 = UpdateService.selectXgimiRelease(releases, is64Bit: false);
     expect(armv7?['testNumber'], 7);
     expect(armv7?['installFileName'], endsWith('-armeabi-v7a.apk'));
+    expect(armv7?['installVersionCode'], 1155);
+  });
+
+  test('update check requires a strictly newer code and never downgrades the version', () {
+    bool newer(String version, int? code) => UpdateService.isNewerXgimiRelease(
+      {'version': version, 'installVersionCode': code},
+      currentVersion: '2.22.0',
+      currentBuild: '1155',
+    );
+    expect(newer('2.22.0', 1156), isTrue);
+    expect(newer('2.23.0', 1156), isTrue);
+    expect(newer('2.22.0', 1155), isFalse);
+    expect(newer('2.22.0', 1154), isFalse);
+    expect(newer('2.21.0', 1156), isFalse);
+    expect(newer('2.22.0', null), isFalse);
   });
 
   test('XGIMI release selection follows version bumps and prefers stable builds', () {

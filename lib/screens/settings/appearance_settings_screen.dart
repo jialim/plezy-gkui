@@ -11,6 +11,7 @@ import '../../services/settings_service.dart' hide ThemeMode;
 import '../../services/settings_service.dart' as settings show ThemeMode;
 import '../../focus/focusable_slider.dart';
 import '../../services/device_performance.dart';
+import '../../services/family_projector_profile.dart';
 import '../../utils/platform_detector.dart';
 import '../../widgets/app_icon.dart';
 import '../../widgets/setting_tile.dart';
@@ -34,6 +35,7 @@ class AppearanceSettingsScreen extends StatelessWidget {
           title: t.settings.display,
           children: [
             _themeSelector(),
+            if (FamilyProjectorProfile.enabled) _projectorSizeSelector(),
             if (PlatformDetector.isAutomotive()) _displayScaleSelector(),
             if (Platform.isAndroid) _visualEffectsSelector(context),
           ],
@@ -234,6 +236,20 @@ class AppearanceSettingsScreen extends StatelessWidget {
       },
     );
   }
+
+  Widget _projectorSizeSelector() => SettingSelectionTile<ProjectorUiSize>(
+    pref: SettingsService.projectorUiSize,
+    icon: Symbols.format_size_rounded,
+    title: t.settings.projectorUiSize,
+    subtitleBuilder: _projectorSizeLabel,
+    options: ProjectorUiSize.values.map((size) => DialogOption(value: size, title: _projectorSizeLabel(size))).toList(),
+  );
+
+  String _projectorSizeLabel(ProjectorUiSize size) => switch (size) {
+    ProjectorUiSize.normal => t.settings.projectorNormal,
+    ProjectorUiSize.large => t.settings.projectorLarge,
+    ProjectorUiSize.extraLarge => t.settings.projectorExtraLarge,
+  };
 
   Widget _displayScaleSelector() {
     return SettingValueBuilder<double>(

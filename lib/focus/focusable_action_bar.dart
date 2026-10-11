@@ -7,6 +7,7 @@ import 'focus_theme.dart';
 import 'input_mode_tracker.dart';
 import 'key_event_utils.dart';
 import 'owned_focus_node_binding.dart';
+import '../services/family_projector_profile.dart';
 
 typedef FocusableActionBuilder = Widget Function(BuildContext context, FocusableActionBuildState state);
 
@@ -76,6 +77,7 @@ class FocusableActionBar extends StatefulWidget {
   final ValueChanged<bool>? onFocusChange;
 
   final double spacing;
+  final bool scrollable;
 
   const FocusableActionBar({
     super.key,
@@ -87,6 +89,7 @@ class FocusableActionBar extends StatefulWidget {
     this.onBack,
     this.onFocusChange,
     this.spacing = 0,
+    this.scrollable = false,
   });
 
   @override
@@ -182,6 +185,13 @@ class FocusableActionBarState extends State<FocusableActionBar> {
       final hasFocus = binding.node.hasFocus;
       if (_focusStates[index] != hasFocus) {
         setState(() => _focusStates[index] = hasFocus);
+      }
+      final focusContext = binding.node.context;
+      if (hasFocus && widget.scrollable && focusContext != null) {
+        Scrollable.ensureVisible(
+          focusContext,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        ).ignore();
       }
     }
     _notifyRowFocusIfChanged();
@@ -296,8 +306,17 @@ class FocusableActionBarState extends State<FocusableActionBar> {
     // switch on the tiled GPUs low-end TVs use, and these bars sit on screen
     // permanently. Per-button dims (below) take over only while the row holds
     // focus; mid-transition the two multiply, which stays visually seamless.
-    return AnimatedOpacity(opacity: isKeyboard && !_hasAnyFocus ? 0.6 : 1.0, duration: duration, child: row);
+    final visibleRow = widget.scrollable
+        ? SingleChildScrollView(scrollDirection: Axis.horizontal, clipBehavior: Clip.none, child: row)
+        : row;
+    return AnimatedOpacity(
+      opacity: isKeyboard && !_hasAnyFocus ? _unfocusedOpacity : 1.0,
+      duration: duration,
+      child: visibleRow,
+    );
   }
+
+  double get _unfocusedOpacity => FamilyProjectorProfile.enabled ? FamilyProjectorProfile.unfocusedActionOpacity : 0.6;
 
   double _gapBefore(int index) => widget.actions[index].spacingBefore ?? widget.spacing;
 
@@ -306,7 +325,7 @@ class FocusableActionBarState extends State<FocusableActionBar> {
     final enabled = action.onPressed != null;
     final isFocused = _focusStates[index];
     final showFocus = isFocused && isKeyboard;
-    final opacity = isKeyboard && _hasAnyFocus && !isFocused ? 0.6 : 1.0;
+    final opacity = isKeyboard && _hasAnyFocus && !isFocused ? _unfocusedOpacity : 1.0;
     final buildState = FocusableActionBuildState(showFocus: showFocus, animationDuration: duration);
     final customChild = action.builder?.call(context, buildState);
 

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:provider/provider.dart';
 
 import '../../i18n/strings.g.dart';
 import '../../models/audio_channel_limit.dart';
@@ -11,6 +12,8 @@ import '../../models/player_setting_scope.dart';
 import '../../utils/audio_channel_limit_labels.dart';
 import '../../utils/quality_preset_labels.dart';
 import '../../services/settings_service.dart';
+import '../../services/family_projector_profile.dart';
+import '../../profiles/active_profile_provider.dart';
 import '../../services/video_decode_capabilities.dart';
 import '../../utils/codec_utils.dart';
 import '../../utils/platform_detector.dart';
@@ -18,6 +21,9 @@ import '../../widgets/setting_tile.dart';
 import '../../widgets/settings_builder.dart';
 import '../../widgets/settings_page.dart';
 import '../../widgets/settings_section.dart';
+import '../../widgets/focusable_list_tile.dart';
+import '../../utils/dialogs.dart';
+import '../../utils/snackbar_helper.dart';
 import 'external_player_screen.dart';
 import 'mpv_config_screen.dart';
 import 'settings_utils.dart';
@@ -125,6 +131,7 @@ class PlaybackSettingsScreen extends StatelessWidget {
             SettingsGroup(
               title: t.settings.subtitles,
               children: [
+                if (FamilyProjectorProfile.enabled) _resetProjectorSubtitles(context),
                 SettingNavigationTile(
                   icon: Symbols.subtitles_rounded,
                   title: t.settings.subtitleStyling,
@@ -145,6 +152,26 @@ class PlaybackSettingsScreen extends StatelessWidget {
       },
     );
   }
+
+  Widget _resetProjectorSubtitles(BuildContext context) => FocusableListTile(
+    leading: const Icon(Symbols.restart_alt_rounded),
+    title: Text(t.settings.resetProjectorSubtitles),
+    subtitle: Text(t.settings.resetProjectorSubtitlesDescription),
+    onTap: () async {
+      final profileId = context.read<ActiveProfileProvider?>()?.activeId;
+      if (profileId == null) return;
+      final confirmed = await showConfirmDialog(
+        context,
+        title: t.settings.resetProjectorSubtitles,
+        message: t.settings.resetProjectorSubtitlesDescription,
+        confirmText: t.common.reset,
+      );
+      if (confirmed != true || !context.mounted) return;
+      if (context.read<ActiveProfileProvider?>()?.activeId != profileId) return;
+      await FamilyProjectorSubtitleMemory.clearForProfile(profileId);
+      if (context.mounted) showAppSnackBar(context, t.settings.projectorSubtitlesReset);
+    },
+  );
 
   Widget _seekAndTimingGroup() => SettingsGroup(
     title: t.settings.seekAndTiming,

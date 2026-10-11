@@ -17,11 +17,13 @@ class _StubPlayer implements Player {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-TrackSelectionService _svc(List<MediaSubtitleTrack> plexSubs, {MediaItem? item}) => TrackSelectionService(
-  player: _StubPlayer(),
-  metadata: item ?? testMediaItem(id: 'rk1', backend: MediaBackend.plex, kind: MediaKind.movie),
-  plexMediaInfo: MediaSourceInfo(videoUrl: '', audioTracks: const [], subtitleTracks: plexSubs, chapters: const []),
-);
+TrackSelectionService _svc(List<MediaSubtitleTrack> plexSubs, {MediaItem? item, String? profileId}) =>
+    TrackSelectionService(
+      player: _StubPlayer(),
+      profileId: profileId,
+      metadata: item ?? testMediaItem(id: 'rk1', backend: MediaBackend.plex, kind: MediaKind.movie),
+      plexMediaInfo: MediaSourceInfo(videoUrl: '', audioTracks: const [], subtitleTracks: plexSubs, chapters: const []),
+    );
 
 MediaItem _episode(String id, String showId) =>
     testMediaItem(id: id, backend: MediaBackend.plex, kind: MediaKind.episode, grandparentId: showId);
@@ -61,6 +63,55 @@ void main() {
       FamilyProjectorSubtitleMemory.load(prefs);
     });
     tearDown(FamilyProjectorSubtitleMemory.resetForTest);
+
+    test('source IDs and language aliases do not lose a Traditional choice', () async {
+      await FamilyProjectorSubtitleMemory.record(
+        FamilyProjectorSubtitleMemory.keyFor(_episode('e1', 'show-a'), profileId: 'viewer-a'),
+        const SubtitleTrack(id: 'source:7', language: 'chi', title: 'Traditional', isForced: false),
+      );
+      FamilyProjectorSubtitleMemory.load(prefs);
+      final result = _svc(plexSubs, item: _episode('e2', 'show-a'), profileId: 'viewer-a').selectSubtitleTrack(
+        const [
+          SubtitleTrack(id: 'source:91', language: 'zho', title: 'Simplified'),
+          SubtitleTrack(id: 'source:92', language: 'zho', title: 'Traditional', isForced: true),
+          SubtitleTrack(id: 'source:93', language: 'zho', title: 'Traditional'),
+        ],
+        null,
+        audio,
+      );
+      expect(result?.track.id, 'source:93');
+    }, skip: !enabled);
+
+    test('viewer choices and resets are isolated', () async {
+      final item = _episode('e1', 'show-a');
+      final firstKey = FamilyProjectorSubtitleMemory.keyFor(item, profileId: 'viewer-a');
+      final secondKey = FamilyProjectorSubtitleMemory.keyFor(item, profileId: 'viewer-b');
+      await FamilyProjectorSubtitleMemory.record(firstKey, SubtitleTrack.off);
+      await FamilyProjectorSubtitleMemory.record(secondKey, tracks.last);
+      final next = _episode('e2', 'show-a');
+      expect(
+        _svc(plexSubs, item: next, profileId: 'viewer-a').selectSubtitleTrack(tracks, null, audio)?.track,
+        SubtitleTrack.off,
+      );
+      expect(_svc(plexSubs, item: next, profileId: 'viewer-b').selectSubtitleTrack(tracks, null, audio)?.track.id, '3');
+      await FamilyProjectorSubtitleMemory.clearForProfile('viewer-a');
+      FamilyProjectorSubtitleMemory.load(prefs);
+      expect(FamilyProjectorSubtitleMemory.choiceFor(firstKey), isNull);
+      expect(_svc(plexSubs, item: next, profileId: 'viewer-b').selectSubtitleTrack(tracks, null, audio)?.track.id, '3');
+    }, skip: !enabled);
+
+    test('invalid memory shapes and field types cannot break settings startup', () async {
+      final key = FamilyProjectorSubtitleMemory.keyFor(_episode('e1', 'show-a'));
+      for (final stored in ['[]', 'null', '"wrong root"', '{"bad":{"language":7}}', '{bad json']) {
+        await prefs.setString('family_projector_subtitle_choices', stored);
+        expect(() => FamilyProjectorSubtitleMemory.load(prefs), returnsNormally);
+      }
+      await prefs.setString('family_projector_subtitle_choices', '{"${key.replaceAll('"', '\\"')}":{"language":7}}');
+      expect(() => FamilyProjectorSubtitleMemory.load(prefs), returnsNormally);
+      expect(FamilyProjectorSubtitleMemory.choiceFor(key), isNull);
+      await prefs.setInt('family_projector_subtitle_choices', 7);
+      expect(() => FamilyProjectorSubtitleMemory.load(prefs), returnsNormally);
+    }, skip: !enabled);
 
     test('Off chosen in one episode keeps the rest of the show off', () async {
       await FamilyProjectorSubtitleMemory.record(

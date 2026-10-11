@@ -384,8 +384,20 @@ class Translations$update$en {
 	/// en: 'Allow Plezy to install apps. The installer will continue automatically when you return.'
 	String get allowInstall => 'Allow Plezy to install apps. The installer will continue automatically when you return.';
 
-	/// en: 'The update could not be downloaded or verified. Check the connection and try again.'
-	String get downloadFailed => 'The update could not be downloaded or verified. Check the connection and try again.';
+	/// en: 'The update download stopped. Check the connection and try again.'
+	String get downloadFailed => 'The update download stopped. Check the connection and try again.';
+
+	/// en: 'There is not enough writable storage for the update. Free some space and try again.'
+	String get storageFailed => 'There is not enough writable storage for the update. Free some space and try again.';
+
+	/// en: 'This update could not be verified or is not newer than this installation. Check the latest release before retrying.'
+	String get verificationFailed => 'This update could not be verified or is not newer than this installation. Check the latest release before retrying.';
+
+	/// en: 'Android could not open the installer. Check that Plezy XGIMI Lite is allowed to install apps.'
+	String get installerFailed => 'Android could not open the installer. Check that Plezy XGIMI Lite is allowed to install apps.';
+
+	/// en: 'Another update download is finishing. Try again in a moment.'
+	String get downloadBusy => 'Another update download is finishing. Try again in a moment.';
 
 	/// en: 'You are on the latest version'
 	String get latestVersion => 'You are on the latest version';
@@ -476,6 +488,27 @@ class Translations$settings$en {
 
 	/// en: 'Display Scale'
 	String get displayScale => 'Display Scale';
+
+	/// en: 'Projector interface size'
+	String get projectorUiSize => 'Projector interface size';
+
+	/// en: 'Normal (1.2×)'
+	String get projectorNormal => 'Normal (1.2×)';
+
+	/// en: 'Large (1.4×)'
+	String get projectorLarge => 'Large (1.4×)';
+
+	/// en: 'Extra-large (1.6×)'
+	String get projectorExtraLarge => 'Extra-large (1.6×)';
+
+	/// en: 'Reset remembered subtitles'
+	String get resetProjectorSubtitles => 'Reset remembered subtitles';
+
+	/// en: 'Clear subtitle choices for the current viewer. Other viewers keep their choices. Chinese subtitle defaults apply on the next playback.'
+	String get resetProjectorSubtitlesDescription => 'Clear subtitle choices for the current viewer. Other viewers keep their choices. Chinese subtitle defaults apply on the next playback.';
+
+	/// en: 'Remembered subtitles reset for this viewer'
+	String get projectorSubtitlesReset => 'Remembered subtitles reset for this viewer';
 
 	/// en: 'Compact'
 	String get compact => 'Compact';
@@ -7435,7 +7468,11 @@ extension on Translations {
 			'update.downloadAndInstall' => 'Download and install',
 			'update.downloading' => ({required Object version}) => 'Downloading ${version}…',
 			'update.allowInstall' => 'Allow Plezy to install apps. The installer will continue automatically when you return.',
-			'update.downloadFailed' => 'The update could not be downloaded or verified. Check the connection and try again.',
+			'update.downloadFailed' => 'The update download stopped. Check the connection and try again.',
+			'update.storageFailed' => 'There is not enough writable storage for the update. Free some space and try again.',
+			'update.verificationFailed' => 'This update could not be verified or is not newer than this installation. Check the latest release before retrying.',
+			'update.installerFailed' => 'Android could not open the installer. Check that Plezy XGIMI Lite is allowed to install apps.',
+			'update.downloadBusy' => 'Another update download is finishing. Try again in a moment.',
 			'update.latestVersion' => 'You are on the latest version',
 			'update.checkFailed' => 'Failed to check for updates',
 			'settings.title' => 'Settings',
@@ -7463,6 +7500,13 @@ extension on Translations {
 			'settings.oledTheme' => 'OLED',
 			'settings.libraryDensity' => 'Library Density',
 			'settings.displayScale' => 'Display Scale',
+			'settings.projectorUiSize' => 'Projector interface size',
+			'settings.projectorNormal' => 'Normal (1.2×)',
+			'settings.projectorLarge' => 'Large (1.4×)',
+			'settings.projectorExtraLarge' => 'Extra-large (1.6×)',
+			'settings.resetProjectorSubtitles' => 'Reset remembered subtitles',
+			'settings.resetProjectorSubtitlesDescription' => 'Clear subtitle choices for the current viewer. Other viewers keep their choices. Chinese subtitle defaults apply on the next playback.',
+			'settings.projectorSubtitlesReset' => 'Remembered subtitles reset for this viewer',
 			'settings.compact' => 'Compact',
 			'settings.comfortable' => 'Comfortable',
 			'settings.gridSpacing' => 'Grid Spacing',
@@ -7832,6 +7876,8 @@ extension on Translations {
 			'fileInfo.level' => 'Level',
 			'fileInfo.bitDepth' => 'Bit Depth',
 			'fileInfo.pixelFormat' => 'Pixel Format',
+			_ => null,
+		} ?? switch (path) {
 			'fileInfo.colorSpace' => 'Color Space',
 			'fileInfo.colorRange' => 'Color Range',
 			'fileInfo.colorPrimaries' => 'Color Primaries',
@@ -7848,8 +7894,6 @@ extension on Translations {
 			'fileInfo.dolbyVisionVersion' => 'Dolby Vision Version',
 			'fileInfo.dolbyVisionLayers' => 'Dolby Vision Layers',
 			'fileInfo.baseLayerCompatibility' => 'Base Layer Compatibility',
-			_ => null,
-		} ?? switch (path) {
 			'fileInfo.avcBitstream' => 'AVC Bitstream',
 			'fileInfo.nalLengthSize' => 'NAL Length Size',
 			'fileInfo.scalingMatrix' => 'Custom Scaling Matrix',
@@ -8346,6 +8390,8 @@ extension on Translations {
 			'discover.titleCount' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('en'))(n, one: '${n} title', other: '${n} titles', ), 
 			'errors.searchFailed' => ({required Object error}) => 'Search failed: ${error}',
 			'errors.searchUnavailable' => 'Search could not reach any media server.',
+			_ => null,
+		} ?? switch (path) {
 			'errors.connectionTimeout' => ({required Object context}) => 'Connection timeout while loading ${context}',
 			'errors.connectionFailed' => 'Unable to connect to media server',
 			'errors.unableToLoad' => ({required Object context}) => 'Unable to load ${context}. Please try again.',
@@ -8362,8 +8408,6 @@ extension on Translations {
 			'errors.reasonNotFound' => 'the item is no longer on the server',
 			'errors.reasonServerError' => 'the server reported an error',
 			'errors.reasonCancelled' => 'the request was cancelled',
-			_ => null,
-		} ?? switch (path) {
 			'errors.reasonUnexpected' => 'an unexpected error occurred',
 			'libraries.title' => 'Libraries',
 			'libraries.fallbackTitle' => 'Library',
@@ -8860,6 +8904,8 @@ extension on Translations {
 			'watchTogether.hostControlsPlayback' => 'Host controls playback',
 			'watchTogether.anyoneCanControl' => 'Anyone can control playback',
 			'watchTogether.hostControls' => 'Host controls',
+			_ => null,
+		} ?? switch (path) {
 			'watchTogether.anyoneControls' => 'Anyone controls',
 			'watchTogether.participants' => 'Participants',
 			'watchTogether.host' => 'Host',
@@ -8876,8 +8922,6 @@ extension on Translations {
 			'watchTogether.endSession' => 'End Session',
 			'watchTogether.leaveSession' => 'Leave Session',
 			'watchTogether.endSessionQuestion' => 'End Session?',
-			_ => null,
-		} ?? switch (path) {
 			'watchTogether.leaveSessionQuestion' => 'Leave Session?',
 			'watchTogether.endSessionConfirm' => 'This will end the session for all participants.',
 			'watchTogether.leaveSessionConfirm' => 'You will be removed from the session.',
@@ -9374,6 +9418,8 @@ extension on Translations {
 			'services.names.mal' => 'MyAnimeList',
 			'services.names.anilist' => 'AniList',
 			'services.names.simkl' => 'Simkl',
+			_ => null,
+		} ?? switch (path) {
 			'services.names.seerr' => 'Seerr',
 			'services.names.mdblist' => 'MDBList',
 			'services.deviceCode.title' => ({required Object service}) => 'Activate Plezy on ${service}',
@@ -9390,8 +9436,6 @@ extension on Translations {
 			'services.libraryFilter.title' => 'Library filter',
 			'services.libraryFilter.subtitleAllSyncing' => 'Syncing all libraries',
 			'services.libraryFilter.subtitleNoneSyncing' => 'Nothing syncing',
-			_ => null,
-		} ?? switch (path) {
 			'services.libraryFilter.subtitleBlocked' => ({required Object count}) => '${count} blocked',
 			'services.libraryFilter.subtitleAllowed' => ({required Object count}) => '${count} allowed',
 			'services.libraryFilter.mode' => 'Filter mode',

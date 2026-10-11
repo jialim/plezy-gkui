@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -14,6 +15,28 @@ import 'package:plezy/utils/platform_detector.dart';
 import 'base_shared_preferences_service.dart';
 import 'device_performance.dart';
 import 'family_projector_profile.dart';
+
+enum XgimiUpdateFailure { network, storage, verification, installer, busy }
+
+class XgimiUpdateException implements Exception {
+  const XgimiUpdateException(this.failure, {this.cause});
+  final XgimiUpdateFailure failure;
+  final Object? cause;
+
+  @override
+  String toString() => 'XGIMI update ${failure.name}: ${cause ?? failure.name}';
+}
+
+class XgimiUpdateCancelled implements Exception {}
+
+class XgimiUpdateCancellation {
+  final AbortController _abort = AbortController();
+  void cancel() => _abort.abort();
+  bool get isCancelled => _abort.isAborted;
+  void throwIfCancelled() {
+    if (isCancelled) throw XgimiUpdateCancelled();
+  }
+}
 
 /// Service to check for new versions on GitHub
 /// Only enabled when ENABLE_UPDATE_CHECK build flag is set
@@ -33,6 +56,7 @@ class UpdateService {
   static const String _gitCommit = String.fromEnvironment('GIT_COMMIT');
   static const MethodChannel _xgimiInstallerChannel = MethodChannel('com.plezy/xgimi_update');
   static const int _maximumXgimiApkBytes = 160 * 1024 * 1024;
+  static bool _xgimiDownloadActive = false;
 
   static const String _keySkippedVersion = 'update_skipped_version';
   static const String _keyLastCheckTime = 'update_last_check_time';
@@ -246,6 +270,9 @@ class UpdateService {
 
     final targetCommit = selected['targetCommit'] as String;
     if (targetCommit.toLowerCase() == _gitCommit.toLowerCase()) return null;
+    if (!isNewerXgimiRelease(selected, currentVersion: packageInfo.version, currentBuild: packageInfo.buildNumber)) {
+      return null;
+    }
 
     final tag = selected['tag'] as String;
     if (await getSkippedVersion() == tag) return null;
@@ -263,8 +290,22 @@ class UpdateService {
       'installUrl': selected['installUrl'],
       'installSha256': selected['installSha256'],
       'installFileName': selected['installFileName'],
+      'installVersionCode': selected['installVersionCode'],
       'canInstall': true,
     };
+  }
+
+  @visibleForTesting
+  static bool isNewerXgimiRelease(
+    Map<String, dynamic> release, {
+    required String currentVersion,
+    required String currentBuild,
+  }) {
+    final code = release['installVersionCode'];
+    final currentCode = int.tryParse(currentBuild);
+    if (code is! int || currentCode == null || code <= currentCode) return false;
+    final version = release['version'] as String?;
+    return version != null && (version == currentVersion || _isNewerVersion(version, currentVersion));
   }
 
   /// Select the newest usable XGIMI test release and the APK matching this
@@ -319,7 +360,14 @@ class UpdateService {
         continue;
       }
       final label = candidate.number == null ? candidate.version : '${candidate.version} Test ${candidate.number}';
+      final notes = release['body'] is String ? release['body'] as String : '';
+      final codeMatch = RegExp(
+        '^\\s*- ${is64Bit ? 'arm64' : 'armv7'} APK version code:\\s*(\\d+)\\s*\$',
+        multiLine: true,
+      ).firstMatch(notes);
       return {
+        'version': candidate.version,
+        'installVersionCode': int.tryParse(codeMatch?.group(1) ?? ''),
         'testNumber': candidate.number,
         'versionLabel': label,
         'tag': release['tag_name'],
@@ -342,73 +390,146 @@ class UpdateService {
   static Future<String> downloadAndInstallXgimiUpdate(
     Map<String, dynamic> updateInfo, {
     ValueChanged<double?>? onProgress,
+    XgimiUpdateCancellation? cancellation,
   }) async {
     if (!_useXgimiUpdater || updateInfo['canInstall'] != true) {
       throw StateError('In-app APK installation is unavailable for this build.');
     }
-    final url = Uri.parse(updateInfo['installUrl'] as String);
-    final expectedSha256 = (updateInfo['installSha256'] as String).toLowerCase();
-    final fileName = p.basename(updateInfo['installFileName'] as String);
-    if (url.scheme != 'https' || url.host != 'github.com') {
-      throw const FormatException('Invalid XGIMI release download URL.');
-    }
-    if (!fileName.endsWith('.apk') || !RegExp(r'^[0-9a-f]{64}$').hasMatch(expectedSha256)) {
-      throw const FormatException('Invalid XGIMI release asset metadata.');
-    }
+    return _downloadAndInstallXgimiUpdate(updateInfo, onProgress: onProgress, cancellation: cancellation);
+  }
 
-    final directory = await getTemporaryDirectory();
-    final finalFile = File(p.join(directory.path, fileName));
-    final partialFile = File('${finalFile.path}.partial');
-    await removeStaleXgimiDownloads(directory);
+  @visibleForTesting
+  static Future<String> debugDownloadAndInstallXgimiUpdate(
+    Map<String, dynamic> updateInfo, {
+    required http.Client client,
+    required Directory directory,
+    XgimiUpdateCancellation? cancellation,
+    ValueChanged<double?>? onProgress,
+  }) => _downloadAndInstallXgimiUpdate(
+    updateInfo,
+    client: client,
+    directory: directory,
+    cancellation: cancellation,
+    onProgress: onProgress,
+  );
 
-    final request = http.Request('GET', url)..headers['Accept'] = 'application/vnd.android.package-archive';
-    final response = await httpClient.inner.send(request).timeout(const Duration(seconds: 30));
-    if (response.statusCode != 200) {
-      throw StateError('APK download returned HTTP ${response.statusCode}');
-    }
-    final contentLength = response.contentLength;
-    if (contentLength != null && (contentLength <= 0 || contentLength > _maximumXgimiApkBytes)) {
-      throw StateError('APK download size is outside the allowed range.');
-    }
-
-    var received = 0;
-    final sink = partialFile.openWrite();
+  static Future<String> _downloadAndInstallXgimiUpdate(
+    Map<String, dynamic> updateInfo, {
+    http.Client? client,
+    Directory? directory,
+    XgimiUpdateCancellation? cancellation,
+    ValueChanged<double?>? onProgress,
+  }) async {
+    if (_xgimiDownloadActive) throw const XgimiUpdateException(XgimiUpdateFailure.busy);
+    final token = cancellation ?? XgimiUpdateCancellation();
+    token.throwIfCancelled();
+    _xgimiDownloadActive = true;
+    var timedOut = false;
+    final deadline = Timer(const Duration(minutes: 20), () {
+      timedOut = true;
+      token.cancel();
+    });
+    File? partialFile;
     try {
-      try {
-        await for (final chunk in response.stream.timeout(const Duration(seconds: 45))) {
-          received += chunk.length;
-          if (received > _maximumXgimiApkBytes) {
-            throw StateError('APK download exceeded the allowed size.');
-          }
-          sink.add(chunk);
-          onProgress?.call(contentLength == null || contentLength == 0 ? null : received / contentLength);
-        }
-        await sink.flush();
-      } finally {
-        await sink.close();
+      final url = Uri.parse(updateInfo['installUrl'] as String);
+      final expectedSha256 = (updateInfo['installSha256'] as String).toLowerCase();
+      final fileName = p.basename(updateInfo['installFileName'] as String);
+      if (url.scheme != 'https' || url.host != 'github.com') {
+        throw const FormatException('Invalid XGIMI release download URL.');
       }
-    } catch (_) {
-      if (await partialFile.exists()) await partialFile.delete();
+      if (!fileName.endsWith('.apk') || !RegExp(r'^[0-9a-f]{64}$').hasMatch(expectedSha256)) {
+        throw const FormatException('Invalid XGIMI release asset metadata.');
+      }
+
+      final downloadDirectory = directory ?? await getTemporaryDirectory();
+      final finalFile = File(p.join(downloadDirectory.path, fileName));
+      partialFile = File('${finalFile.path}.partial');
+      await removeStaleXgimiDownloads(downloadDirectory);
+
+      final request = http.AbortableRequest('GET', url, abortTrigger: token._abort.trigger)
+        ..headers['Accept'] = 'application/vnd.android.package-archive';
+      final response = await (client ?? httpClient.inner).send(request).timeout(const Duration(seconds: 30));
+      if (response.statusCode != 200) {
+        throw StateError('APK download returned HTTP ${response.statusCode}');
+      }
+      final contentLength = response.contentLength;
+      if (contentLength != null && (contentLength <= 0 || contentLength > _maximumXgimiApkBytes)) {
+        throw StateError('APK download size is outside the allowed range.');
+      }
+
+      var received = 0;
+      final sink = partialFile.openWrite();
+      try {
+        try {
+          await sink.addStream(
+            response.stream.timeout(const Duration(seconds: 45)).map((chunk) {
+              token.throwIfCancelled();
+              received += chunk.length;
+              if (received > _maximumXgimiApkBytes) {
+                throw StateError('APK download exceeded the allowed size.');
+              }
+              onProgress?.call(contentLength == null || contentLength == 0 ? null : received / contentLength);
+              return chunk;
+            }),
+          );
+          await sink.flush();
+        } finally {
+          await sink.close();
+        }
+      } catch (_) {
+        if (await partialFile.exists()) await partialFile.delete();
+        rethrow;
+      }
+      if (contentLength != null && received != contentLength) {
+        await partialFile.delete();
+        throw StateError('APK download was incomplete.');
+      }
+
+      final actualDigest = (await sha256.bind(partialFile.openRead()).first).toString().toLowerCase();
+      if (actualDigest != expectedSha256) {
+        await partialFile.delete();
+        throw const XgimiUpdateException(XgimiUpdateFailure.verification);
+      }
+      if (await finalFile.exists()) await finalFile.delete();
+      await partialFile.rename(finalFile.path);
+
+      token.throwIfCancelled();
+      deadline.cancel();
+      final result = await _xgimiInstallerChannel.invokeMethod<String>('installApk', {'path': finalFile.path});
+      if (result != 'installer_started' && result != 'permission_requested') {
+        throw const XgimiUpdateException(XgimiUpdateFailure.installer);
+      }
+      return result!;
+    } on PlatformException catch (error) {
+      throw XgimiUpdateException(
+        error.code == 'UPDATE_REJECTED' ? XgimiUpdateFailure.verification : XgimiUpdateFailure.installer,
+      );
+    } on FileSystemException catch (error) {
+      if (token.isCancelled && !timedOut) throw XgimiUpdateCancelled();
+      throw XgimiUpdateException(XgimiUpdateFailure.storage, cause: error);
+    } on FormatException {
+      throw const XgimiUpdateException(XgimiUpdateFailure.verification);
+    } on XgimiUpdateException {
       rethrow;
+    } catch (error) {
+      if (token.isCancelled && !timedOut) throw XgimiUpdateCancelled();
+      if (error is MissingPluginException) throw const XgimiUpdateException(XgimiUpdateFailure.installer);
+      throw XgimiUpdateException(XgimiUpdateFailure.network, cause: error);
+    } finally {
+      deadline.cancel();
+      token.cancel();
+      try {
+        if (partialFile != null && await partialFile.exists()) {
+          try {
+            await partialFile.delete();
+          } on FileSystemException {
+            // A failed cleanup is retried before the next download.
+          }
+        }
+      } finally {
+        _xgimiDownloadActive = false;
+      }
     }
-    if (contentLength != null && received != contentLength) {
-      await partialFile.delete();
-      throw StateError('APK download was incomplete.');
-    }
-
-    final actualDigest = (await sha256.bind(partialFile.openRead()).first).toString().toLowerCase();
-    if (actualDigest != expectedSha256) {
-      await partialFile.delete();
-      throw StateError('APK checksum did not match the GitHub release.');
-    }
-    if (await finalFile.exists()) await finalFile.delete();
-    await partialFile.rename(finalFile.path);
-
-    final result = await _xgimiInstallerChannel.invokeMethod<String>('installApk', {'path': finalFile.path});
-    if (result != 'installer_started' && result != 'permission_requested') {
-      throw StateError('Android could not open the package installer.');
-    }
-    return result!;
   }
 
   /// Each update APK is ~95 MB and named per build, so earlier downloads would

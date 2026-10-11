@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import '../services/family_projector_profile.dart';
+import '../services/settings_service.dart';
 import 'platform_detector.dart';
 
 /// Layout and sizing constants used throughout the application
@@ -78,7 +79,10 @@ class TvLayoutConstants {
   static const double compactHeroLogoHeight = 112;
 
   static double scaleForHeight(double height) {
-    final designHeight = FamilyProjectorProfile.enabled ? FamilyProjectorProfile.tvDesignHeight : 1080;
+    final projectorScale = FamilyProjectorProfile.scaleFor(
+      SettingsService.instanceOrNull?.read(SettingsService.projectorUiSize) ?? ProjectorUiSize.normal,
+    );
+    final designHeight = FamilyProjectorProfile.enabled ? 1080 / projectorScale : 1080;
     return (height / designHeight).clamp(0.85, 1.35).toDouble();
   }
 

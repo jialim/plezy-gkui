@@ -1933,7 +1933,14 @@ class FormFactorScale extends StatelessWidget {
     // scale even if an unusual projector firmware omits the Leanback feature.
     // Safe-area insets remain real on Android and are preserved.
     if (FamilyProjectorProfile.enabled) {
-      return _scaledSurface(child: child, scale: FamilyProjectorProfile.uiScale, zeroInsets: false);
+      if (SettingsService.instanceOrNull == null) {
+        return _scaledSurface(child: child, scale: FamilyProjectorProfile.uiScale, zeroInsets: false);
+      }
+      return SettingValueBuilder<ProjectorUiSize>(
+        pref: SettingsService.projectorUiSize,
+        builder: (context, size, _) =>
+            _scaledSurface(child: child, scale: FamilyProjectorProfile.scaleFor(size), zeroInsets: false),
+      );
     }
     if (!PlatformDetector.isAutomotive()) return child;
 

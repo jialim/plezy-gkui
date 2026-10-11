@@ -81,6 +81,11 @@ MediaItem _item({int? durationMs}) {
 }
 
 void main() {
+  test('external start-over wins over saved resume while normal Play resumes', () {
+    expect(ExternalPlayerService.externalStartPositionMs(90000, Duration.zero), 0);
+    expect(ExternalPlayerService.externalStartPositionMs(90000, null), 90000);
+    expect(ExternalPlayerService.externalStartPositionMs(null, const Duration(seconds: 45)), 45000);
+  });
   test('Android external progress preserves null duration and still stops after start failure', () async {
     final client = _RecordingClient()..failStart = true;
 

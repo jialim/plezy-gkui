@@ -50,7 +50,8 @@ class XgimiUpdateInstaller(private val activity: FlutterActivity) {
           result.success("installer_started")
         }
       } catch (error: Exception) {
-        result.error("INSTALL_FAILED", error.message ?: error.javaClass.simpleName, null)
+        val code = if (error is SecurityException) "UPDATE_REJECTED" else "INSTALL_FAILED"
+        result.error(code, error.message ?: error.javaClass.simpleName, null)
       }
     }
   }

@@ -44,6 +44,7 @@ typedef TrackSelectionMemoryEnabler = Future<bool> Function(String trackType);
 /// disposed when the player screen tears down.
 class TrackManager {
   final Player player;
+  final String? profileId;
 
   /// Returns false once the owning widget is unmounted or disposed.
   final bool Function() isActive;
@@ -125,6 +126,7 @@ class TrackManager {
 
   TrackManager({
     required this.player,
+    this.profileId,
     required this.isActive,
     this.persistTrackPreference,
     this.enableTrackSelectionMemory,
@@ -234,7 +236,7 @@ class TrackManager {
     final realSubtitleTracks = tracks.subtitle
         .where((track) => track.id != SubtitleTrack.auto.id && track.id != SubtitleTrack.off.id)
         .toList(growable: false);
-    final service = TrackSelectionService(metadata: metadata, plexMediaInfo: mediaInfo);
+    final service = TrackSelectionService(metadata: metadata, plexMediaInfo: mediaInfo, profileId: profileId);
 
     // A burned-in primary is already in the picture, so no native track is ever coming for it.
     // Waiting for one holds up audio and rate setup for the five-second fallback and then logs a
@@ -334,6 +336,7 @@ class TrackManager {
         profileSettings: profileSettings,
         metadata: metadata,
         plexMediaInfo: mediaInfo,
+        profileId: profileId,
       );
 
       return await trackService.selectAndApplyTracks(
@@ -467,8 +470,9 @@ class TrackManager {
   /// Records an explicit user subtitle choice, retiring any pending automatic
   /// selection for the same reason as [onAudioTrackSelectedByUser].
   Future<void> onSubtitleTrackSelectedByUser(SubtitleTrack track, {int? sourceStreamId}) async {
+    final memoryKey = FamilyProjectorSubtitleMemory.keyFor(metadata, profileId: profileId);
     await invalidatePendingSelection();
-    await FamilyProjectorSubtitleMemory.record(FamilyProjectorSubtitleMemory.keyFor(metadata), track);
+    await FamilyProjectorSubtitleMemory.record(memoryKey, track);
     await onSubtitleTrackChanged(track, sourceStreamId: sourceStreamId);
   }
 

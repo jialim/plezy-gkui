@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:plezy/focus/focus_theme.dart';
 import 'package:plezy/main.dart' as app;
 import 'package:plezy/services/family_projector_profile.dart';
+import 'package:plezy/services/settings_service.dart' hide ThemeMode;
+import '../test_helpers/prefs.dart';
 import 'package:plezy/theme/mono_theme.dart';
 import 'package:plezy/utils/layout_constants.dart';
 
@@ -22,6 +24,38 @@ void main() {
     expect(FamilyProjectorProfile.shouldOfferPlayFromBeginning(null), isFalse);
     expect(FamilyProjectorProfile.shouldOfferPlayFromBeginning(0), isFalse);
     expect(FamilyProjectorProfile.shouldOfferPlayFromBeginning(90 * 1000), isTrue);
+  }, skip: skip);
+
+  testWidgets('selected size enlarges controls without the TV scale cancelling it', (tester) async {
+    resetSharedPreferencesForTest();
+    final settings = await SettingsService.getInstance();
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var media = const MediaQueryData();
+    var tvScale = 0.0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: app.FormFactorScale(
+          child: Builder(
+            builder: (context) {
+              media = MediaQuery.of(context);
+              tvScale = TvLayoutConstants.scaleOf(context);
+              return const SizedBox.expand();
+            },
+          ),
+        ),
+      ),
+    );
+    for (final size in ProjectorUiSize.values) {
+      await settings.write(SettingsService.projectorUiSize, size);
+      await tester.pump();
+      final scale = FamilyProjectorProfile.scaleFor(size);
+      expect(media.size.width, closeTo(1920 / scale, 0.01));
+      expect(media.size.height, closeTo(1080 / scale, 0.01));
+      expect(tvScale, closeTo(1, 0.01));
+    }
   }, skip: skip);
 
   test('projector palette stays highly legible on a low-contrast display', () {

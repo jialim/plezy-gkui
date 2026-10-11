@@ -10,6 +10,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter/services.dart';
 import 'package:os_media_controls/os_media_controls.dart';
 import 'package:provider/provider.dart';
+import '../profiles/active_profile_provider.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import '../mpv/mpv.dart';

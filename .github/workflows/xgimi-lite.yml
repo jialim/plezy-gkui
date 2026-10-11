@@ -74,6 +74,10 @@ jobs:
           test/services/family_projector_subtitle_test.dart
           test/services/family_projector_subtitle_selection_test.dart
           test/services/family_projector_ui_test.dart
+          test/services/external_player_service_test.dart
+          test/services/update_service_test.dart
+          test/focus/focusable_action_bar_test.dart
+          test/utils/update_dialog_test.dart
           --dart-define=FAMILY_PROJECTOR_MODE=true
 
       # Branch releases and manual builds use the permanent key so every build
@@ -129,6 +133,10 @@ jobs:
           keyAlias=$key_alias
           storeFile=xgimi-test-keystore.jks
           EOF
+
+      - name: Android updater and native unit tests
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest -x :app:compileFlutterBuildDebug --continue
 
       - name: Build ARM APKs
         run: >-
@@ -204,6 +212,15 @@ jobs:
           tag="${prefix}${number}"
           label="test${number}"
 
+          current_build=$(sed -n 's/^version: *//p' pubspec.yaml | cut -d+ -f2)
+          if [ -n "$last" ]; then
+            previous_build=$(git show "${prefix}${last}:pubspec.yaml" | sed -n 's/^version: *//p' | cut -d+ -f2)
+            if [ "$current_build" -le "$previous_build" ]; then
+              echo "::error::Increase the pubspec build number before publishing an update."
+              exit 1
+            fi
+          fi
+
           cd dist
           for file in *; do
             mv "$file" "${file/sha-${GITHUB_SHA::7}/$label}"
@@ -217,6 +234,10 @@ jobs:
           done
           arm64_sha=$(sha256sum *-arm64-v8a.apk | cut -d' ' -f1)
           armv7_sha=$(sha256sum *-armeabi-v7a.apk | cut -d' ' -f1)
+          aapt=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          arm64_code=$("$aapt" dump badging *-arm64-v8a.apk | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)
+          armv7_code=$("$aapt" dump badging *-armeabi-v7a.apk | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" | head -1)
+          test -n "$arm64_code" && test -n "$armv7_code"
           cd ..
 
           if [ -n "$last" ]; then
@@ -237,8 +258,8 @@ jobs:
 
           ## Downloads
 
-          - **arm64-v8a**: try this first on most XGIMI projectors
-          - **armeabi-v7a**: use only if the arm64 APK does not install
+          - **armeabi-v7a**: use this for the confirmed 32-bit XGIMI projector
+          - **arm64-v8a**: for other devices with confirmed 64-bit userspace
 
           The \`.tar.gz\` files contain the same APKs for download environments that block APK files.
 
@@ -249,6 +270,8 @@ jobs:
           - Source commit: ${GITHUB_SHA}
           - arm64 APK SHA-256: \`${arm64_sha}\`
           - armv7 APK SHA-256: \`${armv7_sha}\`
+          - arm64 APK version code: ${arm64_code}
+          - armv7 APK version code: ${armv7_code}
 
           ${signing}
           NOTES

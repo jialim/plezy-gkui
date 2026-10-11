@@ -7,6 +7,13 @@ import org.junit.Test
 
 class XgimiApkVerifierTest {
   @Test
+  fun refusesEqualVersionsAndDowngrades() {
+    assertTrue(XgimiApkVerifier.isNewerBuild(1155, 1154))
+    assertFalse(XgimiApkVerifier.isNewerBuild(1154, 1154))
+    assertFalse(XgimiApkVerifier.isNewerBuild(1153, 1154))
+  }
+
+  @Test
   fun acceptsOnlyAnUpdateCarryingTheInstalledCertificate() {
     val installed = listOf("aa")
     assertTrue(XgimiApkVerifier.sharesSigner(installed, listOf("aa")))

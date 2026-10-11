@@ -907,6 +907,11 @@ class SettingsService extends BaseSharedPreferencesService {
     defaultValue: GridSpacing.tight,
   );
   static const automotiveUiScale = _AutomotiveUiScalePref();
+  static const projectorUiSize = EnumPref<ProjectorUiSize>(
+    'projector_ui_size',
+    values: ProjectorUiSize.values,
+    defaultValue: ProjectorUiSize.normal,
+  );
   static const tvCornerSpotlightBackdrop = BoolPref('tv_corner_spotlight_backdrop');
   static const episodePosterMode = _EpisodePosterModePref();
   static const continueWatchingAction = EnumPref<ContinueWatchingAction>(
@@ -1482,6 +1487,7 @@ class SettingsService extends BaseSharedPreferencesService {
     libraryDensity,
     gridSpacing,
     automotiveUiScale,
+    projectorUiSize,
     tvCornerSpotlightBackdrop,
     episodePosterMode,
     continueWatchingAction,

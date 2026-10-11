@@ -473,7 +473,13 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
       ];
       if (!maxWidth.isFinite || estimatedRowWidth(medium) <= maxWidth) return medium;
 
-      final compact = <FocusableAction>[playAction, ?versionAction, ?startOverAction, watchedAction, ?moreActionsAction];
+      final compact = <FocusableAction>[
+        playAction,
+        ?versionAction,
+        ?startOverAction,
+        watchedAction,
+        ?moreActionsAction,
+      ];
       if (estimatedRowWidth(compact) <= maxWidth) return compact;
 
       return [playAction, ?versionAction, ?startOverAction, ?moreActionsAction];
@@ -482,6 +488,7 @@ extension _MediaDetailActionButtons on _MediaDetailScreenState {
     Widget actionBar(List<FocusableAction> actions) {
       return FocusableActionBar(
         actions: actions,
+        scrollable: isTv && FamilyProjectorProfile.enabled,
         spacing: gap,
         onFocusChange: isTv ? _setTvDetailActionRowFocus : null,
         onNavigateUp: _focusAboveActionRow,

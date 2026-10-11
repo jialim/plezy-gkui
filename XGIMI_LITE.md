@@ -6,6 +6,7 @@ Plezy XGIMI Lite is a Chinese-first, low-memory Android TV distribution of Plezy
 
 - Android TV 12 / API 31
 - ARMv8 CPU and Mali-G52 GPU
+- Confirmed 32-bit Android userspace: install the `armeabi-v7a` APK
 - 1920×1080 at 60 Hz
 - Approximately 1.8 GiB usable system RAM
 - Projector speakers, without an AVR
@@ -30,6 +31,10 @@ Build with `--dart-define=FAMILY_PROJECTOR_MODE=true`. The profile seeds default
 Artwork remains sharp. Upstream 2.22.0 already caps reduced-tier artwork downloads at three concurrent requests, uses a 64 MiB Flutter image cache, caps the Skia cache, requests server-sized artwork, and avoids disk-side image re-decoding. XGIMI Lite preserves those mechanisms.
 
 The accessibility palette is tuned for an elderly viewer on a low-lumen projector in a dark room. A 4 px amber focus outline and larger focused-state scale remain visible even though the reduced-effects tier deliberately disables expensive blurred focus glows.
+
+Test 8 offers Normal (1.2×), Large (1.4×), and Extra-large (1.6×) under Appearance. TV design-height calculations track the chosen root scale so they do not shrink the controls back down. Narrow detail action rows scroll as D-pad focus moves. Unfocused actions retain 85% brightness. Subtitle memory uses semantic intent and a canonical viewer scope; invalid cache shapes are discarded, and Playback settings can reset just the current viewer's choices. Unowned Test 7 entries are not inherited.
+
+Update downloads use abortable streaming requests, a Cancel action, stalled/overall timeouts, integrity checks, and separate network/storage/verification/installer errors. Release notes publish actual per-ABI Android version codes; both the updater and native verifier reject equal/older builds. CI requires an increasing build number and runs the Android JVM suite, including APK verifier tests, before building a release. The package ID remains `app.plezylite.xgimi` and the launcher label is now Plezy XGIMI Lite.
 
 ## Playback policy
 
@@ -74,11 +79,11 @@ The existing performance overlay continues to expose live playback information. 
 
 ## Build outputs
 
-`.github/workflows/xgimi-lite.yml` builds and uploads both `arm64-v8a` and `armeabi-v7a` APKs plus tarballs. Both variants should be retained until the projector confirms its Android userspace ABI.
+`.github/workflows/xgimi-lite.yml` builds and uploads both `arm64-v8a` and `armeabi-v7a` APKs plus tarballs. This projector uses `armeabi-v7a`; arm64 remains available for other devices with confirmed 64-bit userspace.
 
 Every push to `plezy-xgimi-lite` that passes the checks is published as the next GitHub pre-release, `xgimi-lite-v<version>-test<N>`, with both APKs, the tarballs, their SHA-256 and the commits since the previous test release.
 
-Branch releases are signed with the permanent key in the `XGIMI_KEYSTORE_BASE64`, `XGIMI_KEYSTORE_PASSWORD`, `XGIMI_KEY_ALIAS` and `XGIMI_KEY_PASSWORD` repository secrets, so Test 4 and later install over one another and keep the projector's sign-in and settings. The release workflow fails closed when any signing secret is missing; only pull-request checks may fall back to a throwaway key. Tests 1-3 used unrelated disposable keys and cannot be updated in place to Test 4. Pull requests and tag pushes never receive the key, even from this repository, because their APK artifacts are public; they sign with a throwaway key. The key file is deleted before artifact packaging.
+Branch releases are signed with the permanent key in the `XGIMI_KEYSTORE_BASE64`, `XGIMI_KEYSTORE_PASSWORD`, `XGIMI_KEY_ALIAS` and `XGIMI_KEY_PASSWORD` repository secrets. The certificate has remained unchanged since Test 4; Test 7 introduced the new package ID, and Test 7 onward update in place and keep sign-in and settings. Test 6 and earlier install the new package as a separate app once, without requiring uninstall. The release workflow fails closed when any signing secret is missing; only pull-request checks may fall back to a throwaway key. Tests 1-3 used unrelated disposable keys and cannot be updated in place to Test 4. Pull requests and tag pushes never receive the key, even from this repository, because their APK artifacts are public; they sign with a throwaway key. The key file is deleted before artifact packaging.
 
 XGIMI Lite uses the package ID `app.plezylite.xgimi` (earlier test builds used upstream's `com.edde746.plezy`). Content-provider authorities derive from it, so it can be installed next to official Plezy. The build moving to the new ID installs as a separate app once; later builds update it in place. CI refuses to publish an APK with any other package ID.
 

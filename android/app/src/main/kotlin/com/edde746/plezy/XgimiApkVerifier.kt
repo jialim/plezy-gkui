@@ -20,7 +20,11 @@ internal object XgimiApkVerifier {
     if (archive.packageName != installedPackage) {
       throw SecurityException("The downloaded update is for a different app (${archive.packageName}).")
     }
-    val installed = certificateDigests(installedInfo(packageManager, installedPackage))
+    val installedInfo = installedInfo(packageManager, installedPackage)
+    if (!isNewerBuild(versionCode(archive), versionCode(installedInfo))) {
+      throw SecurityException("The downloaded update is not newer than the installed app.")
+    }
+    val installed = certificateDigests(installedInfo)
     val update = certificateDigests(archive)
     if (!sharesSigner(installed, update)) {
       throw SecurityException("The downloaded update is not signed with this installation's key.")
@@ -30,6 +34,12 @@ internal object XgimiApkVerifier {
   /** True when the update carries at least one of the installed certificates. */
   fun sharesSigner(installed: List<String>, update: List<String>): Boolean =
     installed.isNotEmpty() && installed.any(update::contains)
+
+  fun isNewerBuild(update: Long, installed: Long): Boolean = update > installed
+
+  @Suppress("DEPRECATION")
+  private fun versionCode(info: PackageInfo): Long =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode else info.versionCode.toLong()
 
   fun digest(certificate: ByteArray): String =
     MessageDigest.getInstance("SHA-256").digest(certificate).joinToString("") { "%02x".format(it) }

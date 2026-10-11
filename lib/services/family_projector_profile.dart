@@ -6,6 +6,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../media/media_item.dart';
 import '../mpv/mpv.dart';
+import '../profiles/profile.dart';
+import '../utils/app_logger.dart';
+import 'subtitle_preference.dart';
+
+enum ProjectorUiSize { normal, large, extraLarge }
 
 /// Compile-time defaults for the lightweight family/projector distribution.
 ///
@@ -19,6 +24,14 @@ abstract final class FamilyProjectorProfile {
   /// controls. The dedicated projector build uses a 1.2x logical scale so
   /// those controls reach a 48 px visual target at a typical 3 m distance.
   static const double uiScale = 1.2;
+
+  static double scaleFor(ProjectorUiSize size) => switch (size) {
+    ProjectorUiSize.normal => uiScale,
+    ProjectorUiSize.large => 1.4,
+    ProjectorUiSize.extraLarge => 1.6,
+  };
+
+  static const double unfocusedActionOpacity = 0.85;
 
   /// TV rails calculate their own height-relative scale. After [uiScale]
   /// rewrites 1080 logical pixels to 900, this baseline keeps their effective
@@ -50,53 +63,107 @@ abstract final class FamilyProjectorSubtitleMemory {
   static final LinkedHashMap<String, Map<String, Object?>> _choices = LinkedHashMap();
 
   /// One key per show for episodes and seasons, otherwise per item.
-  static String keyFor(MediaItem item) => item.seriesGlobalKey ?? item.globalKey;
+  static String keyFor(MediaItem item, {String? profileId}) =>
+      jsonEncode([profileUserScope(profileId ?? ''), item.seriesGlobalKey ?? item.globalKey]);
 
   static void load(SharedPreferencesWithCache prefs) {
     _prefs = prefs;
     _choices.clear();
     try {
-      final raw = jsonDecode(prefs.getString(_key) ?? '{}') as Map<String, dynamic>;
+      final stored = prefs.get(_key);
+      if (stored is! String) return;
+      final raw = jsonDecode(stored);
+      if (raw is! Map) return;
       for (final entry in raw.entries) {
-        if (entry.value is Map) _choices[entry.key] = Map<String, Object?>.from(entry.value as Map);
+        // Old unscoped entries cannot be attributed to a viewer safely.
+        // They never override the new per-viewer choices.
+        if (entry.key is! String || _scopeOf(entry.key as String) == null) continue;
+        final value = entry.value;
+        if (value is! Map || value.keys.any((key) => key is! String)) continue;
+        final decoded = Map<String, Object?>.from(value);
+        if (_decode(decoded) != null) _choices[entry.key as String] = decoded;
+        if (_choices.length > _limit) _choices.remove(_choices.keys.first);
       }
     } on FormatException {
       // A damaged value only loses remembered choices.
     }
   }
 
-  /// The remembered choice: [SubtitleTrack.off], a track template to match by
-  /// language/title, or null when nobody has chosen for this title yet.
-  static SubtitleTrack? choiceFor(String key) {
+  /// The remembered Off decision or item-independent subtitle intent.
+  /// Null means this viewer has not chosen for this title yet.
+  static SubtitlePreference? choiceFor(String key) {
     final value = _choices[key];
-    if (value == null) return null;
-    if (value['off'] == true) return SubtitleTrack.off;
-    return SubtitleTrack(
-      id: value['id'] as String? ?? '',
-      language: value['language'] as String?,
-      title: value['title'] as String?,
-      codec: value['codec'] as String?,
-      isForced: value['forced'] == true,
+    return value == null ? null : _decode(value);
+  }
+
+  static SubtitlePreference? _decode(Map<String, Object?> value) {
+    if (value['off'] == true) return const SubtitlePreference.off();
+    for (final field in ['language', 'title', 'codec']) {
+      if (value[field] != null && value[field] is! String) return null;
+    }
+    for (final field in ['forced', 'external']) {
+      if (value[field] != null && value[field] is! bool) return null;
+    }
+    final language = value['language'] as String?;
+    final title = value['title'] as String?;
+    if ((language?.trim().isEmpty ?? true) && (title?.trim().isEmpty ?? true)) return null;
+    return SubtitlePreference.intent(
+      SubtitleIntent(
+        language: language,
+        title: title,
+        codec: value['codec'] as String?,
+        forced: value['forced'] == true,
+        isExternal: value['external'] == true,
+      ),
     );
+  }
+
+  static String? _scopeOf(String key) {
+    try {
+      final value = jsonDecode(key);
+      if (value is List && value.length == 2 && value[0] is String && value[1] is String) {
+        return value[0] as String;
+      }
+    } on FormatException {
+      // Pre-profile keys and damaged entries are not part of any viewer.
+    }
+    return null;
+  }
+
+  static Future<void> clearForProfile(String profileId) async {
+    final scope = profileUserScope(profileId);
+    _choices.removeWhere((key, _) => _scopeOf(key) == scope);
+    await _save();
+  }
+
+  static Future<void> _save() async {
+    try {
+      await _prefs?.setString(_key, jsonEncode(_choices));
+    } catch (error, stackTrace) {
+      // A cache write must never interrupt the actual subtitle selection.
+      appLogger.w('Could not save projector subtitle choices', error: error, stackTrace: stackTrace);
+    }
   }
 
   /// Remembers [track] for the title; [SubtitleTrack.off] (id `no`) is Off.
   static Future<void> record(String key, SubtitleTrack track) async {
     if (!FamilyProjectorProfile.enabled) return;
     _choices.remove(key);
+    final intent = SubtitleIntent.fromTrack(track);
+    if (track.id != SubtitleTrack.off.id && intent == null) return;
     _choices[key] = track.id == SubtitleTrack.off.id
         ? const {'off': true}
         : {
-            'id': track.id,
-            'language': track.language,
-            'title': track.title,
-            'codec': track.codec,
-            'forced': track.isForced,
+            'language': intent!.language,
+            'title': intent.title,
+            'codec': intent.codec,
+            'forced': intent.forced,
+            'external': intent.isExternal,
           };
     while (_choices.length > _limit) {
       _choices.remove(_choices.keys.first);
     }
-    await _prefs?.setString(_key, jsonEncode(_choices));
+    await _save();
   }
 
   @visibleForTesting
