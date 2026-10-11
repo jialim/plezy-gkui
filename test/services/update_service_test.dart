@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:path/path.dart' as p;
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -77,6 +78,58 @@ void main() {
       );
       expect(installerCalls, 0);
       expect(await directory.list().toList(), isEmpty);
+    });
+    test('a dropped connection resumes with a range request', () async {
+      final ranges = <String?>[];
+      final client = MockClient.streaming((request, _) async {
+        ranges.add(request.headers['Range']);
+        if (ranges.length == 1) {
+          // The first response stops after five bytes of the full file.
+          final stream = StreamController<List<int>>();
+          stream.add(bytes.sublist(0, 5));
+          stream.close().ignore();
+          return http.StreamedResponse(stream.stream, 200, contentLength: bytes.length);
+        }
+        return http.StreamedResponse(
+          Stream.value(bytes.sublist(5)),
+          206,
+          contentLength: bytes.length - 5,
+          headers: {'content-range': 'bytes 5-${bytes.length - 1}/${bytes.length}'},
+        );
+      });
+      addTearDown(client.close);
+      expect(
+        await UpdateService.debugDownloadAndInstallXgimiUpdate(info(), client: client, directory: directory),
+        'installer_started',
+      );
+      expect(ranges, [null, 'bytes=5-']);
+      expect(installerCalls, 1);
+    });
+    test('a server that ignores the range restarts the file cleanly', () async {
+      var calls = 0;
+      final client = MockClient.streaming((request, _) async {
+        calls++;
+        if (calls == 1) {
+          final stream = StreamController<List<int>>();
+          stream.add(bytes.sublist(0, 5));
+          stream.close().ignore();
+          return http.StreamedResponse(stream.stream, 200, contentLength: bytes.length);
+        }
+        return http.StreamedResponse(Stream.value(bytes), 200, contentLength: bytes.length);
+      });
+      addTearDown(client.close);
+      expect(
+        await UpdateService.debugDownloadAndInstallXgimiUpdate(info(), client: client, directory: directory),
+        'installer_started',
+      );
+      expect(calls, 2);
+    });
+    test('only network failures are resumable', () {
+      expect(UpdateService.isResumableDownloadError(TimeoutException('stall')), isTrue);
+      expect(UpdateService.isResumableDownloadError(const SocketException('reset')), isTrue);
+      expect(UpdateService.isResumableDownloadError(http.ClientException('closed')), isTrue);
+      expect(UpdateService.isResumableDownloadError(http.RequestAbortedException()), isFalse);
+      expect(UpdateService.isResumableDownloadError(StateError('too large')), isFalse);
     });
     test('cancellation aborts a live response and leaves no APK', () async {
       final token = XgimiUpdateCancellation();
@@ -270,8 +323,12 @@ void main() {
       ..writeAsStringSync('partial');
     final unrelated = File('${directory.path}/poster.jpg')..writeAsStringSync('keep');
 
-    await UpdateService.removeStaleXgimiDownloads(directory);
+    final resuming = File('${directory.path}/plezy-xgimi-lite-2.22.0-test7-arm64-v8a.apk.0123456789abcdef.partial')
+      ..writeAsStringSync('resume me');
 
+    await UpdateService.removeStaleXgimiDownloads(directory, keep: p.basename(resuming.path));
+
+    expect(resuming.existsSync(), isTrue);
     expect(oldApk.existsSync(), isFalse);
     expect(partial.existsSync(), isFalse);
     expect(unrelated.existsSync(), isTrue);
