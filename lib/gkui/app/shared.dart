@@ -4,6 +4,21 @@ enum AppPhase { starting, signedOut, signingIn, chooseServer, ready, error }
 
 enum PlaybackMode { direct, transcode720, transcode480 }
 
+/// What to store for a mode that showed video; direct play stores nothing.
+String? rememberedPlaybackMode(PlaybackMode mode) =>
+    mode == PlaybackMode.direct ? null : mode.name;
+
+/// The mode to start a title in, from what last showed video for it.
+PlaybackMode playbackModeFrom(String? stored) =>
+    PlaybackMode.values.where((mode) => mode.name == stored).firstOrNull ??
+    PlaybackMode.direct;
+
+String playbackModeLabel(PlaybackMode mode) => switch (mode) {
+      PlaybackMode.direct => 'Original quality',
+      PlaybackMode.transcode720 => '720p compatible',
+      PlaybackMode.transcode480 => '480p safe mode',
+    };
+
 /// Reads the audio/subtitle tracks picked inside the native player and maps
 /// them to Plex streams. Returns null when the driver changed nothing.
 PlaybackChoice? playerTrackChoice(

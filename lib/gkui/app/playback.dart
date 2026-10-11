@@ -9,6 +9,7 @@ extension GkuiPlayback on GkuiController {
       String? subtitleTrackId,
       int? startMs,
       bool autoResumed = false,
+      bool checkFiles = true,
       bool allowAutoNext = true}) async {
     String? failureKind;
     // Only a failure the native player reported may change video profile;
@@ -43,7 +44,16 @@ extension GkuiPlayback on GkuiController {
       preparingVisible = true;
       await Future<void>.delayed(const Duration(milliseconds: 80));
 
-      if (item.versions.isEmpty) {
+      // One request loads the title and asks Plex about its files. A retry
+      // of a file that was just streaming skips the check.
+      Map<String, dynamic>? checkedMetadata;
+      var filesChecked = false;
+      if (item.versions.isEmpty && checkFiles) {
+        final loaded = await api!.loadMetadataCheckingFiles(item.ratingKey);
+        item = loaded.item;
+        checkedMetadata = loaded.checked;
+        filesChecked = true;
+      } else if (item.versions.isEmpty) {
         item = await api!.loadMetadata(item.ratingKey);
       }
       final remembered = api!.loadPlaybackChoice(item);
@@ -56,8 +66,13 @@ extension GkuiPlayback on GkuiController {
               : PlexMediaVersion.preferredIndex(item.versions));
       // Plex knows when a file is gone; say so instead of opening a player
       // that can only fail on it.
-      final missingReason =
-          await api!.missingFileReason(item.ratingKey, selectedIndex);
+      final missingReason = !checkFiles
+          ? null
+          : checkedMetadata != null
+              ? PlexApi.fileProblem(checkedMetadata, selectedIndex)
+              : filesChecked
+                  ? null
+                  : await api!.missingFileReason(item.ratingKey, selectedIndex);
       if (missingReason != null) {
         failureKind = 'missing';
         throw StateError(missingReason);
@@ -67,6 +82,7 @@ extension GkuiPlayback on GkuiController {
           .firstOrNull;
       lastSelectedVersion = selectedVersion?.displayLabel ?? 'Original';
       final startAt = startMs ?? resumeOffsetFor(item);
+      final playbackDurationMs = selectedVersion?.durationMs ?? item.durationMs;
       resumeAtMs = startAt;
 
       final versionAudio = selectedVersion?.audioTracks ?? const <PlexTrack>[];
@@ -100,6 +116,7 @@ extension GkuiPlayback on GkuiController {
             subtitleOrdinal: selectedSubtitle == null
                 ? null
                 : versionSubtitles.indexOf(selectedSubtitle),
+            playbackMode: remembered.playbackMode,
           ));
 
       final markers = settings.skipMode != SkipMode.off
@@ -129,7 +146,9 @@ extension GkuiPlayback on GkuiController {
         'title': item.title,
         'startMs': startAt,
         'ratingKey': item.ratingKey,
-        'durationMs': item.durationMs,
+        // The chosen file's own length: a different cut of the title must
+        // not look like a stream that ended early.
+        'durationMs': playbackDurationMs,
         'timelineUrl': '${api!.session!.baseUrl}/:/timeline',
         'sessionId': request.sessionId,
         'audioLanguage': selectedAudio?.languageCode ?? settings.audioLanguage,
@@ -188,7 +207,7 @@ extension GkuiPlayback on GkuiController {
       }
       // Telemetry must never delay the native player opening.
       unawaited(api!.reportProgress(item, startAt, 'playing',
-          sessionId: request.sessionId));
+          sessionId: request.sessionId, durationMs: playbackDurationMs));
       final raw = await playerFuture;
       for (final line in (raw?['diagnostics'] as List<dynamic>? ?? const [])) {
         logs.add(line.toString());
@@ -239,6 +258,7 @@ extension GkuiPlayback on GkuiController {
               subtitleOrdinal: subtitleChanged
                   ? inPlayerChoice.subtitleOrdinal
                   : current.subtitleOrdinal,
+              playbackMode: current.playbackMode,
             ));
         if (inPlayerChoice.audioTrackId != null) {
           retryAudioTrackId = inPlayerChoice.audioTrackId;
@@ -249,8 +269,9 @@ extension GkuiPlayback on GkuiController {
         logs.add('Remembered in-player track choice.');
       }
       if (renderedFrame) {
-        _updateLocalProgress(item.ratingKey, ended ? 0 : position);
-        if (ended) _locallyWatched.add(item.ratingKey);
+        _updateLocalProgress(item.ratingKey, ended ? 0 : position,
+            watched: ended);
+        await api!.savePlaybackMode(item, rememberedPlaybackMode(mode));
       }
       notifySafely();
       // Both calls have short total budgets, and neither holds up Retry,
@@ -258,7 +279,7 @@ extension GkuiPlayback on GkuiController {
       unawaited(Future.wait<void>([
         if (renderedFrame)
           api!.reportProgress(item, position, ended ? 'stopped' : 'paused',
-              sessionId: request.sessionId),
+              sessionId: request.sessionId, durationMs: playbackDurationMs),
         api!.stopPlaybackSession(request),
       ]));
       activeRequest = null;
@@ -273,8 +294,9 @@ extension GkuiPlayback on GkuiController {
           final proceed = await _showPlayNextCountdown(context, next);
           if (proceed && context.mounted) {
             logs.add('Autoplaying next episode: ${next.title}.');
-            await play(context, next, PlaybackMode.direct,
-                startMs: 0, allowAutoNext: true);
+            // Episodes of one show share encoding, so the mode that just
+            // worked is the one to start the next episode in.
+            await play(context, next, mode, startMs: 0, allowAutoNext: true);
           }
         }
       }
@@ -313,6 +335,7 @@ extension GkuiPlayback on GkuiController {
                 subtitleTrackId: retrySubtitleTrackId,
                 startMs: resumeAt,
                 autoResumed: true,
+                checkFiles: false,
                 allowAutoNext: allowAutoNext);
           }
           return;
@@ -331,6 +354,7 @@ extension GkuiPlayback on GkuiController {
                 subtitleTrackId: retrySubtitleTrackId,
                 startMs: resumeAtMs,
                 autoResumed: autoResumed,
+                checkFiles: false,
                 allowAutoNext: allowAutoNext);
           }
           return;

@@ -55,4 +55,42 @@ class PlaybackSessionStateTest {
             PlaybackMarker("credits", 200, 100), PlaybackMarker("intro", 0, 100)))
         assertEquals(listOf(PlaybackMarker("intro", 0, 100)), mailbox.take("video"))
     }
+
+    private fun hide(
+        visible: Boolean = true,
+        playWhenReady: Boolean = true,
+        renderedFirstFrame: Boolean = true,
+        seeking: Boolean = false,
+        dialogOpen: Boolean = false,
+        idleMs: Long = ControlsAutoHide.IDLE_MS,
+    ) = ControlsAutoHide.shouldHide(visible, playWhenReady, renderedFirstFrame, seeking, dialogOpen, idleMs)
+
+    @Test fun controlsHideAfterIdlePlaybackWithoutAnyTap() {
+        assertTrue(hide())
+        assertFalse(hide(idleMs = ControlsAutoHide.IDLE_MS - 1))
+    }
+
+    @Test fun controlsStayWhilePausedSeekingOrChoosingTracks() {
+        assertFalse(hide(playWhenReady = false))
+        assertFalse(hide(seeking = true))
+        assertFalse(hide(dialogOpen = true))
+        assertFalse(hide(renderedFirstFrame = false))
+        assertFalse(hide(visible = false))
+    }
+
+    @Test fun bufferingPlaybackStillHidesControls() {
+        // Rebuffering keeps playWhenReady; the status label reports it instead.
+        assertTrue(hide(playWhenReady = true, idleMs = 60_000L))
+    }
+
+    @Test fun controlsKeepTheirDesignSizeOnThe480dpHeadUnit() {
+        assertEquals(1f, PlayerControlsLayout.scale(480f), 0.001f)
+    }
+
+    @Test fun controlsShrinkOnADenserScreenWithoutBecomingTiny() {
+        // 800x480 pixels at hdpi is 320dp tall.
+        assertEquals(320f / 480f, PlayerControlsLayout.scale(320f), 0.001f)
+        assertEquals(0.65f, PlayerControlsLayout.scale(200f), 0.001f)
+        assertEquals(1.4f, PlayerControlsLayout.scale(1080f), 0.001f)
+    }
 }

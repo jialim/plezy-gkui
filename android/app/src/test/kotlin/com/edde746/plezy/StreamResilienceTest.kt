@@ -57,4 +57,10 @@ class StreamResilienceTest {
         assertFalse(StreamResilience.endedEarly(30_000L, 0L))
         assertFalse(StreamResilience.endedEarly(30_000L, 90_000L))
     }
+
+    @Test
+    fun aWakeKeepsWhatIsLeftOfTheBackoff() {
+        assertEquals(6_000L, StreamResilience.remainingDelayMs(dueAtMs = 10_000L, nowMs = 4_000L))
+        assertEquals(0L, StreamResilience.remainingDelayMs(dueAtMs = 10_000L, nowMs = 12_000L))
+    }
 }

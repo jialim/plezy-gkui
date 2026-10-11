@@ -22,44 +22,82 @@ class _GkuiShellState extends State<GkuiShell> {
     return Scaffold(
         body: SafeArea(
             child: Row(children: <Widget>[
+      // Five equal touch targets fill the rail's height. The stock
+      // NavigationRail with a logo was taller than 480 pixels and cut off
+      // the last destination on the head unit.
       Container(
-          width: 96,
-          color: const Color(0xFF121212),
-          child: NavigationRail(
-            backgroundColor: Colors.transparent,
-            selectedIndex: selected,
-            labelType: NavigationRailLabelType.all,
-            minWidth: 92,
-            onDestinationSelected: (value) => setState(() => selected = value),
-            leading: Padding(
-                padding: const EdgeInsets.only(top: 8, bottom: 8),
-                child: Image.asset('assets/plezy.png', width: 45, height: 45)),
-            destinations: const <NavigationRailDestination>[
-              NavigationRailDestination(
-                  icon: Icon(Icons.home_outlined, size: 29),
-                  selectedIcon: Icon(Icons.home, size: 31),
-                  label: Text('Home')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.video_library_outlined, size: 29),
-                  selectedIcon: Icon(Icons.video_library, size: 31),
-                  label: Text('Library')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.search, size: 29),
-                  selectedIcon: Icon(Icons.manage_search, size: 31),
-                  label: Text('Search')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.tune, size: 29),
-                  selectedIcon: Icon(Icons.tune, size: 31),
-                  label: Text('Settings')),
-              NavigationRailDestination(
-                  icon: Icon(Icons.monitor_heart_outlined, size: 29),
-                  selectedIcon: Icon(Icons.monitor_heart, size: 31),
-                  label: Text('Status')),
-            ],
-          )),
+        width: 100,
+        color: const Color(0xFF121212),
+        child: Column(children: <Widget>[
+          for (final (index, destination) in shellDestinations.indexed)
+            Expanded(
+              child: ShellRailButton(
+                icon: destination.$1,
+                label: destination.$2,
+                selected: index == selected,
+                onPressed: () => setState(() => selected = index),
+              ),
+            ),
+        ]),
+      ),
       const VerticalDivider(width: 1),
       Expanded(child: pages[selected]),
     ])));
+  }
+}
+
+const List<(IconData, String)> shellDestinations = <(IconData, String)>[
+  (Icons.home, 'Home'),
+  (Icons.video_library, 'Library'),
+  (Icons.search, 'Search'),
+  (Icons.tune, 'Settings'),
+  (Icons.monitor_heart, 'Status'),
+];
+
+class ShellRailButton extends StatelessWidget {
+  const ShellRailButton(
+      {required this.icon,
+      required this.label,
+      required this.selected,
+      required this.onPressed,
+      super.key});
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    final color = selected ? accent : Colors.white70;
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
+        onTap: onPressed,
+        child: Container(
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF242424) : null,
+            border: Border(
+                left: BorderSide(
+                    color: selected ? accent : Colors.transparent, width: 4)),
+          ),
+          child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(icon, size: 32, color: color),
+                const SizedBox(height: 4),
+                Text(label,
+                    maxLines: 1,
+                    style: TextStyle(
+                        fontSize: 15,
+                        color: color,
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w400)),
+              ]),
+        ),
+      ),
+    );
   }
 }
 
@@ -86,8 +124,11 @@ class HomePane extends StatelessWidget {
                 onPressed: controller.switchingProfile
                     ? null
                     : () => _showProfiles(context),
-                icon: const Icon(Icons.switch_account),
-                label: const Text('Profiles')),
+                style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(150, 62),
+                    padding: const EdgeInsets.symmetric(horizontal: 18)),
+                icon: const Icon(Icons.switch_account, size: 28),
+                label: const Text('Profiles', style: TextStyle(fontSize: 19))),
           ]),
           if (controller.error != null) ErrorBanner(controller.error!),
           const SizedBox(height: 18),

@@ -38,31 +38,36 @@ Future<void> main() async {
   runApp(const PlezyGkuiApp());
 }
 
+/// The head unit's dark theme, shared by the app and the screen tests.
+ThemeData gkuiTheme() {
+  const scheme = ColorScheme.dark(
+    primary: Color(0xFFE5A00D),
+    secondary: Color(0xFFE5A00D),
+    surface: Color(0xFF171717),
+    background: Color(0xFF0B0B0B),
+    error: Color(0xFFFF6B6B),
+  );
+  return ThemeData(
+    useMaterial3: false,
+    brightness: Brightness.dark,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: scheme.background,
+    fontFamily: 'PlezySans',
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(minimumSize: const Size(96, 54)),
+    ),
+  );
+}
+
 class PlezyGkuiApp extends StatelessWidget {
   const PlezyGkuiApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    const scheme = ColorScheme.dark(
-      primary: Color(0xFFE5A00D),
-      secondary: Color(0xFFE5A00D),
-      surface: Color(0xFF171717),
-      background: Color(0xFF0B0B0B),
-      error: Color(0xFFFF6B6B),
-    );
     return MaterialApp(
       title: 'Plezy GKUI',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: false,
-        brightness: Brightness.dark,
-        colorScheme: scheme,
-        scaffoldBackgroundColor: scheme.background,
-        fontFamily: 'PlezySans',
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(minimumSize: const Size(96, 54)),
-        ),
-      ),
+      theme: gkuiTheme(),
       home: const GkuiRoot(),
     );
   }
