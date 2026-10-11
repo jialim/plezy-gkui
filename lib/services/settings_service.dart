@@ -1105,6 +1105,11 @@ class SettingsService extends BaseSharedPreferencesService {
     await setStringIfMissing(playbackBufferTier, PlaybackBufferTier.auto.name);
     await setStringIfMissing(subtitleSearchLanguage, 'zh');
     await setBoolIfMissing(directPlayCoveredQuality, true);
+    // Read from a sofa on a projected image: about a fifth larger than the
+    // upstream 38, bold, with a thicker outline for dense Chinese glyphs.
+    await setIntIfMissing(subtitleFontSize, 46);
+    await setBoolIfMissing(subtitleBold, true);
+    await setIntIfMissing(subtitleBorderSize, 4);
   }
 
   /// Raises [UnreadableSensitivePreferenceException] if any stored credential

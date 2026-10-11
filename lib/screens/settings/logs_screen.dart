@@ -152,8 +152,13 @@ class _LogsScreenState extends State<LogsScreen> with MountedSetStateMixin {
           }
           buffer.writeln(
             'Surface: ${diagnostics['screenWidthPx']}x${diagnostics['screenHeightPx']} '
-            '@ ${((diagnostics['refreshRateHz'] as num?) ?? 0).toStringAsFixed(2)} Hz',
+            '@ ${((diagnostics['refreshRateHz'] as num?) ?? 0).toStringAsFixed(2)} Hz, '
+            '${diagnostics['densityDpi'] ?? '?'} dpi',
           );
+          final modes = (diagnostics['displayModes'] as List?)?.join(', ');
+          if (modes != null && modes.isNotEmpty) buffer.writeln('Display modes: $modes');
+          final hdr = (diagnostics['hdrTypes'] as List?)?.join(', ');
+          buffer.writeln('HDR: ${hdr == null || hdr.isEmpty ? 'none reported' : hdr}');
           final decoders = diagnostics['decoders'] as List? ?? const [];
           for (final decoder in decoders.whereType<Map>()) {
             final profiles = (decoder['profiles'] as List?)?.join('/') ?? '';

@@ -349,9 +349,28 @@ class MainActivity : FlutterActivity() {
       "largeMemoryClassMb" to activityManager.largeMemoryClass,
       "screenWidthPx" to metrics.widthPixels,
       "screenHeightPx" to metrics.heightPixels,
-      "refreshRateHz" to (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.refreshRate,
+      "refreshRateHz" to defaultDisplayCompat.refreshRate,
+      "densityDpi" to metrics.densityDpi,
+      // What frame-rate matching could switch to: 24 Hz here means films can
+      // play without 3:2 judder once matching is turned on.
+      "displayModes" to defaultDisplayCompat.supportedModes
+        .map { "${it.physicalWidth}x${it.physicalHeight}@${"%.2f".format(java.util.Locale.ROOT, it.refreshRate)}" }
+        .distinct(),
+      "hdrTypes" to (defaultDisplayCompat.hdrCapabilities?.supportedHdrTypes?.map(::hdrTypeName) ?: emptyList<String>()),
       "decoders" to MediaCodecQuery.videoDecoderDiagnostics()
     )
+  }
+
+  @Suppress("DEPRECATION")
+  // Not named `display`: that would override Activity.getDisplay() (API 30).
+  private val defaultDisplayCompat: android.view.Display
+    get() = (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay
+
+  private fun hdrTypeName(type: Int): String = when (type) {
+    android.view.Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION -> "Dolby Vision"
+    android.view.Display.HdrCapabilities.HDR_TYPE_HDR10 -> "HDR10"
+    android.view.Display.HdrCapabilities.HDR_TYPE_HLG -> "HLG"
+    else -> "type $type"
   }
 
   private fun initializeStartupPhaseStore() {

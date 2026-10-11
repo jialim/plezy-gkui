@@ -51,9 +51,7 @@ ThemeData _buildMonoTheme({required bool dark, required bool oled, required Targ
   final isDark = dark || oled;
   // Amber remains readily distinguishable through the yellowing of the eye
   // that commonly accompanies age, and stays conspicuous on colourful art.
-  final primary = projector
-      ? (isDark ? const Color(0xFFFFD54F) : const Color(0xFF765000))
-      : c.text;
+  final primary = projector ? (isDark ? const Color(0xFFFFD54F) : const Color(0xFF765000)) : c.text;
   final onPrimary = projector ? (isDark ? Colors.black : Colors.white) : (isDark ? c.bg : Colors.white);
   final clickableCursor = WidgetStateProperty.resolveWith<MouseCursor>(
     (states) => states.contains(WidgetState.disabled) ? MouseCursor.defer : SystemMouseCursors.click,
@@ -69,8 +67,7 @@ ThemeData _buildMonoTheme({required bool dark, required bool oled, required Targ
       (states) => states.contains(WidgetState.disabled) ? c.text.withValues(alpha: 0.2) : primary,
     ),
     foregroundColor: WidgetStateProperty.resolveWith(
-      (states) =>
-          states.contains(WidgetState.disabled) ? c.text.withValues(alpha: 0.45) : onPrimary,
+      (states) => states.contains(WidgetState.disabled) ? c.text.withValues(alpha: 0.45) : onPrimary,
     ),
     shape: const WidgetStatePropertyAll(StadiumBorder()),
   );
@@ -82,7 +79,9 @@ ThemeData _buildMonoTheme({required bool dark, required bool oled, required Targ
     // Linux resolves UI text through fontconfig, which on a minimal desktop
     // may have no CJK font at all; the bundled subtitle fonts (pubspec
     // `fonts:`) cover it. Other platforms keep their native CJK fonts.
-    fontFamilyFallback: platform == TargetPlatform.linux ? const ['Go Noto Current', 'Go Noto Current Hangul'] : null,
+    fontFamilyFallback: platform == TargetPlatform.linux
+        ? const ['Go Noto Current', 'Go Noto Current Hangul', 'Go Noto Current Han']
+        : null,
     colorScheme: ColorScheme(
       brightness: isDark ? Brightness.dark : Brightness.light,
       primary: primary,

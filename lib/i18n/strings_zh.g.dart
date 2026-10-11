@@ -922,6 +922,7 @@ class Translations$videoControls$zh extends Translations$videoControls$en {
 	@override String get osdSubtitlesOff => '字幕：关闭';
 	@override String osdSubtitles({required Object track}) => '字幕：${track}';
 	@override String osdAudio({required Object track}) => '音频：${track}';
+	@override String get pressBackAgainToStop => '再按一次返回键停止播放';
 }
 
 // Path: messages
@@ -3786,6 +3787,7 @@ extension on TranslationsZh {
 			'videoControls.osdSubtitlesOff' => '字幕：关闭',
 			'videoControls.osdSubtitles' => ({required Object track}) => '字幕：${track}',
 			'videoControls.osdAudio' => ({required Object track}) => '音频：${track}',
+			'videoControls.pressBackAgainToStop' => '再按一次返回键停止播放',
 			'messages.markedAsWatched' => '已标记为已观看',
 			'messages.markedAsUnwatched' => '已标记为未观看',
 			'messages.markedAsWatchedOffline' => '已标记为已观看（将在联网时同步）',
@@ -4066,9 +4068,9 @@ extension on TranslationsZh {
 			'errors.failedToDeleteProfile' => ({required Object displayName}) => '无法删除 ${displayName}',
 			'errors.failedToRate' => '无法更新评分',
 			'errors.reasonTimedOut' => '连接超时',
-			'errors.reasonUnreachable' => '无法连接到服务器',
 			_ => null,
 		} ?? switch (path) {
+			'errors.reasonUnreachable' => '无法连接到服务器',
 			'errors.reasonRefused' => '服务器拒绝了此请求',
 			'errors.reasonNotFound' => '该项目已不在服务器上',
 			'errors.reasonServerError' => '服务器报告了一个错误',
@@ -4580,9 +4582,9 @@ extension on TranslationsZh {
 			'watchTogether.joinCurrentPlayback' => '加入当前播放',
 			'watchTogether.joinCurrentPlaybackDescription' => '加入主持人当前正在观看的内容',
 			'watchTogether.failedToOpenCurrentPlayback' => '无法打开当前播放',
-			'watchTogether.participantJoined' => ({required Object name}) => '${name} 已加入',
 			_ => null,
 		} ?? switch (path) {
+			'watchTogether.participantJoined' => ({required Object name}) => '${name} 已加入',
 			'watchTogether.participantLeft' => ({required Object name}) => '${name} 已离开',
 			'watchTogether.participantPaused' => ({required Object name}) => '${name} 暂停了播放',
 			'watchTogether.participantResumed' => ({required Object name}) => '${name} 恢复了播放',
@@ -5094,9 +5096,9 @@ extension on TranslationsZh {
 			'addServer.couldNotReachServer' => ({required Object error}) => '无法连接到服务器：${error}',
 			'addServer.signInFailed' => ({required Object error}) => '登录失败：${error}',
 			'addServer.quickConnectFailed' => ({required Object error}) => 'Quick Connect 失败：${error}',
-			'addServer.addPlexTitle' => '使用 Plex 登录',
 			_ => null,
 		} ?? switch (path) {
+			'addServer.addPlexTitle' => '使用 Plex 登录',
 			'addServer.pinExpired' => 'PIN 在登录前已过期。请重试。',
 			'addServer.failedToRegisterAccount' => ({required Object error}) => '注册账户失败：${error}',
 			'addServer.enterMediaBrowserUrlError' => ({required Object product}) => '请输入你的 ${product} 服务器 URL',

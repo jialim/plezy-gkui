@@ -794,7 +794,8 @@
     "forcedTrack": "${label}（强制）",
     "osdSubtitlesOff": "字幕：关闭",
     "osdSubtitles": "字幕：${track}",
-    "osdAudio": "音频：${track}"
+    "osdAudio": "音频：${track}",
+    "pressBackAgainToStop": "再按一次返回键停止播放"
   },
   "userStatus": {},
   "messages": {

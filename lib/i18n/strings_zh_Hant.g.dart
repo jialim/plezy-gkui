@@ -907,6 +907,7 @@ class _Translations$videoControls$zh_Hant extends Translations$videoControls$zh 
 	@override String get osdSubtitlesOff => '字幕：關閉';
 	@override String osdSubtitles({required Object track}) => '字幕：${track}';
 	@override String osdAudio({required Object track}) => '音訊：${track}';
+	@override String get pressBackAgainToStop => '再按一次返回鍵停止播放';
 }
 
 // Path: messages
@@ -3755,6 +3756,7 @@ extension on TranslationsZhHant {
 			'videoControls.osdSubtitlesOff' => '字幕：關閉',
 			'videoControls.osdSubtitles' => ({required Object track}) => '字幕：${track}',
 			'videoControls.osdAudio' => ({required Object track}) => '音訊：${track}',
+			'videoControls.pressBackAgainToStop' => '再按一次返回鍵停止播放',
 			'messages.markedAsWatched' => '已標記為已觀看',
 			'messages.markedAsUnwatched' => '已標記為未觀看',
 			'messages.markedAsWatchedOffline' => '已標記為已觀看（將在連線時同步）',
@@ -4051,9 +4053,9 @@ extension on TranslationsZhHant {
 			'libraries.emptyTrash' => '清空垃圾桶',
 			'libraries.emptyingTrash' => ({required Object title}) => '正在清空「${title}」的垃圾桶…',
 			'libraries.trashEmptied' => ({required Object title}) => '已清空「${title}」的垃圾桶',
-			'libraries.failedToEmptyTrash' => ({required Object error}) => '無法清空垃圾桶：${error}',
 			_ => null,
 		} ?? switch (path) {
+			'libraries.failedToEmptyTrash' => ({required Object error}) => '無法清空垃圾桶：${error}',
 			'libraries.analyzing' => ({required Object title}) => '正在分析「${title}」…',
 			'libraries.analysisStarted' => ({required Object title}) => '已開始分析「${title}」',
 			'libraries.failedToAnalyze' => ({required Object error}) => '無法分析媒體庫：${error}',
@@ -4565,9 +4567,9 @@ extension on TranslationsZhHant {
 			'watchTogether.removeRoom' => '移除',
 			'watchTogether.guestSwitchUnavailable' => '無法切換 — 伺服器無法進行同步',
 			'watchTogether.guestSwitchFailed' => '無法切換 — 在此伺服器上找不到內容',
-			'watchTogether.defaultDisplayName' => '使用者',
 			_ => null,
 		} ?? switch (path) {
+			'watchTogether.defaultDisplayName' => '使用者',
 			'watchTogether.errors.timedOut' => '中繼伺服器未及時回應',
 			'watchTogether.errors.connectionLost' => '工作階段就緒前連線已中斷',
 			'watchTogether.errors.invalidRelayResponse' => '中繼伺服器傳回了非預期的回應',
@@ -5079,9 +5081,9 @@ extension on TranslationsZhHant {
 			'addServer.borrowFromAnotherProfileSubtitle' => '重複使用另一個使用者設定檔的連線資訊。受 PIN 碼保護的使用者設定檔需輸入 PIN 碼。',
 			'addServer.invalidCredentials' => '使用者名稱或密碼無效',
 			'addServer.authResponseNotJson' => '驗證回應不是有效的 JSON',
-			'addServer.authResponseIncomplete' => '伺服器傳回的登入回應不完整',
 			_ => null,
 		} ?? switch (path) {
+			'addServer.authResponseIncomplete' => '伺服器傳回的登入回應不完整',
 			'addServer.quickConnectRejected' => 'Quick Connect 遭到伺服器拒絕',
 			'addServer.quickConnectNotJson' => 'Quick Connect 回應不是有效的 JSON',
 			'addServer.quickConnectMissingFields' => 'Quick Connect 回應缺少代碼或密鑰',

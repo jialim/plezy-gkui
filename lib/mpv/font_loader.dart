@@ -40,7 +40,9 @@ class SubtitleFontLoader {
   static const String _fontName = 'Go Noto Current-Regular';
 
   /// Font files extracted to the subtitle fonts directory, in extraction order:
-  /// the primary, then its Hangul-syllable companion (see class docs).
+  /// the primary, then its Hangul-syllable and Chinese companions (see class
+  /// docs). Each companion carries the primary's family name and only
+  /// codepoints the primary lacks.
   static const List<SubtitleFont> fonts = [
     SubtitleFont(
       asset: 'assets/go-noto-current-regular.ttf',
@@ -48,6 +50,9 @@ class SubtitleFontLoader {
       length: 14700060,
     ),
     SubtitleFont(asset: 'assets/go-noto-kurrent-hangul.ttf', fileName: 'go-noto-kurrent-hangul.ttf', length: 1976696),
+    // The ~9000 GBK/GB2312/Big5 hanzi the primary lacks (诶, 谘 …), from
+    // Noto Sans SC by scripts/codegen/generate_han_subtitle_font.py.
+    SubtitleFont(asset: 'assets/go-noto-current-han.ttf', fileName: 'go-noto-current-han.ttf', length: 3445476),
   ];
 
   /// Suffix of a copy still being written; a leftover one is stale by definition.

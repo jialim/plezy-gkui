@@ -179,6 +179,8 @@ class FocusableActionBarState extends State<FocusableActionBar> {
 
   /// Index resolved at call time: a binding survives action-list changes, so
   /// a listener must not capture the slot it was created for.
+  int? _lastFocusedIndex;
+
   void _handleBindingFocusChange(OwnedFocusNodeBinding binding) {
     final index = _focusBindings.indexOf(binding);
     if (index != -1) {
@@ -188,11 +190,17 @@ class FocusableActionBarState extends State<FocusableActionBar> {
       }
       final focusContext = binding.node.context;
       if (hasFocus && widget.scrollable && focusContext != null) {
+        // keepVisibleAtEnd only ever scrolls forward, so moving left needs
+        // keepVisibleAtStart or the row never scrolls back to Play.
+        final movingLeft = _lastFocusedIndex != null && index < _lastFocusedIndex!;
         Scrollable.ensureVisible(
           focusContext,
-          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+          alignmentPolicy: movingLeft
+              ? ScrollPositionAlignmentPolicy.keepVisibleAtStart
+              : ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
         ).ignore();
       }
+      if (hasFocus) _lastFocusedIndex = index;
     }
     _notifyRowFocusIfChanged();
   }

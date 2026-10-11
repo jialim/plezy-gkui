@@ -47,6 +47,30 @@ void main() {
     expect(result?.track.id, '2');
   }, skip: !enabled);
 
+  test('a full Chinese track wins over a forced Simplified one', () {
+    final service = _svc([_plexSub(1, 'chi'), _plexSub(2, 'chi')]);
+    final result = service.selectSubtitleTrack(
+      const [
+        SubtitleTrack(id: '1', language: 'zh-hans', title: 'Signs', isForced: true),
+        SubtitleTrack(id: '2', language: 'zh-hant', title: 'Traditional'),
+      ],
+      null,
+      const AudioTrack(id: 'a1', language: 'eng'),
+    );
+    expect(result?.track.id, '2');
+  }, skip: !enabled);
+
+  test('a Cantonese film still gets Chinese subtitles, a Mandarin one does not', () {
+    const tracks = [SubtitleTrack(id: '2', language: 'chi', title: 'Chinese (Simplified)')];
+    final cantonese = _svc([
+      _plexSub(2, 'chi'),
+    ]).selectSubtitleTrack(tracks, null, const AudioTrack(id: 'a1', language: 'yue', title: '粵語'));
+    expect(cantonese?.track.id, '2');
+    expect(familyProjectorAudioNeedsNoSubtitle(const AudioTrack(id: 'a', language: 'chi', title: '粤语')), isFalse);
+    expect(familyProjectorAudioNeedsNoSubtitle(const AudioTrack(id: 'a', language: 'cmn')), isTrue);
+    expect(familyProjectorAudioNeedsNoSubtitle(const AudioTrack(id: 'a', language: 'eng')), isFalse);
+  }, skip: !enabled);
+
   group('remembered choice for a show', () {
     const audio = AudioTrack(id: 'a1', language: 'eng');
     const tracks = [

@@ -35,6 +35,24 @@ bool isFamilyProjectorChineseLanguage(String? language) {
   return value.startsWith('zh-') || const {'zh', 'zho', 'chi', 'chinese', 'cmn', 'yue', 'chs', 'cht'}.contains(value);
 }
 
+/// Whether spoken audio already serves a Mandarin-reading family. Cantonese
+/// counts as Chinese text but not as understood speech, so a Cantonese film
+/// still gets Chinese subtitles.
+bool familyProjectorAudioNeedsNoSubtitle(AudioTrack? audio) {
+  if (audio == null || !isFamilyProjectorChineseLanguage(audio.language)) return false;
+  final language = _normalizedTrackLanguage(audio.language);
+  final title = (audio.title ?? '').toLowerCase();
+  final cantonese =
+      language == 'yue' ||
+      language.startsWith('yue-') ||
+      language == 'zh-yue' ||
+      language == 'zh-hk' ||
+      title.contains('粤') ||
+      title.contains('粵') ||
+      title.contains('cantonese');
+  return !cantonese;
+}
+
 int familyProjectorSubtitleRank(SubtitleTrack track) {
   final language = _normalizedTrackLanguage(track.language);
   final title = (track.title ?? '').trim();
@@ -840,15 +858,22 @@ class TrackSelectionService {
   /// the audio is not already Chinese. Anything else keeps the server's choice,
   /// which for Plex is "off" when no stream is selected.
   SubtitleTrack? _findFamilyProjectorSubtitle(List<SubtitleTrack> availableTracks, AudioTrack? selectedAudioTrack) {
-    if (isFamilyProjectorChineseLanguage(selectedAudioTrack?.language)) return null;
+    if (familyProjectorAudioNeedsNoSubtitle(selectedAudioTrack)) return null;
+    // A forced track only translates signs, so any full Chinese track wins
+    // over it; a forced one is used only when it is the only Chinese track.
     SubtitleTrack? best;
     var bestRank = familyProjectorAutoSubtitleRank - 1;
+    var bestIsForced = true;
     for (final track in availableTracks) {
       if (track.id == SubtitleTrack.auto.id || track.id == SubtitleTrack.off.id) continue;
       final rank = familyProjectorSubtitleRank(track);
-      if (rank > bestRank) {
+      if (rank < familyProjectorAutoSubtitleRank) continue;
+      final better =
+          best == null || (bestIsForced && !track.isForced) || (bestIsForced == track.isForced && rank > bestRank);
+      if (better) {
         best = track;
         bestRank = rank;
+        bestIsForced = track.isForced;
       }
     }
     return best;

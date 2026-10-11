@@ -1172,6 +1172,12 @@ FutureOr<SentryEvent?> _beforeSend(SentryEvent event, Hint _) {
 }
 
 void _registerShaderLicenses() {
+  // The Chinese subtitle companion font is a subset of Noto Sans SC.
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(const [
+      'Noto Sans SC (subtitle font)',
+    ], await rootBundle.loadString('assets/licenses/noto-sans-sc-OFL.txt'));
+  });
   LicenseRegistry.addLicense(() async* {
     yield const LicenseEntryWithLineBreaks(
       ['Anime4K'],
