@@ -14,8 +14,30 @@ Everything in this repository serves that one app.
 
 ## Toolchain
 
-Flutter 3.19.6 / Dart 3.3.4, JDK 17, Android SDK 34. Newer Flutter releases no
-longer target API 19, so do not upgrade the pinned versions casually.
+Flutter 3.19.6 / Dart 3.3.4, JDK 17, Android SDK 34.
+
+These pins are permanent for this app, not overdue upgrades:
+
+- **Flutter 3.19.6** is the last release whose engine runs on API 19.
+  Flutter 3.22 raised the minimum to API 21.
+- **ExoPlayer 2.19.1** is the final ExoPlayer 2 release. Its successor,
+  AndroidX Media3, requires API 21 from 1.4, so Media3 1.3.x is the only
+  newer player that could still run here. Moving to it is a package rename
+  across the native player, worth doing only for a specific fix.
+- **OkHttp 3.12.x** is the last OkHttp line for Android 4.4.
+
+Dependency bumps that keep these floors are fine; anything that raises the
+minimum SDK is not. Dependabot ignores major updates for this reason.
+
+## Screen tests
+
+`test/gkui/screen_golden_test.dart` keeps 800x480 pictures of the main
+screens in `test/gkui/goldens/`. After an intended layout change, regenerate
+them and review the images in the pull request:
+
+```sh
+flutter test --update-goldens test/gkui/screen_golden_test.dart
+```
 
 ## Before you push
 

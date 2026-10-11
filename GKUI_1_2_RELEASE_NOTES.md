@@ -1,6 +1,23 @@
-# Plezy GKUI 1.2.11 — Playback and Profile Fixes (2026-10-11)
+# Plezy GKUI 1.2.12 — Car-Sized Controls (unreleased)
 
 This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit. Phone remote and mirroring are intentionally excluded.
+
+## 1.2.12 car-sized controls
+
+- The details screen fits the 800x480 screen without scrolling: a large Back button, the poster, the summary scrolling in place, large Version, Audio and Subtitles buttons that show the current choice, and one large Play or Resume button with Start over beside it. The 720p and 480p modes moved behind a quality button, since Plezy already falls back to them by itself.
+- The player controls are larger: Close, title, Audio and CC along the top, big round rewind, play and forward buttons in the middle, and the seek bar with times along the bottom. Buttons light up when pressed.
+- Tapping the video now shows or hides the controls; before, taps on the picture were ignored. The controls hide five seconds after the video starts or the last touch, stay up while paused, seeking or choosing tracks, and come back when playback pauses.
+- A title or show that only plays in 720p or 480p remembers it: Play and the next autoplayed episode start in that mode instead of failing direct play first. The quality button shows and changes it.
+- Starting a title asks Plex for its details and checks its file in one request. Automatic retries of a file that was just playing skip the file check.
+- The player uses the chosen file's own length, so a different cut of a film is no longer mistaken for a stream that stopped early.
+- Resume points are saved on the head unit, so a crash or a dead connection keeps the position until Plex records a later view.
+- When a video stops with an error, Home shows why, how many reconnects were tried, and a Resume button.
+- Settings has a connection test that shows the route (local, remote or relay), the response time and the address, and switches to a working address when the saved one fails.
+- The Status screen can show the latest redacted logs as a QR code to scan with a phone.
+- The side navigation no longer cuts off Status on the 480-pixel screen, and its buttons fill the rail's height.
+- Error messages from the network read as one short sentence instead of a paragraph of developer text.
+- A reconnect interrupted by the head unit sleeping keeps the rest of its wait when it wakes.
+- Screen tests keep 800x480 pictures of the main screens to catch layout regressions.
 
 ## 1.2.11 playback and profile fixes
 

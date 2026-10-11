@@ -592,6 +592,28 @@ class PlexMedia {
       );
 }
 
+/// The result of the Settings connection test.
+class ConnectionCheck {
+  const ConnectionCheck(
+      {required this.route,
+      required this.endpoint,
+      required this.latencyMs,
+      required this.switched});
+  final String? route;
+  final String endpoint;
+  final int? latencyMs;
+
+  /// True when the saved address failed and another one was found.
+  final bool switched;
+
+  String describe() => <String>[
+        if (switched) 'Saved address failed; switched to a working one',
+        '${route == null ? 'Connected' : '${route![0].toUpperCase()}${route!.substring(1)} route'}'
+            ' • ${latencyMs == null ? 'no answer' : '$latencyMs ms'}',
+        endpoint,
+      ].join('\n');
+}
+
 /// Where this car last stopped a title, kept across restarts.
 class LocalProgress {
   const LocalProgress(
@@ -1072,6 +1094,13 @@ class PlexApi {
       baseUrl: winner.uri,
     );
     await _saveSession(connected);
+    await _prefs.setString(
+        _routeKey,
+        winner.relay
+            ? 'relay'
+            : winner.local
+                ? 'local'
+                : 'remote');
     session = connected;
     logs.add('Connected securely to ${server.name} '
         '(${winner.relay ? 'relay' : winner.local ? 'local' : 'remote'}).');
@@ -1081,6 +1110,47 @@ class PlexApi {
   /// Picks a working address again for the signed-in server. The saved
   /// address can stop answering when the car leaves the home Wi-Fi, so a
   /// failed refresh calls this before showing an error.
+  static const String _routeKey = 'gkui.route';
+
+  /// How the saved address reaches the server: local, remote or relay.
+  String? get connectionRoute => _prefs.getString(_routeKey);
+
+  /// Times the saved address. When it does not answer, looks for another
+  /// route the way a failed refresh does, then times that one.
+  Future<ConnectionCheck> checkConnection() async {
+    final before = _requireSession().baseUrl;
+    var latency = await _timeIdentity();
+    if (latency == null) {
+      await reconnect();
+      latency = await _timeIdentity();
+    }
+    return ConnectionCheck(
+      route: connectionRoute,
+      endpoint: safeEndpoint,
+      latencyMs: latency,
+      switched: session?.baseUrl != before,
+    );
+  }
+
+  Future<int?> _timeIdentity() async {
+    final value = _requireSession();
+    final watch = Stopwatch()..start();
+    try {
+      await _serverDio
+          .get<dynamic>('${value.baseUrl}/identity',
+              options: Options(
+                headers: headers(value.serverToken),
+                receiveTimeout: const Duration(seconds: 7),
+              ))
+          .timeout(const Duration(seconds: 8));
+      return watch.elapsedMilliseconds;
+    } catch (error) {
+      logs.add('Connection test: ${_safeHost(value.baseUrl)} did not answer '
+          '(${_briefError(error)}).');
+      return null;
+    }
+  }
+
   Future<PlexSession> reconnect() async {
     final value = _requireSession();
     logs.add('Saved endpoint failed; looking for another route.');
@@ -1115,6 +1185,7 @@ class PlexApi {
       'baseUrl',
       'currentHomeUserUuid',
       'currentHomeUserName',
+      'route',
     ]) {
       await _prefs.remove('gkui.$key');
     }

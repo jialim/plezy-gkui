@@ -96,3 +96,21 @@ String redactSecrets(String input) {
   );
   return output;
 }
+
+/// Diagnostics for a QR code a phone can scan: the [header] lines, then as
+/// much of the newest [log] as fits in [limit] characters, all redacted. A
+/// head unit has no other easy way to hand text to someone helping.
+String qrDiagnostics(String header, String log, {int limit = 1200}) {
+  final head = redactSecrets(header.trim());
+  final room = limit - head.length - 2;
+  var tail = redactSecrets(log.trim());
+  if (room <= 0) return head.substring(0, limit.clamp(0, head.length));
+  if (tail.length > room) {
+    tail = tail.substring(tail.length - room);
+    final newline = tail.indexOf('\n');
+    if (newline >= 0 && newline < tail.length - 1) {
+      tail = tail.substring(newline + 1);
+    }
+  }
+  return tail.isEmpty ? head : '$head\n\n$tail';
+}

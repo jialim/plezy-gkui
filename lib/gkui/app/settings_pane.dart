@@ -32,6 +32,35 @@ class SettingsPane extends StatelessWidget {
             subtitle: 'Remembered for this head unit'),
         const SizedBox(height: 18),
         _SettingCard(
+          title: 'Connection',
+          child: Row(children: <Widget>[
+            Expanded(
+              child: Text(
+                  controller.connectionReport ??
+                      '${controller.api?.session?.serverName ?? 'Not connected'}'
+                          '\n${controller.api?.safeEndpoint ?? ''}',
+                  style: const TextStyle(fontSize: 16, height: 1.3)),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              height: 58,
+              child: ElevatedButton.icon(
+                onPressed: controller.testingConnection ||
+                        controller.api?.session == null
+                    ? null
+                    : controller.testConnection,
+                icon: controller.testingConnection
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 3))
+                    : const Icon(Icons.network_check, size: 26),
+                label: const Text('Test', style: TextStyle(fontSize: 18)),
+              ),
+            ),
+          ]),
+        ),
+        _SettingCard(
           title: 'Preferred audio',
           child: DropdownButton<String>(
             isExpanded: true,

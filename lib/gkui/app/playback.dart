@@ -24,6 +24,7 @@ extension GkuiPlayback on GkuiController {
     var retrySubtitleTrackId = subtitleTrackId;
     var selectedIndex = mediaIndex ?? 0;
     var item = media;
+    var reconnectAttempts = 0;
     try {
       unawaited(showDialog<void>(
         context: context,
@@ -209,9 +210,11 @@ extension GkuiPlayback on GkuiController {
       unawaited(api!.reportProgress(item, startAt, 'playing',
           sessionId: request.sessionId, durationMs: playbackDurationMs));
       final raw = await playerFuture;
-      for (final line in (raw?['diagnostics'] as List<dynamic>? ?? const [])) {
-        logs.add(line.toString());
-      }
+      final playerLines = (raw?['diagnostics'] as List<dynamic>? ?? const [])
+          .map((line) => line.toString())
+          .toList();
+      playerLines.forEach(logs.add);
+      reconnectAttempts = reconnectAttemptsFrom(playerLines);
       failureKind = raw?['failureKind']?.toString();
       renderedFrame = raw?['renderedFrame'] == true;
       final position = (raw?['positionMs'] as num?)?.toInt() ?? startAt;
@@ -269,6 +272,7 @@ extension GkuiPlayback on GkuiController {
         logs.add('Remembered in-player track choice.');
       }
       if (renderedFrame) {
+        lastPlaybackProblem = null;
         _updateLocalProgress(item.ratingKey, ended ? 0 : position,
             watched: ended);
         await api!.savePlaybackMode(item, rememberedPlaybackMode(mode));
@@ -359,6 +363,14 @@ extension GkuiPlayback on GkuiController {
           }
           return;
         }
+        lastPlaybackProblem = PlaybackProblem(
+          media: item,
+          message: GkuiController.compact(caught),
+          mode: mode,
+          resumeAtMs: renderedFrame ? resumeAtMs : null,
+          reconnectAttempts: reconnectAttempts,
+        );
+        notifySafely();
         final retry = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(

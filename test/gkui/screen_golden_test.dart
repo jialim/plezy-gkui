@@ -193,4 +193,28 @@ void main() {
     await shoot(tester, GkuiShell(controller: controller), 'home');
     controller.dispose();
   });
+
+  testWidgets('home after a playback dropped', (tester) async {
+    final controller = await signedIn();
+    controller.shelves = const <PlexShelf>[
+      PlexShelf(title: 'Continue Watching', items: <PlexMedia>[movie, short]),
+    ];
+    controller.lastPlaybackProblem = const PlaybackProblem(
+        media: movie,
+        message: 'The Plex server could not be reached.',
+        mode: PlaybackMode.direct,
+        resumeAtMs: 1834000,
+        reconnectAttempts: 3);
+    await shoot(tester, GkuiShell(controller: controller), 'home_problem');
+    controller.dispose();
+  });
+
+  testWidgets('settings', (tester) async {
+    final controller = await signedIn();
+    controller.connectionReport =
+        'Remote route • 182 ms\nhttps://….plex.direct:32400';
+    await shoot(tester, Scaffold(body: SettingsPane(controller: controller)),
+        'settings');
+    controller.dispose();
+  });
 }

@@ -29,6 +29,9 @@ class GkuiController extends ChangeNotifier {
   GkuiUpdateInfo? updateInfo;
   String? updateError;
   bool checkingForUpdate = false;
+  bool testingConnection = false;
+  String? connectionReport;
+  PlaybackProblem? lastPlaybackProblem;
   bool installingUpdate = false;
   // What this car last played, so screens opened before playback show the
   // new resume point instead of the one Plex returned when they loaded. It is
@@ -571,6 +574,31 @@ class GkuiController extends ChangeNotifier {
         .toList();
     libraryItems = libraryItems.map(update).toList();
     searchResults = searchResults.map(update).toList();
+  }
+
+  /// The Settings connection test: times the saved address and finds
+  /// another route when it does not answer.
+  Future<void> testConnection() async {
+    if (api?.session == null || testingConnection) return;
+    testingConnection = true;
+    connectionReport = null;
+    notifySafely();
+    try {
+      final check = await api!.checkConnection();
+      connectionReport = check.describe();
+      logs.add('Connection test: ${check.describe().replaceAll('\n', ' / ')}');
+      if (check.switched) unawaited(refreshContent(includeLibrary: false));
+    } catch (caught) {
+      connectionReport = message('No route reached the server', caught);
+    } finally {
+      testingConnection = false;
+      notifySafely();
+    }
+  }
+
+  void dismissPlaybackProblem() {
+    lastPlaybackProblem = null;
+    notifySafely();
   }
 
   void fail(String prefix, Object value) {

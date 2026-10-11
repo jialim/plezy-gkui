@@ -131,6 +131,8 @@ class HomePane extends StatelessWidget {
                 label: const Text('Profiles', style: TextStyle(fontSize: 19))),
           ]),
           if (controller.error != null) ErrorBanner(controller.error!),
+          if (controller.lastPlaybackProblem case final problem?)
+            PlaybackProblemBanner(problem: problem, controller: controller),
           const SizedBox(height: 18),
           if (controller.shelves.isEmpty)
             const Padding(
@@ -428,4 +430,80 @@ class _SearchPaneState extends State<SearchPane> {
           ),
         ],
       );
+}
+
+/// Why the last video closed, with a one-tap way back into it.
+class PlaybackProblemBanner extends StatelessWidget {
+  const PlaybackProblemBanner(
+      {required this.problem, required this.controller, super.key});
+  final PlaybackProblem problem;
+  final GkuiController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final resumeAt = problem.resumeAtMs;
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF3A2410),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF8A5A20)),
+      ),
+      child: Row(children: <Widget>[
+        const Icon(Icons.warning_amber_rounded,
+            size: 32, color: Color(0xFFFFB74D)),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('${problem.media.title} stopped',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w700)),
+                Text(
+                    <String>[
+                      problem.message,
+                      if (problem.reconnectAttempts > 0)
+                        'Gave up after ${problem.reconnectAttempts} reconnect '
+                            '${problem.reconnectAttempts == 1 ? 'attempt' : 'attempts'}.',
+                    ].join(' '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(fontSize: 15, color: Colors.white70)),
+              ]),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          height: 60,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              controller.dismissPlaybackProblem();
+              controller.play(context, problem.media, problem.mode,
+                  startMs: resumeAt);
+            },
+            icon: const Icon(Icons.play_arrow, size: 28),
+            label: Text(
+                resumeAt != null && resumeAt > 0
+                    ? 'Resume ${formatPlaybackTime(resumeAt)}'
+                    : 'Try again',
+                style: const TextStyle(fontSize: 18)),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 60,
+          height: 60,
+          child: OutlinedButton(
+            style: OutlinedButton.styleFrom(padding: EdgeInsets.zero),
+            onPressed: controller.dismissPlaybackProblem,
+            child: const Icon(Icons.close, size: 28, semanticLabel: 'Dismiss'),
+          ),
+        ),
+      ]),
+    );
+  }
 }
