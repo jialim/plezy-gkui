@@ -1,0 +1,43 @@
+# Dependabot reads this file from the default branch only, so it covers both
+# apps here. GKUI is pinned to the last toolchain that runs on Android 4.4
+# (see CONTRIBUTING.md), so it only takes patch updates; a newer minor of a
+# Dart package often needs a newer Dart SDK than Flutter 3.19.6 ships.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: gkui/api19-implementation
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: plezy-xgimi-lite
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: pub
+    directory: /
+    target-branch: gkui/api19-implementation
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+
+  - package-ecosystem: pub
+    directory: /
+    target-branch: plezy-xgimi-lite
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
