@@ -38,6 +38,7 @@ The UI scale multiplies Flutter's logical pixels, which Android TV usually repor
 
 Test 9 adds, for the remote and the sofa:
 
+- The first launch asks 中文 or English before anything else, sign-in included. Settings > General switches it later and lists only Simplified Chinese, Traditional Chinese and English. Every screen now has Simplified and Traditional Chinese text; upstream had left about 40 strings (audio channels, library filters and others) in English, and the installer's error toast is Chinese.
 - Back with the controls hidden or showing asks "press Back again to stop" for three seconds, so one stray press does not end a film.
 - The remote's CC key cycles subtitles (Off included), its audio key cycles audio tracks, and Menu raises the player controls.
 - New installs default to larger, bold subtitles (46 instead of 38) with a thicker outline. Existing custom subtitle settings are kept.

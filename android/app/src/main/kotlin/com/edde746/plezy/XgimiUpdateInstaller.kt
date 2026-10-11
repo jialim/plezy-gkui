@@ -77,7 +77,8 @@ class XgimiUpdateInstaller(private val activity: FlutterActivity) {
       launchInstaller(apk)
     } catch (error: Exception) {
       Log.w(TAG, "Could not open the package installer", error)
-      Toast.makeText(activity, "Android could not open the installer. Try the update again.", Toast.LENGTH_LONG)
+      // This installer only ships in the Chinese-first XGIMI build.
+      Toast.makeText(activity, "无法打开安卓安装程序，请重新尝试更新。", Toast.LENGTH_LONG)
         .show()
     }
   }

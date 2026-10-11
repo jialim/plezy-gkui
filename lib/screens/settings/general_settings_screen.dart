@@ -7,10 +7,12 @@ import 'package:provider/provider.dart';
 import '../../i18n/strings.g.dart';
 import '../../navigation/navigation_tabs.dart';
 import '../../profiles/active_profile_provider.dart';
+import '../../services/family_projector_profile.dart';
 import '../../services/settings_service.dart';
 import '../../services/settings_mutation_service.dart';
 import '../../utils/platform_detector.dart';
 import '../../widgets/app_icon.dart';
+import '../../widgets/family_language_gate.dart';
 import '../../widgets/focusable_list_tile.dart';
 import '../../widgets/setting_tile.dart';
 import '../../widgets/settings_page.dart';
@@ -80,7 +82,8 @@ class GeneralSettingsScreen extends StatelessWidget {
         final picked = await showSelectionDialog<AppLocale>(
           context: context,
           title: t.settings.language,
-          options: AppLocale.values
+          // The family projector build keeps the list to the household's languages.
+          options: (FamilyProjectorProfile.enabled ? familyProjectorLocales : AppLocale.values)
               .map((locale) => DialogOption(value: locale, title: _getLanguageDisplayName(locale)))
               .toList(),
           currentValue: LocaleSettings.currentLocale,

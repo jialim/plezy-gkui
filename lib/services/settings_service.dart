@@ -912,6 +912,11 @@ class SettingsService extends BaseSharedPreferencesService {
     values: ProjectorUiSize.values,
     defaultValue: ProjectorUiSize.normal,
   );
+
+  /// First-run sentinel for the family projector build: set once the viewer
+  /// has picked Chinese or English. Runtime state, so neither reset nor
+  /// exported (see the groups below).
+  static const familyProjectorLanguageChosen = BoolPref('family_projector_language_chosen');
   static const tvCornerSpotlightBackdrop = BoolPref('tv_corner_spotlight_backdrop');
   static const episodePosterMode = _EpisodePosterModePref();
   static const continueWatchingAction = EnumPref<ContinueWatchingAction>(
