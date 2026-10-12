@@ -1,6 +1,10 @@
-# Plezy GKUI 1.2.12 — Car-Sized Controls (unreleased)
+# Plezy GKUI 1.2.13 — GitHub Certificate Fix (unreleased)
 
 This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit. Phone remote and mirroring are intentionally excluded.
+
+## 1.2.13 GitHub certificate fix
+
+- In-app updates trust GitHub's newer Sectigo certificates. GitHub serves github.com and api.github.com from either Let's Encrypt or Sectigo's Public Server Authentication hierarchy; Android 4.4 predates the Sectigo roots, so an update check or download could fail whenever GitHub answered with a Sectigo certificate. The app now bundles Sectigo Public Server Authentication Root R46 and E46 and their USERTrust RSA and ECC cross-signers, next to the Let's Encrypt and DigiCert roots it already carried.
 
 ## 1.2.12 car-sized controls
 
