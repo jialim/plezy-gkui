@@ -15,6 +15,8 @@ class ModernTlsSocketFactoryTest {
         var last: Socket? = null
         private fun legacy(): Socket = (delegate.createSocket() as SSLSocket).apply {
             enabledProtocols = arrayOf("TLSv1")
+            // KitKat enables only CBC suites by default, although it supports GCM.
+            enabledCipherSuites = supportedCipherSuites.filter { it.endsWith("_CBC_SHA") }.toTypedArray()
             last = this
         }
         override fun getDefaultCipherSuites() = delegate.defaultCipherSuites
@@ -44,8 +46,23 @@ class ModernTlsSocketFactoryTest {
                 assertSame(provider.last, socket)
                 assertTrue(socket.enabledProtocols.contains("TLSv1.2"))
                 assertTrue(socket.enabledProtocols.all { it == "TLSv1.2" || it == "TLSv1.3" })
+                assertEquals("TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256", socket.enabledCipherSuites.first())
+                assertTrue(socket.enabledCipherSuites.contains("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"))
+                // The provider's own suites stay available as a fallback.
+                assertTrue(socket.enabledCipherSuites.any { it.endsWith("_CBC_SHA") })
             }
         }
         assertArrayEquals(provider.defaultCipherSuites, factory.defaultCipherSuites)
+    }
+
+    @Test fun unsupportedPreferredSuitesAreNeverEnabled() {
+        val selected = ModernCipherSuites.select(
+            supported = arrayOf("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_RSA_WITH_AES_128_CBC_SHA"),
+            enabled = arrayOf("TLS_RSA_WITH_AES_128_CBC_SHA"),
+        )
+        assertArrayEquals(
+            arrayOf("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_RSA_WITH_AES_128_CBC_SHA"),
+            selected,
+        )
     }
 }

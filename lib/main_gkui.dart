@@ -19,8 +19,9 @@ part 'gkui/app/media_widgets.dart';
 part 'gkui/app/details_screen.dart';
 part 'gkui/app/common_widgets.dart';
 part 'gkui/app/diagnostics_pane.dart';
+part 'gkui/app/profile_widgets.dart';
 
-const String buildLabel = 'Plezy GKUI 1.2.12 / car-sized controls';
+const String buildLabel = 'Plezy GKUI 1.2.13 / GitHub connection fix';
 const String sourceLabel = 'Plezy 1.8.1 / GKUI compatibility fork';
 const String toolchainLabel = 'Flutter 3.19.6 / ExoPlayer 2.19.1 / API 19';
 const MethodChannel nativeChannel =

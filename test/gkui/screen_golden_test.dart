@@ -217,4 +217,73 @@ void main() {
         'settings');
     controller.dispose();
   });
+
+  const homeUsers = <PlexHomeUser>[
+    PlexHomeUser(
+        uuid: 'a',
+        displayName: 'Owner',
+        thumb: '',
+        protected: true,
+        admin: true,
+        guest: false),
+    PlexHomeUser(
+        uuid: 'b',
+        displayName: 'Alex',
+        thumb: '',
+        protected: false,
+        admin: false,
+        guest: false),
+    PlexHomeUser(
+        uuid: 'c',
+        displayName: 'Bea',
+        thumb: '',
+        protected: false,
+        admin: false,
+        guest: false),
+    PlexHomeUser(
+        uuid: 'd',
+        displayName: 'Chris Long-Name Example',
+        thumb: '',
+        protected: false,
+        admin: false,
+        guest: false),
+    PlexHomeUser(
+        uuid: 'e',
+        displayName: 'Dana',
+        thumb: '',
+        protected: false,
+        admin: false,
+        guest: false),
+    PlexHomeUser(
+        uuid: 'f',
+        displayName: 'Evan',
+        thumb: '',
+        protected: true,
+        admin: false,
+        guest: false),
+    PlexHomeUser(
+        uuid: 'g',
+        displayName: 'Fay',
+        thumb: '',
+        protected: false,
+        admin: false,
+        guest: false),
+  ];
+
+  testWidgets('profile picker', (tester) async {
+    await shoot(
+        tester,
+        const Scaffold(
+            body: ProfilePickerDialog(users: homeUsers, currentUuid: 'e')),
+        'profile_picker');
+  });
+
+  testWidgets('PIN pad', (tester) async {
+    await shoot(
+        tester,
+        Scaffold(
+            body: PinPadDialog(
+                title: 'PIN for Owner', onSubmit: (_) async => null)),
+        'pin_pad');
+  });
 }
