@@ -97,12 +97,6 @@ void main() {
     expect(media.size, const Size(1600, 900));
     expect(media.devicePixelRatio, 1.2);
   }, skip: skip);
-}
-
-double _contrast(Color a, Color b) {
-  final lighter = a.computeLuminance() > b.computeLuminance() ? a : b;
-  final darker = identical(lighter, a) ? b : a;
-  return (lighter.computeLuminance() + 0.05) / (darker.computeLuminance() + 0.05);
 
   testWidgets('library rail focus is an amber outline, not a faint white tint', (tester) async {
     final focus = FocusNode();
@@ -158,4 +152,10 @@ double _contrast(Color a, Color b) {
     expect(fills, contains(amber.withValues(alpha: 0.3)));
     expect(fills, contains(amber.withValues(alpha: 0.14)));
   }, skip: !FamilyProjectorProfile.enabled);
+}
+
+double _contrast(Color a, Color b) {
+  final lighter = a.computeLuminance() > b.computeLuminance() ? a : b;
+  final darker = identical(lighter, a) ? b : a;
+  return (lighter.computeLuminance() + 0.05) / (darker.computeLuminance() + 0.05);
 }
