@@ -304,7 +304,7 @@ void main() {
       release('gkui-v1.2.10'),
     ], is64Bit: true);
     expect(bumped?['tag'], 'xgimi-lite-v2.23.0-test1');
-    expect(bumped?['versionLabel'], '2.23.0 Test 1');
+    expect(bumped?['versionLabel'], '2.23.0 build 1');
 
     final stable = UpdateService.selectXgimiRelease([
       release('xgimi-lite-v2.23.0-test4'),

@@ -177,8 +177,8 @@ jobs:
             plezy-xgimi-lite-*.tar.gz
           retention-days: 30
 
-  # Every change merged to the branch is published as the next test
-  # pre-release, so the projector always has a downloadable APK for it.
+  # Every change merged to the branch is published as the next stable
+  # release, so the projector always has a downloadable APK for it.
   release:
     needs: android
     if: github.event_name == 'push' && github.ref == 'refs/heads/plezy-xgimi-lite'
@@ -201,7 +201,7 @@ jobs:
           name: plezy-xgimi-lite-android
           path: dist
 
-      - name: Publish test pre-release
+      - name: Publish release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -278,8 +278,11 @@ jobs:
           ${signing}
           NOTES
 
+          # A stable release, but never marked Latest: that badge stays with
+          # GKUI, which shares this repository. Tags keep the -testN form
+          # because installed XGIMI updaters (Test 8 onward) only recognise it.
           gh release create "$tag" dist/* \
             --target "$GITHUB_SHA" \
-            --title "Plezy XGIMI Lite ${XGIMI_VERSION} Test ${number}" \
+            --title "Plezy XGIMI Lite ${XGIMI_VERSION} build ${number}" \
             --notes-file notes.md \
-            --prerelease
+            --latest=false
