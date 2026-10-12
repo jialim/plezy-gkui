@@ -374,7 +374,8 @@ class UpdateService {
           targetCommit.isEmpty) {
         continue;
       }
-      final label = candidate.number == null ? candidate.version : '${candidate.version} Test ${candidate.number}';
+      // Releases are stable from build 10; the tag's -testN is only the counter.
+      final label = candidate.number == null ? candidate.version : '${candidate.version} build ${candidate.number}';
       final notes = release['body'] is String ? release['body'] as String : '';
       final codeMatch = RegExp(
         '^\\s*- ${is64Bit ? 'arm64' : 'armv7'} APK version code:\\s*(\\d+)\\s*\$',
