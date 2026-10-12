@@ -20,8 +20,11 @@ is removed when you uninstall the app:
   unit could read them. Signing out deletes them.
 - **A random client identifier** that Plex uses to recognize this head unit.
 - **Settings and remembered choices**: seek intervals, skip and autoplay
-  settings, and the media version, audio track and subtitle you chose per
-  title or show (up to 200 titles).
+  settings, and the media version, audio track, subtitle and playback
+  quality you chose per title or show (up to 200 titles).
+- **Resume points**: where this head unit last stopped up to 100 titles, so a
+  crash or a lost connection keeps the position. They belong to the current
+  server and profile, and signing out or switching profile deletes them.
 - **Cached Plex content**: Home shelves, library lists and poster images, so
   the app can start quickly and stay usable offline. Signing out or switching
   Plex Home profile clears the cached lists.

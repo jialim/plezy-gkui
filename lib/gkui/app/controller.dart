@@ -29,11 +29,14 @@ class GkuiController extends ChangeNotifier {
   GkuiUpdateInfo? updateInfo;
   String? updateError;
   bool checkingForUpdate = false;
+  bool testingConnection = false;
+  String? connectionReport;
+  PlaybackProblem? lastPlaybackProblem;
   bool installingUpdate = false;
   // What this car last played, so screens opened before playback show the
-  // new resume point instead of the one Plex returned when they loaded.
-  final Map<String, int> _localProgress = <String, int>{};
-  final Set<String> _locallyWatched = <String>{};
+  // new resume point instead of the one Plex returned when they loaded. It is
+  // also saved, so a crash or a dead connection keeps the position.
+  Map<String, LocalProgress> _localProgress = <String, LocalProgress>{};
   bool loadingContent = false;
   bool searching = false;
   bool loadingMoreLibrary = false;
@@ -48,15 +51,23 @@ class GkuiController extends ChangeNotifier {
 
   bool get clockValid => DateTime.now().year >= 2024;
 
+  LocalProgress? _localFor(PlexMedia media) {
+    final local = _localProgress[media.ratingKey];
+    return local != null && local.supersedes(media) ? local : null;
+  }
+
   int resumeOffsetFor(PlexMedia media) =>
-      _localProgress[media.ratingKey] ?? media.viewOffsetMs;
+      _localFor(media)?.positionMs ?? media.viewOffsetMs;
 
   bool isWatched(PlexMedia media) =>
-      media.watched || _locallyWatched.contains(media.ratingKey);
+      media.watched || _localFor(media)?.watched == true;
 
   void _clearLocalProgress() {
-    _localProgress.clear();
-    _locallyWatched.clear();
+    _localProgress = <String, LocalProgress>{};
+  }
+
+  void _loadLocalProgress() {
+    _localProgress = api?.loadLocalProgress() ?? <String, LocalProgress>{};
   }
 
   Future<void> initialize() async {
@@ -73,6 +84,7 @@ class GkuiController extends ChangeNotifier {
       if (api!.session == null) {
         phase = AppPhase.signedOut;
       } else {
+        _loadLocalProgress();
         shelves = api!.loadCachedHome();
         sections = api!.loadCachedSections();
         selectedSection = sections.isEmpty ? null : sections.first;
@@ -544,8 +556,15 @@ class GkuiController extends ChangeNotifier {
     notifySafely();
   }
 
-  void _updateLocalProgress(String ratingKey, int position) {
-    _localProgress[ratingKey] = position;
+  void _updateLocalProgress(String ratingKey, int position,
+      {bool watched = false}) {
+    final progress = LocalProgress(
+      positionMs: position,
+      savedAtSec: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      watched: watched || _localProgress[ratingKey]?.watched == true,
+    );
+    _localProgress[ratingKey] = progress;
+    unawaited(api?.saveLocalProgress(ratingKey, progress));
     PlexMedia update(PlexMedia item) => item.ratingKey == ratingKey
         ? item.copyWith(viewOffsetMs: position)
         : item;
@@ -555,6 +574,31 @@ class GkuiController extends ChangeNotifier {
         .toList();
     libraryItems = libraryItems.map(update).toList();
     searchResults = searchResults.map(update).toList();
+  }
+
+  /// The Settings connection test: times the saved address and finds
+  /// another route when it does not answer.
+  Future<void> testConnection() async {
+    if (api?.session == null || testingConnection) return;
+    testingConnection = true;
+    connectionReport = null;
+    notifySafely();
+    try {
+      final check = await api!.checkConnection();
+      connectionReport = check.describe();
+      logs.add('Connection test: ${check.describe().replaceAll('\n', ' / ')}');
+      if (check.switched) unawaited(refreshContent(includeLibrary: false));
+    } catch (caught) {
+      connectionReport = message('No route reached the server', caught);
+    } finally {
+      testingConnection = false;
+      notifySafely();
+    }
+  }
+
+  void dismissPlaybackProblem() {
+    lastPlaybackProblem = null;
+    notifySafely();
   }
 
   void fail(String prefix, Object value) {
@@ -574,8 +618,33 @@ class GkuiController extends ChangeNotifier {
     return '$prefix: ${compact(value)}';
   }
 
-  static String compact(Object value) =>
-      value.toString().replaceFirst(RegExp(r'^(Exception|StateError):\s*'), '');
+  /// One short line for the driver. Dio's own messages run to a paragraph
+  /// of developer advice that does not fit a head-unit dialog.
+  static String compact(Object value) {
+    if (value is DioException) {
+      final status = value.response?.statusCode;
+      return switch (value.type) {
+        DioExceptionType.connectionTimeout ||
+        DioExceptionType.sendTimeout ||
+        DioExceptionType.receiveTimeout =>
+          'The Plex server did not answer in time.',
+        DioExceptionType.connectionError =>
+          'The Plex server could not be reached.',
+        DioExceptionType.badCertificate =>
+          'The Plex server\'s certificate was not trusted.',
+        DioExceptionType.cancel => 'The request was cancelled.',
+        DioExceptionType.badResponse => status == null
+            ? 'The Plex server sent an unexpected answer.'
+            : 'The Plex server answered HTTP $status.',
+        DioExceptionType.unknown => value.error == null
+            ? 'The Plex server could not be reached.'
+            : compact(value.error!),
+      };
+    }
+    return value
+        .toString()
+        .replaceFirst(RegExp(r'^(Exception|StateError):\s*'), '');
+  }
 
   void notifySafely() {
     if (!disposed) notifyListeners();

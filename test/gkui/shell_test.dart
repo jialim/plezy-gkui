@@ -167,8 +167,8 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: DetailsScreen(media: episode, controller: controller)));
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('Resume from 12:34'), findsOneWidget);
-    expect(find.text('Play from beginning'), findsOneWidget);
+    expect(find.text('Resume 12:34'), findsOneWidget);
+    expect(find.text('Start over'), findsOneWidget);
     expect(find.textContaining('S1 E3'), findsWidgets);
     expect(tester.takeException(), isNull);
     controller.dispose();

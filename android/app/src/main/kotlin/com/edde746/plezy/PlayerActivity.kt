@@ -5,11 +5,13 @@ import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.StateListDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -75,18 +77,21 @@ class PlayerActivity : Activity() {
     private var automaticRetries = 0
     private val lifecycle = PlaybackLifecycle()
     private var reconnectRunnable: Runnable? = null
+    /** When the pending reconnect is due, so a wake keeps its backoff. */
+    private var reconnectDueAtMs = 0L
     private var playerView: StyledPlayerView? = null
     private var trackSelector: DefaultTrackSelector? = null
     private var skipButton: Button? = null
     private var statusLabel: TextView? = null
     private var reconnecting = false
     private var bufferingSinceMs = 0L
-    private var controlPanel: LinearLayout? = null
+    private var controlPanel: FrameLayout? = null
     private var playPauseButton: Button? = null
     private var audioButton: Button? = null
     private var captionsButton: Button? = null
     private var seekBar: SeekBar? = null
     private var positionLabel: TextView? = null
+    private var durationLabel: TextView? = null
     private var userSeeking = false
     private var initialSubtitleApplied = false
     private var initialAudioApplied = false
@@ -125,9 +130,9 @@ class PlayerActivity : Activity() {
         pendingSeekPositionMs = null
         if (target != null && !completed) player?.seekTo(target)
     }
-    private val hideControlsRunnable = Runnable {
-        if (player?.isPlaying == true) controlPanel?.visibility = View.GONE
-    }
+    /** Last tap, key or button press that should keep the controls on screen. */
+    private var controlsShownAtMs = 0L
+    private var choiceDialogOpen = false
     private val startupTransferListener = object : TransferListener {
         override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) = Unit
 
@@ -166,6 +171,7 @@ class PlayerActivity : Activity() {
                     reportTimeline(exo.currentPosition, "playing")
                 }
                 updateCarControls(exo)
+                autoHideControls(exo, now)
                 resetReconnectBudgetIfStable(exo, now)
                 updateBufferingStatus(exo, now)
                 checkStartupProgress(exo, now)
@@ -316,8 +322,17 @@ class PlayerActivity : Activity() {
         try {
             root.addView(createCarControls(), FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ))
+            // StyledPlayerView ignores touches while its own controller is
+            // off, so a transparent layer under the controls takes the taps.
+            val tapLayer = View(this).apply {
+                contentDescription = "Show or hide player controls"
+                setOnClickListener { toggleControls() }
+            }
+            root.addView(tapLayer, 1, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
             ))
             diagnostics.add("Player controls: GKUI large-touch overlay")
         } catch (error: LinkageError) {
@@ -326,12 +341,12 @@ class PlayerActivity : Activity() {
             view.setShowSubtitleButton(true)
             diagnostics.add("Player controls: stock compatibility fallback (${describeLinkage(error)})")
         }
-        view.setOnClickListener { toggleControls() }
         val skip = Button(this).apply {
             visibility = View.GONE
-            textSize = 20f
-            minHeight = dp(64)
-            minWidth = dp(170)
+            textSize = 22f * controlScale
+            transformationMethod = null
+            minHeight = sdp(76)
+            minWidth = sdp(190)
             setTextColor(Color.WHITE)
             background = carButtonBackground(0xEEFF9800.toInt())
             setOnClickListener {
@@ -344,8 +359,8 @@ class PlayerActivity : Activity() {
         root.addView(skip, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.END or Gravity.CENTER_VERTICAL,
-        ).apply { setMargins(0, 0, dp(28), 0) })
+            Gravity.END or Gravity.BOTTOM,
+        ).apply { setMargins(0, 0, sdp(24), sdp(112)) })
         val status = TextView(this).apply {
             visibility = View.GONE
             textSize = 20f
@@ -359,7 +374,7 @@ class PlayerActivity : Activity() {
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
             Gravity.TOP or Gravity.CENTER_HORIZONTAL,
-        ).apply { setMargins(0, dp(24), 0, 0) })
+        ).apply { setMargins(0, sdp(116), 0, 0) })
         setContentView(root)
         showControls()
 
@@ -463,9 +478,17 @@ class PlayerActivity : Activity() {
                 }
             }
 
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                // A pause from audio focus, unplugged audio or a steering key
+                // brings the controls back so the driver sees what happened.
+                if (!playWhenReady) guarded("pause") { showControls() }
+            }
+
             override fun onRenderedFirstFrame() {
                 guarded("first frame") {
                     renderedFirstFrame = true
+                    // The controls stay up through startup, then hide on their own.
+                    controlsShownAtMs = SystemClock.elapsedRealtime()
                     firstFrameMs = SystemClock.elapsedRealtime() - playerStartedAtMs
                     videoFormat = describeVideoFormat(exo.videoFormat)
                     diagnostics.add("Player: first video frame in ${firstFrameMs}ms")
@@ -546,43 +569,116 @@ class PlayerActivity : Activity() {
         timelineHandler.post(timelineRunnable)
     }
 
-    private fun createCarControls(): LinearLayout {
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(10), dp(18), dp(12))
-            background = GradientDrawable().apply { setColor(0xE6161616.toInt()) }
-        }
+    /**
+     * The in-car controls: close, title, audio and subtitles along the top;
+     * rewind, play and forward as large round buttons in the middle; position,
+     * seek bar and length along the bottom. Sized for a thumb at arm's length
+     * and scaled to the screen height, over fades that keep the video visible.
+     */
+    private fun createCarControls(): FrameLayout {
+        val panel = FrameLayout(this)
         controlPanel = panel
+        val match = FrameLayout.LayoutParams.MATCH_PARENT
+        val wrap = FrameLayout.LayoutParams.WRAP_CONTENT
 
-        val time = TextView(this).apply {
-            text = "00:00 / --:--"
-            textSize = 18f
+        val top = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(sdp(14), sdp(12), sdp(14), sdp(26))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xE6000000.toInt(), 0x00000000),
+            )
+        }
+        panel.addView(top, FrameLayout.LayoutParams(match, wrap, Gravity.TOP))
+        top.addView(
+            carButton("Close", "Close player", 21f) { closeByUser() },
+            LinearLayout.LayoutParams(sdp(118), sdp(72)),
+        )
+        val title = TextView(this).apply {
+            text = intent.getStringExtra(EXTRA_TITLE).orEmpty()
+            textSize = 22f * controlScale
+            setTextColor(Color.WHITE)
+            setSingleLine(true)
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(sdp(16), 0, sdp(16), 0)
+        }
+        top.addView(title, LinearLayout.LayoutParams(0, wrap, 1f))
+        audioButton = carButton("Audio", "Choose audio language", 21f) { showAudioDialog() }.also {
+            top.addView(it, LinearLayout.LayoutParams(sdp(124), sdp(72)))
+        }
+        captionsButton = carButton("CC", "Choose subtitles", 21f) { showSubtitleDialog() }.also {
+            top.addView(it, LinearLayout.LayoutParams(sdp(124), sdp(72)).apply {
+                // Avoid the API 17 start/end margin methods on vendor-modified
+                // Android 4.4 frameworks; this landscape UI is not RTL.
+                setMargins(sdp(10), 0, 0, 0)
+            })
+        }
+
+        val centre = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        panel.addView(centre, FrameLayout.LayoutParams(wrap, wrap, Gravity.CENTER))
+        val seekSize = sdp(108)
+        val playSize = sdp(136)
+        val gap = sdp(40)
+        centre.addView(
+            roundButton("\u2212${seekBackMs / 1_000}s", "Rewind ${seekBackMs / 1_000} seconds", 24f) {
+                queueSeek(-seekBackMs)
+            },
+            LinearLayout.LayoutParams(seekSize, seekSize),
+        )
+        playPauseButton = roundButton("Pause", "Play or pause", 26f) {
+            val exo = player
+            if (exo?.playWhenReady == true) exo.pause() else exo?.play()
+            exo?.let(::updateCarControls)
+        }.also {
+            centre.addView(it, LinearLayout.LayoutParams(playSize, playSize).apply {
+                setMargins(gap, 0, gap, 0)
+            })
+        }
+        centre.addView(
+            roundButton("+${seekForwardMs / 1_000}s", "Forward ${seekForwardMs / 1_000} seconds", 24f) {
+                queueSeek(seekForwardMs)
+            },
+            LinearLayout.LayoutParams(seekSize, seekSize),
+        )
+
+        val bottom = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(sdp(14), sdp(26), sdp(14), sdp(10))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(0xE6000000.toInt(), 0x00000000),
+            )
+        }
+        panel.addView(bottom, FrameLayout.LayoutParams(match, wrap, Gravity.BOTTOM))
+        fun timeLabel(initial: String) = TextView(this).apply {
+            text = initial
+            textSize = 20f * controlScale
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
         }
-        positionLabel = time
-        panel.addView(time, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(30),
-        ))
-
+        positionLabel = timeLabel("00:00").also {
+            bottom.addView(it, LinearLayout.LayoutParams(sdp(96), wrap))
+        }
         val progress = SeekBar(this).apply {
             max = 1_000
             // Do not set minHeight here: on a SeekBar it resolves to
             // ProgressBar.setMinHeight, which only exists from API 29. The
-            // 48dp LayoutParams below already give the bar its touch height.
+            // LayoutParams below give the bar its touch height.
             contentDescription = "Playback position"
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onStartTrackingTouch(seekBar: SeekBar) {
                     userSeeking = true
-                    timelineHandler.removeCallbacks(hideControlsRunnable)
                 }
 
                 override fun onProgressChanged(seekBar: SeekBar, value: Int, fromUser: Boolean) {
                     if (!fromUser) return
                     val duration = player?.duration?.takeIf { it > 0L } ?: return
-                    val target = duration * value / seekBar.max
-                    positionLabel?.text = "${formatTime(target)} / ${formatTime(duration)}"
+                    positionLabel?.text = formatTime(duration * value / seekBar.max)
                 }
 
                 override fun onStopTrackingTouch(seekBar: SeekBar) {
@@ -597,62 +693,62 @@ class PlayerActivity : Activity() {
             })
         }
         seekBar = progress
-        panel.addView(progress, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(48),
-        ))
-
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+        bottom.addView(progress, LinearLayout.LayoutParams(0, sdp(64), 1f))
+        durationLabel = timeLabel("--:--").also {
+            bottom.addView(it, LinearLayout.LayoutParams(sdp(96), wrap))
         }
-        panel.addView(row, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            dp(70),
-        ))
-
-        fun addButton(label: String, description: String, action: () -> Unit): Button {
-            val button = Button(this).apply {
-                text = label
-                textSize = 19f
-                setTextColor(Color.WHITE)
-                // Some ECARX Android 4.4 builds omit TextView.setAllCaps despite
-                // reporting API 19. Removing the transformation is equivalent
-                // and only relies on the original TextView API.
-                transformationMethod = null
-                minWidth = 0
-                minHeight = dp(64)
-                contentDescription = description
-                background = carButtonBackground(0xFF303030.toInt())
-                setOnClickListener {
-                    action()
-                    showControls()
-                }
-            }
-            row.addView(button, LinearLayout.LayoutParams(0, dp(64), 1f).apply {
-                // Avoid the API 17 start/end margin methods on vendor-modified
-                // Android 4.4 frameworks; this landscape UI is not RTL.
-                setMargins(dp(4), 0, dp(4), 0)
-            })
-            return button
-        }
-
-        addButton("Close", "Close player") { closeByUser() }
-        addButton("−${seekBackMs / 1_000}s", "Rewind ${seekBackMs / 1_000} seconds") {
-            queueSeek(-seekBackMs)
-        }
-        playPauseButton = addButton("Pause", "Play or pause") {
-            val exo = player
-            if (exo?.playWhenReady == true) exo.pause() else exo?.play()
-            exo?.let(::updateCarControls)
-        }
-        addButton("+${seekForwardMs / 1_000}s", "Forward ${seekForwardMs / 1_000} seconds") {
-            queueSeek(seekForwardMs)
-        }
-        audioButton = addButton("Audio", "Choose audio language") { showAudioDialog() }
-        captionsButton = addButton("CC", "Choose subtitles") { showSubtitleDialog() }
         return panel
     }
+
+    /** A rectangular control; every press also restarts the auto-hide timer. */
+    private fun carButton(label: String, description: String, size: Float, action: () -> Unit): Button =
+        Button(this).apply {
+            text = label
+            textSize = size * controlScale
+            setTextColor(Color.WHITE)
+            // Some ECARX Android 4.4 builds omit TextView.setAllCaps despite
+            // reporting API 19. Removing the transformation is equivalent
+            // and only relies on the original TextView API.
+            transformationMethod = null
+            minWidth = 0
+            minHeight = 0
+            setPadding(0, 0, 0, 0)
+            gravity = Gravity.CENTER
+            setSingleLine(true)
+            contentDescription = description
+            background = pressable(carButtonBackground(0xCC303030.toInt()), carButtonBackground(0xFF5A5A5A.toInt()))
+            setOnClickListener {
+                action()
+                showControls()
+            }
+        }
+
+    private fun roundButton(label: String, description: String, size: Float, action: () -> Unit): Button =
+        carButton(label, description, size, action).apply {
+            background = pressable(roundBackground(0xB3202020.toInt()), roundBackground(0xE6505050.toInt()))
+        }
+
+    private fun roundBackground(color: Int): GradientDrawable = GradientDrawable().apply {
+        setShape(GradientDrawable.OVAL)
+        setColor(color)
+        setStroke(sdp(2), 0xFFB0B0B0.toInt())
+    }
+
+    /** Visible press feedback, which a touch screen without haptics needs. */
+    private fun pressable(normal: GradientDrawable, pressed: GradientDrawable): StateListDrawable =
+        StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), pressed)
+            addState(intArrayOf(), normal)
+        }
+
+    /** Control sizes are designed for 480dp of height and scale to the screen. */
+    private val controlScale: Float by lazy {
+        val metrics = resources.displayMetrics
+        val heightDp = minOf(metrics.widthPixels, metrics.heightPixels) / metrics.density
+        PlayerControlsLayout.scale(heightDp)
+    }
+
+    private fun sdp(value: Int): Int = (value * controlScale * resources.displayMetrics.density + 0.5f).toInt()
 
     private fun carButtonBackground(color: Int): GradientDrawable = GradientDrawable().apply {
         setColor(color)
@@ -665,17 +761,30 @@ class PlayerActivity : Activity() {
     private fun toggleControls() {
         if (controlPanel?.visibility == View.VISIBLE) {
             controlPanel?.visibility = View.GONE
-            timelineHandler.removeCallbacks(hideControlsRunnable)
         } else {
             showControls()
         }
     }
 
+    /** Shows the controls and restarts their idle timer. */
     private fun showControls() {
         controlPanel?.visibility = View.VISIBLE
-        timelineHandler.removeCallbacks(hideControlsRunnable)
-        if (player?.isPlaying == true) {
-            timelineHandler.postDelayed(hideControlsRunnable, 6_000L)
+        controlsShownAtMs = SystemClock.elapsedRealtime()
+    }
+
+    /** Called on every progress tick, so playback starting also starts the timer. */
+    private fun autoHideControls(exo: ExoPlayer, now: Long) {
+        val panel = controlPanel ?: return
+        if (ControlsAutoHide.shouldHide(
+                visible = panel.visibility == View.VISIBLE,
+                playWhenReady = exo.playWhenReady,
+                renderedFirstFrame = renderedFirstFrame,
+                seeking = userSeeking,
+                dialogOpen = choiceDialogOpen,
+                idleMs = now - controlsShownAtMs,
+            )
+        ) {
+            panel.visibility = View.GONE
         }
     }
 
@@ -686,6 +795,7 @@ class PlayerActivity : Activity() {
         captionsButton = null
         seekBar = null
         positionLabel = null
+        durationLabel = null
     }
 
     private fun describeLinkage(error: LinkageError): String {
@@ -702,7 +812,8 @@ class PlayerActivity : Activity() {
         if (userSeeking) return
         val duration = exo.duration.takeIf { it > 0L }
         val position = exo.currentPosition.coerceAtLeast(0L)
-        positionLabel?.text = "${formatTime(position)} / ${duration?.let(::formatTime) ?: "--:--"}"
+        positionLabel?.text = formatTime(position)
+        durationLabel?.text = duration?.let(::formatTime) ?: "--:--"
         seekBar?.apply {
             isEnabled = duration != null
             progress = if (duration == null) 0 else ((position * max) / duration).toInt()
@@ -853,8 +964,13 @@ class PlayerActivity : Activity() {
             }.takeIf { it >= 0 }
         } ?: 0
         val adapter = largeChoiceAdapter(tracks.map { it.label })
+        choiceDialogOpen = true
         AlertDialog.Builder(this)
             .setTitle("Audio language")
+            .setOnDismissListener {
+                choiceDialogOpen = false
+                showControls()
+            }
             .setSingleChoiceItems(adapter, selected) { dialog, choice ->
                 try {
                     val track = tracks[choice]
@@ -1005,8 +1121,13 @@ class PlayerActivity : Activity() {
             }.takeIf { it >= 0 }?.plus(1)
         } ?: 0
         val adapter = largeChoiceAdapter(labels)
+        choiceDialogOpen = true
         AlertDialog.Builder(this)
             .setTitle("Subtitles")
+            .setOnDismissListener {
+                choiceDialogOpen = false
+                showControls()
+            }
             .setSingleChoiceItems(adapter, selected) { dialog, choice ->
                 try {
                     if (choice == 0) {
@@ -1063,7 +1184,9 @@ class PlayerActivity : Activity() {
             }
         }
         reconnectRunnable = retry
-        timelineHandler.postDelayed(retry, StreamResilience.reconnectDelayMs(attempt))
+        val delay = StreamResilience.reconnectDelayMs(attempt)
+        reconnectDueAtMs = SystemClock.elapsedRealtime() + delay
+        timelineHandler.postDelayed(retry, delay)
         return true
     }
 
@@ -1211,7 +1334,13 @@ class PlayerActivity : Activity() {
         }
         if (!completed && resumeRequested) player?.play()
         if (!completed && player != null) {
-            reconnectRunnable?.let { timelineHandler.post(it) }
+            reconnectRunnable?.let {
+                timelineHandler.removeCallbacks(it)
+                timelineHandler.postDelayed(
+                    it,
+                    StreamResilience.remainingDelayMs(reconnectDueAtMs, SystemClock.elapsedRealtime()),
+                )
+            }
             timelineHandler.removeCallbacks(timelineRunnable)
             timelineHandler.post(timelineRunnable)
         }
@@ -1371,7 +1500,6 @@ class PlayerActivity : Activity() {
         val duration = exo?.duration?.takeIf { it > 0L } ?: 0L
         timelineHandler.removeCallbacks(timelineRunnable)
         timelineHandler.removeCallbacks(seekRunnable)
-        timelineHandler.removeCallbacks(hideControlsRunnable)
         if (renderedFirstFrame) reportTimeline(position, if (ended) "stopped" else "paused")
         val audioChoice = userAudioChoice
         val audioChoiceId = audioChoice?.let(::plexIdForAudio)
@@ -1421,7 +1549,6 @@ class PlayerActivity : Activity() {
         if (activePlayer.get() === this) activePlayer.clear()
         timelineHandler.removeCallbacks(timelineRunnable)
         timelineHandler.removeCallbacks(seekRunnable)
-        timelineHandler.removeCallbacks(hideControlsRunnable)
         playerView?.player = null
         player?.release()
         player = null

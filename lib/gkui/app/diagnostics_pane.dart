@@ -23,6 +23,50 @@ class _DiagnosticsPaneState extends State<DiagnosticsPane> {
     widget.logs.add('Diagnostics copied to clipboard.');
   }
 
+  /// Shows the redacted diagnostics as a QR code a phone can scan.
+  Future<void> showQr() async {
+    final snapshot = await diagnostics;
+    if (!mounted) return;
+    final header = <String>[
+      buildLabel,
+      toolchainLabel,
+      ...snapshot.values.entries.map((entry) => '${entry.key}: ${entry.value}'),
+      'endpoint: ${widget.controller.api?.safeEndpoint ?? 'not connected'}',
+      'last failure: ${widget.controller.lastPlaybackFailure ?? 'none'}',
+    ].join('\n');
+    final text = qrDiagnostics(header, widget.logs.exportText());
+    final size =
+        (MediaQuery.of(context).size.shortestSide - 110).clamp(200.0, 420.0);
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        contentPadding: const EdgeInsets.all(16),
+        content: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(8),
+            child: QrImageView(data: text, size: size.toDouble()),
+          ),
+          const SizedBox(height: 8),
+          const Text('Scan with a phone camera to share the latest logs.',
+              style: TextStyle(fontSize: 15)),
+        ]),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () {
+                copyDiagnostics();
+                Navigator.pop(context);
+              },
+              child: const Text('Copy all', style: TextStyle(fontSize: 18))),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close', style: TextStyle(fontSize: 18))),
+        ],
+      ),
+    );
+    widget.logs.add('Diagnostics shown as a QR code.');
+  }
+
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(22, 16, 22, 16),
@@ -42,9 +86,9 @@ class _DiagnosticsPaneState extends State<DiagnosticsPane> {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
-                    onPressed: copyDiagnostics,
-                    icon: const Icon(Icons.copy),
-                    label: const Text('Copy')),
+                    onPressed: showQr,
+                    icon: const Icon(Icons.qr_code_2),
+                    label: const Text('QR')),
                 const SizedBox(width: 8),
                 OutlinedButton(
                     onPressed: widget.controller.signOut,

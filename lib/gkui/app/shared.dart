@@ -4,6 +4,49 @@ enum AppPhase { starting, signedOut, signingIn, chooseServer, ready, error }
 
 enum PlaybackMode { direct, transcode720, transcode480 }
 
+/// A playback that ended in an error, kept for the Home screen so the driver
+/// can see why the video closed and pick it up again with one tap.
+class PlaybackProblem {
+  const PlaybackProblem(
+      {required this.media,
+      required this.message,
+      required this.mode,
+      this.resumeAtMs,
+      this.reconnectAttempts = 0});
+  final PlexMedia media;
+  final String message;
+  final PlaybackMode mode;
+  final int? resumeAtMs;
+  final int reconnectAttempts;
+}
+
+/// The most reconnect attempts the native player reported for one dropout.
+int reconnectAttemptsFrom(Iterable<String> diagnostics) {
+  final pattern = RegExp(r'reconnect (\d+) of \d+');
+  var most = 0;
+  for (final line in diagnostics) {
+    final match = pattern.firstMatch(line);
+    final attempt = match == null ? 0 : int.parse(match.group(1)!);
+    if (attempt > most) most = attempt;
+  }
+  return most;
+}
+
+/// What to store for a mode that showed video; direct play stores nothing.
+String? rememberedPlaybackMode(PlaybackMode mode) =>
+    mode == PlaybackMode.direct ? null : mode.name;
+
+/// The mode to start a title in, from what last showed video for it.
+PlaybackMode playbackModeFrom(String? stored) =>
+    PlaybackMode.values.where((mode) => mode.name == stored).firstOrNull ??
+    PlaybackMode.direct;
+
+String playbackModeLabel(PlaybackMode mode) => switch (mode) {
+      PlaybackMode.direct => 'Original quality',
+      PlaybackMode.transcode720 => '720p compatible',
+      PlaybackMode.transcode480 => '480p safe mode',
+    };
+
 /// Reads the audio/subtitle tracks picked inside the native player and maps
 /// them to Plex streams. Returns null when the driver changed nothing.
 PlaybackChoice? playerTrackChoice(

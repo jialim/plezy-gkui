@@ -26,6 +26,9 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Full history and tags, for the commit list in the release notes.
+          fetch-depth: 0
 
       - name: Read version
         id: version
@@ -125,6 +128,17 @@ jobs:
           # The notes file lists the newest version first; drop the
           # "(unreleased)" marker for the published copy.
           sed 's/ (unreleased)//' GKUI_1_2_RELEASE_NOTES.md > notes.md
+
+          # Generated from history, so nothing merged is left out of the notes.
+          previous=$(git tag --list 'gkui-v*' --sort=-v:refname | grep -vx "$TAG" | head -1 || true)
+          if [ -n "$previous" ]; then
+            {
+              echo
+              echo "## Commits since ${previous}"
+              echo
+              git log --no-merges --format='- %s (%h)' "${previous}..${GITHUB_SHA}"
+            } >> notes.md
+          fi
           cat >> notes.md <<NOTES
 
           ## Build

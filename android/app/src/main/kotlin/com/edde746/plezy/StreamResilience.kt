@@ -52,6 +52,9 @@ internal object StreamResilience {
 
     fun reconnectDelayMs(attempt: Int): Long = 2_000L shl (attempt - 1).coerceIn(0, 4)
 
+    /** What is left of a backoff that was interrupted, never negative. */
+    fun remainingDelayMs(dueAtMs: Long, nowMs: Long): Long = (dueAtMs - nowMs).coerceAtLeast(0L)
+
     fun endedEarly(positionMs: Long, durationMs: Long): Boolean =
         durationMs > EARLY_END_MARGIN_MS * 2 && positionMs >= 0L &&
             positionMs < durationMs - EARLY_END_MARGIN_MS

@@ -137,6 +137,7 @@ class PlexMediaVersion {
     this.width,
     this.height,
     this.sizeBytes,
+    this.durationMs,
     this.audioTracks = const <PlexTrack>[],
     this.subtitleTracks = const <PlexTrack>[],
   });
@@ -151,6 +152,9 @@ class PlexMediaVersion {
   final int? width;
   final int? height;
   final int? sizeBytes;
+
+  /// This file's own running time; cuts of one title can differ by minutes.
+  final int? durationMs;
   final List<PlexTrack> audioTracks;
   final List<PlexTrack> subtitleTracks;
 
@@ -159,6 +163,15 @@ class PlexMediaVersion {
     if ((resolution ?? '').toLowerCase() == '4k') return 2160;
     return int.tryParse((resolution ?? '').replaceAll(RegExp('[^0-9]'), '')) ??
         0;
+  }
+
+  /// Resolution and codec only, for a picker button.
+  String get shortLabel {
+    final fields = <String>[
+      if (effectiveHeight > 0) '${effectiveHeight}p',
+      if (codec?.isNotEmpty == true) codec!.toUpperCase(),
+    ];
+    return fields.isEmpty ? 'Original' : fields.join(' ');
   }
 
   String get displayLabel {
@@ -223,6 +236,23 @@ class PlexTrack {
   final int? channels;
   final bool selected;
   final bool forced;
+
+  /// A label that fits a picker button: language, a distinguishing title,
+  /// surround layout and Forced, without codec details.
+  String get shortLabel {
+    final name = language?.isNotEmpty == true
+        ? language!
+        : title?.isNotEmpty == true
+            ? title!
+            : 'Track $id';
+    final fields = <String>[
+      name,
+      if (title?.isNotEmpty == true && title != name) title!,
+      if (channels == 6) '5.1' else if (channels == 8) '7.1',
+      if (forced) 'Forced',
+    ];
+    return fields.join(' ');
+  }
 
   String get displayLabel {
     final fields = <String>[
@@ -317,6 +347,7 @@ class PlaybackChoice {
     this.subtitleTitle,
     this.audioOrdinal,
     this.subtitleOrdinal,
+    this.playbackMode,
   });
   final int? mediaIndex;
   final String? audioTrackId;
@@ -330,6 +361,23 @@ class PlaybackChoice {
   final String? subtitleTitle;
   final int? audioOrdinal;
   final int? subtitleOrdinal;
+
+  /// The compatibility mode (`transcode720` or `transcode480`) that last
+  /// showed video for this title or show; null means direct play.
+  final String? playbackMode;
+
+  PlaybackChoice withPlaybackMode(String? mode) => PlaybackChoice(
+        mediaIndex: mediaIndex,
+        audioTrackId: audioTrackId,
+        subtitleTrackId: subtitleTrackId,
+        audioLanguage: audioLanguage,
+        subtitleLanguage: subtitleLanguage,
+        audioTitle: audioTitle,
+        subtitleTitle: subtitleTitle,
+        audioOrdinal: audioOrdinal,
+        subtitleOrdinal: subtitleOrdinal,
+        playbackMode: mode,
+      );
 }
 
 String? normalizeLanguageCode(String? language) {
@@ -488,6 +536,7 @@ class PlexMedia {
     this.index,
     this.parentIndex,
     this.viewCount = 0,
+    this.lastViewedAtSec,
     this.versions = const <PlexMediaVersion>[],
   });
 
@@ -509,6 +558,9 @@ class PlexMedia {
   final int? index;
   final int? parentIndex;
   final int viewCount;
+
+  /// When Plex last recorded a view, from any device (Unix seconds).
+  final int? lastViewedAtSec;
   final List<PlexMediaVersion> versions;
 
   bool get playable =>
@@ -535,8 +587,47 @@ class PlexMedia {
         index: index,
         parentIndex: parentIndex,
         viewCount: viewCount,
+        lastViewedAtSec: lastViewedAtSec,
         versions: versions,
       );
+}
+
+/// The result of the Settings connection test.
+class ConnectionCheck {
+  const ConnectionCheck(
+      {required this.route,
+      required this.endpoint,
+      required this.latencyMs,
+      required this.switched});
+  final String? route;
+  final String endpoint;
+  final int? latencyMs;
+
+  /// True when the saved address failed and another one was found.
+  final bool switched;
+
+  String describe() => <String>[
+        if (switched) 'Saved address failed; switched to a working one',
+        '${route == null ? 'Connected' : '${route![0].toUpperCase()}${route!.substring(1)} route'}'
+            ' • ${latencyMs == null ? 'no answer' : '$latencyMs ms'}',
+        endpoint,
+      ].join('\n');
+}
+
+/// Where this car last stopped a title, kept across restarts.
+class LocalProgress {
+  const LocalProgress(
+      {required this.positionMs,
+      required this.savedAtSec,
+      this.watched = false});
+  final int positionMs;
+  final int savedAtSec;
+  final bool watched;
+
+  /// Plex's own position wins once it records a later view, from this car
+  /// or another device; until then this car's last stop is newer.
+  bool supersedes(PlexMedia media) =>
+      media.lastViewedAtSec == null || savedAtSec >= media.lastViewedAtSec!;
 }
 
 class PlexShelf {
@@ -724,10 +815,69 @@ class PlexApi {
         subtitleTitle: value['subtitleTitle']?.toString(),
         audioOrdinal: (value['audioOrdinal'] as num?)?.toInt(),
         subtitleOrdinal: (value['subtitleOrdinal'] as num?)?.toInt(),
+        playbackMode: value['playbackMode']?.toString(),
       );
     } catch (_) {
       return const PlaybackChoice();
     }
+  }
+
+  /// Remembers the mode that showed video, so the next play of this title or
+  /// show starts there instead of repeating the failed attempts.
+  Future<void> savePlaybackMode(PlexMedia item, String? mode) async {
+    final current = loadPlaybackChoice(item);
+    if (current.playbackMode == mode) return;
+    await savePlaybackChoice(item, current.withPlaybackMode(mode));
+  }
+
+  static const String _localProgressKey = 'gkui.localProgress';
+  static const int _localProgressLimit = 100;
+
+  /// Resume points this car recorded for the current profile and server.
+  Map<String, LocalProgress> loadLocalProgress() {
+    final raw = _prefs.getString(_localProgressKey);
+    final scope = _cacheScope;
+    if (raw == null || scope == null) return <String, LocalProgress>{};
+    try {
+      final document = jsonDecode(raw) as Map<String, dynamic>;
+      if (document['scope'] != scope) return <String, LocalProgress>{};
+      final entries = document['entries'] as Map<String, dynamic>? ?? {};
+      return entries.map((key, value) {
+        final entry = value as Map<String, dynamic>;
+        return MapEntry(
+            key,
+            LocalProgress(
+              positionMs: (entry['p'] as num?)?.toInt() ?? 0,
+              savedAtSec: (entry['t'] as num?)?.toInt() ?? 0,
+              watched: entry['w'] == true,
+            ));
+      });
+    } catch (_) {
+      return <String, LocalProgress>{};
+    }
+  }
+
+  Future<void> saveLocalProgress(
+      String ratingKey, LocalProgress progress) async {
+    final scope = _cacheScope;
+    if (scope == null) return;
+    final entries = loadLocalProgress()
+      ..remove(ratingKey)
+      ..[ratingKey] = progress;
+    while (entries.length > _localProgressLimit) {
+      entries.remove(entries.keys.first);
+    }
+    await _prefs.setString(
+        _localProgressKey,
+        jsonEncode(<String, dynamic>{
+          'scope': scope,
+          'entries':
+              entries.map((key, value) => MapEntry(key, <String, dynamic>{
+                    'p': value.positionMs,
+                    't': value.savedAtSec,
+                    if (value.watched) 'w': true,
+                  })),
+        }));
   }
 
   Future<void> savePlaybackChoice(PlexMedia item, PlaybackChoice choice) async {
@@ -756,6 +906,7 @@ class PlexApi {
       if (choice.audioOrdinal != null) 'audioOrdinal': choice.audioOrdinal,
       if (choice.subtitleOrdinal != null)
         'subtitleOrdinal': choice.subtitleOrdinal,
+      if (choice.playbackMode != null) 'playbackMode': choice.playbackMode,
     };
     // Keep preference storage bounded on the low-memory device.
     while (all.length > 200) {
@@ -943,6 +1094,13 @@ class PlexApi {
       baseUrl: winner.uri,
     );
     await _saveSession(connected);
+    await _prefs.setString(
+        _routeKey,
+        winner.relay
+            ? 'relay'
+            : winner.local
+                ? 'local'
+                : 'remote');
     session = connected;
     logs.add('Connected securely to ${server.name} '
         '(${winner.relay ? 'relay' : winner.local ? 'local' : 'remote'}).');
@@ -952,6 +1110,47 @@ class PlexApi {
   /// Picks a working address again for the signed-in server. The saved
   /// address can stop answering when the car leaves the home Wi-Fi, so a
   /// failed refresh calls this before showing an error.
+  static const String _routeKey = 'gkui.route';
+
+  /// How the saved address reaches the server: local, remote or relay.
+  String? get connectionRoute => _prefs.getString(_routeKey);
+
+  /// Times the saved address. When it does not answer, looks for another
+  /// route the way a failed refresh does, then times that one.
+  Future<ConnectionCheck> checkConnection() async {
+    final before = _requireSession().baseUrl;
+    var latency = await _timeIdentity();
+    if (latency == null) {
+      await reconnect();
+      latency = await _timeIdentity();
+    }
+    return ConnectionCheck(
+      route: connectionRoute,
+      endpoint: safeEndpoint,
+      latencyMs: latency,
+      switched: session?.baseUrl != before,
+    );
+  }
+
+  Future<int?> _timeIdentity() async {
+    final value = _requireSession();
+    final watch = Stopwatch()..start();
+    try {
+      await _serverDio
+          .get<dynamic>('${value.baseUrl}/identity',
+              options: Options(
+                headers: headers(value.serverToken),
+                receiveTimeout: const Duration(seconds: 7),
+              ))
+          .timeout(const Duration(seconds: 8));
+      return watch.elapsedMilliseconds;
+    } catch (error) {
+      logs.add('Connection test: ${_safeHost(value.baseUrl)} did not answer '
+          '(${_briefError(error)}).');
+      return null;
+    }
+  }
+
   Future<PlexSession> reconnect() async {
     final value = _requireSession();
     logs.add('Saved endpoint failed; looking for another route.');
@@ -986,17 +1185,19 @@ class PlexApi {
       'baseUrl',
       'currentHomeUserUuid',
       'currentHomeUserName',
+      'route',
     ]) {
       await _prefs.remove('gkui.$key');
     }
+    await _prefs.remove(_localProgressKey);
     await _cache.clear();
-    session = null;
     _markerCache.clear();
     logs.add('Signed out; stored Plex tokens removed.');
   }
 
   Future<void> clearContentCache() async {
     _sessionGeneration++;
+    await _prefs.remove(_localProgressKey);
     await _cache.clear();
     _markerCache.clear();
   }
@@ -1190,6 +1391,45 @@ class PlexApi {
     if (items.isEmpty)
       throw StateError('Plex returned no metadata for this title.');
     return items.first;
+  }
+
+  /// Loads a title for playback and, in the same request, asks Plex whether
+  /// its files are still on disk. [checked] is the raw metadata to pass to
+  /// [fileProblem], or null when the check did not finish within [budget]
+  /// (a slow mount must not block playback); then the title is loaded
+  /// without the check.
+  Future<({PlexMedia item, Map<String, dynamic>? checked})>
+      loadMetadataCheckingFiles(String ratingKey,
+          {Duration budget = const Duration(milliseconds: 1500)}) async {
+    final value = _requireSession();
+    final cancel = CancelToken();
+    try {
+      final response = await _serverDio
+          .get<Map<String, dynamic>>(
+            '${value.baseUrl}/library/metadata/$ratingKey',
+            cancelToken: cancel,
+            queryParameters: const <String, dynamic>{
+              'includeGuids': 1,
+              'checkFiles': 1,
+            },
+            options: Options(headers: headers(value.serverToken)),
+          )
+          .timeout(budget);
+      final raw = (_container(response.data)['Metadata'] as List<dynamic>?)
+          ?.firstOrNull as Map<String, dynamic>?;
+      final items = _parseItems(_container(response.data)['Metadata']);
+      if (raw != null && items.isNotEmpty) {
+        return (item: items.first, checked: raw);
+      }
+    } on TimeoutException {
+      logs.add('File check skipped: no answer within its startup budget.');
+    } on DioException catch (error) {
+      // A rejected token or a deleted title fails the plain load the same way.
+      logs.add('File check skipped: ${_briefError(error)}');
+    } finally {
+      cancel.cancel('File check completed or reached its startup budget.');
+    }
+    return (item: await loadMetadata(ratingKey), checked: null);
   }
 
   /// Asks Plex whether the chosen file is still on disk before the player
@@ -1410,6 +1650,8 @@ class PlexApi {
           width: (mediaMap['width'] as num?)?.toInt(),
           height: (mediaMap['height'] as num?)?.toInt(),
           sizeBytes: (part?['size'] as num?)?.toInt(),
+          durationMs: (mediaMap['duration'] as num?)?.toInt() ??
+              (part?['duration'] as num?)?.toInt(),
           audioTracks: audioTracks,
           subtitleTracks: subtitleTracks,
         ));
@@ -1438,6 +1680,7 @@ class PlexApi {
         index: (map['index'] as num?)?.toInt(),
         parentIndex: (map['parentIndex'] as num?)?.toInt(),
         viewCount: (map['viewCount'] as num?)?.toInt() ?? 0,
+        lastViewedAtSec: (map['lastViewedAt'] as num?)?.toInt(),
         versions: versions,
       ));
     }
@@ -1553,7 +1796,9 @@ class PlexApi {
   }
 
   Future<void> reportProgress(PlexMedia item, int positionMs, String state,
-      {String? sessionId, Duration budget = const Duration(seconds: 2)}) async {
+      {String? sessionId,
+      int? durationMs,
+      Duration budget = const Duration(seconds: 2)}) async {
     final value = session;
     if (value == null) return;
     final cancel = CancelToken();
@@ -1567,7 +1812,7 @@ class PlexApi {
               'key': '/library/metadata/${item.ratingKey}',
               'state': state,
               'time': positionMs,
-              'duration': item.durationMs,
+              'duration': durationMs ?? item.durationMs,
             },
             options: Options(headers: <String, String>{
               ...headers(value.serverToken),
