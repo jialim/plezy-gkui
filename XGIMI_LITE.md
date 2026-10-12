@@ -34,6 +34,20 @@ The accessibility palette is tuned for an elderly viewer on a low-lumen projecto
 
 Test 8 offers Normal (1.2×), Large (1.4×), and Extra-large (1.6×) under Appearance. TV design-height calculations track the chosen root scale so they do not shrink the controls back down. Narrow detail action rows scroll as D-pad focus moves. Unfocused actions retain 85% brightness. Subtitle memory uses semantic intent and a canonical viewer scope; invalid cache shapes are discarded, and Playback settings can reset just the current viewer's choices. Unowned Test 7 entries are not inherited.
 
+The UI scale multiplies Flutter's logical pixels, which Android TV usually reports at density 2.0 (960×540 logical on a 1080p panel), not 1:1. Normal therefore lays the UI out on about 800×450, Large on about 686×386 and Extra-large on 600×338. Check the projector's density on the Logs screen ("dpi") and smoke-test Large and Extra-large before recommending them.
+
+Test 9 adds, for the remote and the sofa:
+
+- The first launch asks 中文 or English before anything else, sign-in included. Settings > General switches it later and lists only Simplified Chinese, Traditional Chinese and English. Every screen now has Simplified and Traditional Chinese text; upstream had left about 40 strings (audio channels, library filters and others) in English, and the installer's error toast is Chinese.
+- Back with the controls hidden or showing asks "press Back again to stop" for three seconds, so one stray press does not end a film.
+- The remote's CC key cycles subtitles (Off included), its audio key cycles audio tracks, and Menu raises the player controls.
+- New installs default to larger, bold subtitles (46 instead of 38) with a thicker outline. Existing custom subtitle settings are kept.
+- Chinese subtitles no longer show empty boxes for less common characters such as 诶 and 谘. A companion subtitle font adds the ~9000 GBK, GB2312 and Big5 hanzi the bundled Go Noto font lacks (827 of GB2312 and 4941 of Big5 were missing). It adds about 3.4 MB to the APK.
+- A full Chinese subtitle track is chosen over a forced, signs-only one. Cantonese audio still turns Chinese subtitles on; Mandarin audio does not.
+- Scrolling back left along the detail action row works again; it only scrolled forward.
+- Update downloads resume after a dropped connection instead of starting the 95 MB APK again, and the startup update prompt waits until the player closes.
+- The Logs screen lists the display's supported modes, density and HDR types, so frame-rate matching can be judged before it is turned on.
+
 Update downloads use abortable streaming requests, a Cancel action, stalled/overall timeouts, integrity checks, and separate network/storage/verification/installer errors. Release notes publish actual per-ABI Android version codes; both the updater and native verifier reject equal/older builds. CI requires an increasing build number and runs the Android JVM suite, including APK verifier tests, before building a release. The package ID remains `app.plezylite.xgimi` and the launcher label is now Plezy XGIMI Lite.
 
 ## Playback policy
@@ -97,6 +111,17 @@ To create the key once:
 keytool -genkeypair -keystore xgimi.jks -alias xgimi -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Plezy XGIMI Lite'
 base64 -w0 xgimi.jks   # paste into the XGIMI_KEYSTORE_BASE64 secret
 ```
+
+## Upstream updates
+
+XGIMI Lite is upstream Plezy 2.22.0 plus a small, mostly additive set of commits behind the `FAMILY_PROJECTOR_MODE` flag. As of 2026-10-11 there is no newer upstream release tag, but upstream `main` is 43 commits ahead with fixes that matter on this projector:
+
+- Xvid/MPEG-4 and MPEG-2 playback on Android mpv, and an ffmpeg DNS wait that stalled stream opening for 18–30 seconds on some networks.
+- Multi-part movies playing past Part 1, and slow servers no longer failing at the 10-second connect timeout.
+- Plex Home profile switches no longer loading the previous user's rows.
+- Dolby Vision played as its HDR10/HLG base layer, and subtitle position above 100 to move subtitles into the letterbox.
+
+A trial merge of upstream `main` conflicts only in three generated translation files (regenerate with `dart run slang`) and `external_player_service.dart`. Merge the next upstream release tag as soon as it is published, while the divergence is this small, and keep new fork behaviour in `family_projector_profile.dart` rather than in shared upstream files.
 
 ## Known limitations
 

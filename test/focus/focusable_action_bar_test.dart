@@ -33,6 +33,36 @@ void main() {
     final last = tester.getRect(find.byType(IconButton).last);
     expect(last.right, lessThanOrEqualTo(viewport.right + 1));
   });
+  testWidgets('moving back left scrolls the row back to the first action', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 160,
+              child: FocusableActionBar(
+                scrollable: true,
+                spacing: 12,
+                actions: [for (var i = 0; i < 8; i++) FocusableAction(debugLabel: 'action-$i', onPressed: () {})],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final state = tester.state<FocusableActionBarState>(find.byType(FocusableActionBar));
+    state.getFocusNode(7)!.requestFocus();
+    await tester.pumpAndSettle();
+    for (var i = 6; i >= 0; i--) {
+      state.getFocusNode(i)!.requestFocus();
+      await tester.pumpAndSettle();
+    }
+    final scroll = tester.state<ScrollableState>(find.byType(Scrollable));
+    expect(scroll.position.pixels, 0);
+    final viewport = tester.getRect(find.byType(SingleChildScrollView));
+    final first = tester.getRect(find.byType(IconButton).first);
+    expect(first.left, greaterThanOrEqualTo(viewport.left - 1));
+  });
   Future<void> pumpBar(WidgetTester tester, List<FocusableAction> actions, {double spacing = 12}) async {
     await tester.pumpWidget(
       MaterialApp(

@@ -304,6 +304,15 @@ class PlayerNavigationCoordinator {
   final VoidCallback navigateHome;
   final bool Function() isActive;
 
+  /// When true, a Back that would hide the controls or leave the player
+  /// first asks for a second Back within [exitConfirmWindow]. Used by the
+  /// family projector build, where one stray press should not end a film.
+  final bool Function() _confirmExit;
+  final VoidCallback? showExitConfirmation;
+  final DateTime Function() _clock;
+  static const Duration exitConfirmWindow = Duration(seconds: 3);
+  DateTime? _exitArmedAt;
+
   bool _handlingPhysicalEscape = false;
 
   PlayerNavigationCoordinator({
@@ -317,9 +326,14 @@ class PlayerNavigationCoordinator {
     required this.exitPlayer,
     required this.navigateHome,
     bool Function()? isActive,
+    bool Function()? confirmExit,
+    this.showExitConfirmation,
+    DateTime Function()? clock,
   }) : _physicalEscapeExitsFullscreen = physicalEscapeExitsFullscreen ?? _alwaysTrue,
        _exitPlayerBeforeChrome = exitPlayerBeforeChrome ?? _alwaysFalse,
-       isActive = isActive ?? _alwaysActive;
+       isActive = isActive ?? _alwaysActive,
+       _confirmExit = confirmExit ?? _alwaysFalse,
+       _clock = clock ?? DateTime.now;
 
   static bool _alwaysActive() => true;
   static bool _alwaysTrue() => true;
@@ -340,12 +354,27 @@ class PlayerNavigationCoordinator {
       exitPlayer();
       return;
     }
+    final armedAt = _exitArmedAt;
+    if (navigationKey == PlayerNavigationKey.back &&
+        armedAt != null &&
+        _clock().difference(armedAt) <= exitConfirmWindow) {
+      _exitArmedAt = null;
+      exitPlayer();
+      return;
+    }
     final disposition = resolvePlayerBackDisposition(
       navigationKey: navigationKey,
       contentStripVisible: chromeController.contentStripVisible,
       controlsVisible: isChromePresented(),
       physicalEscapeExitsFullscreen: _physicalEscapeExitsFullscreen(),
     );
+    if (navigationKey == PlayerNavigationKey.back &&
+        _confirmExit() &&
+        (disposition == PlayerBackDisposition.exitPlayer || disposition == PlayerBackDisposition.hideControls)) {
+      _exitArmedAt = _clock();
+      showExitConfirmation?.call();
+      return;
+    }
     _applyDisposition(disposition);
   }
 

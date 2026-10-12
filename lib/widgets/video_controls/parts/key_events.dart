@@ -275,6 +275,22 @@ extension _PlexVideoControlsKeyEventMethods on _PlexVideoControlsState {
     }
 
     final key = event.logicalKey;
+
+    // Dedicated remote keys some Android TV remotes carry. CC and the audio
+    // key switch tracks directly, as the S and A shortcuts do; Menu raises
+    // the controls with focus, where the tracks button lives. Without them a
+    // viewer has to press Up and walk the controls to reach subtitles.
+    if (key == LogicalKeyboardKey.closedCaptionToggle || key == LogicalKeyboardKey.mediaAudioTrack) {
+      if (event is KeyDownEvent && widget.canControl) {
+        key == LogicalKeyboardKey.closedCaptionToggle ? _nextSubtitleTrack() : _nextAudioTrack();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.contextMenu && _focusNode.hasPrimaryFocus) {
+      if (event is KeyDownEvent && !_showControls) _showControlsWithFocus();
+      return KeyEventResult.handled;
+    }
+
     final transportCommand = _transportCommandFor(event);
 
     // Always consume transport keys to prevent propagation to background routes.

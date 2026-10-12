@@ -95,7 +95,7 @@ void main() {
       // has no CJK font; the bundled fallback must reach the styles widgets
       // read, including the ones mono_theme replaces via copyWith, despite the
       // explicit textTheme being merged over ThemeData's platform defaults.
-      const bundled = ['Go Noto Current', 'Go Noto Current Hangul'];
+      const bundled = ['Go Noto Current', 'Go Noto Current Hangul', 'Go Noto Current Han'];
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
       final linux = monoTheme(dark: true).textTheme;
       expect(linux.bodyMedium!.fontFamilyFallback, bundled);

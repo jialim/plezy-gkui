@@ -33,11 +33,6 @@ abstract final class FamilyProjectorProfile {
 
   static const double unfocusedActionOpacity = 0.85;
 
-  /// TV rails calculate their own height-relative scale. After [uiScale]
-  /// rewrites 1080 logical pixels to 900, this baseline keeps their effective
-  /// physical size enlarged instead of cancelling the root scale back out.
-  static const double tvDesignHeight = 900;
-
   static const double focusScale = 1.06;
   static const double fullCardFocusScale = 1.07;
   static const double playerControlFocusScale = 1.18;

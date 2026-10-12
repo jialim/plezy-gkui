@@ -1,7 +1,7 @@
 name: plezy
 description: "A beautiful Plex and Jellyfin client for Flutter"
 publish_to: "none"
-version: 2.22.0+155
+version: 2.22.0+156
 
 environment:
   # Dart floor stays 3.12: freezed 3.x emits `final` constructor parameters,
@@ -150,6 +150,8 @@ flutter:
     - assets/mdblist_mark.svg
     - assets/go-noto-current-regular.ttf
     - assets/go-noto-kurrent-hangul.ttf
+    - assets/go-noto-current-han.ttf
+    - assets/licenses/noto-sans-sc-OFL.txt
     - assets/shaders/nvscaler/
     - assets/shaders/artcnn/
     - assets/shaders/anime4k/
@@ -164,3 +166,6 @@ flutter:
     - family: Go Noto Current Hangul
       fonts:
         - asset: assets/go-noto-kurrent-hangul.ttf
+    - family: Go Noto Current Han
+      fonts:
+        - asset: assets/go-noto-current-han.ttf

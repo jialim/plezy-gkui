@@ -29,6 +29,15 @@ class XgimiUpdateException implements Exception {
 
 class XgimiUpdateCancelled implements Exception {}
 
+/// A transfer that stopped early; the next request resumes from its end.
+class XgimiDownloadInterrupted implements Exception {
+  const XgimiDownloadInterrupted(this.reason);
+  final String reason;
+
+  @override
+  String toString() => 'XGIMI download interrupted: $reason';
+}
+
 class XgimiUpdateCancellation {
   final AbortController _abort = AbortController();
   void cancel() => _abort.abort();
@@ -270,6 +279,12 @@ class UpdateService {
 
     final targetCommit = selected['targetCommit'] as String;
     if (targetCommit.toLowerCase() == _gitCommit.toLowerCase()) return null;
+    if (selected['installVersionCode'] == null) {
+      // CI writes one line per ABI; without it the build cannot be compared,
+      // so it is skipped rather than risking a downgrade.
+      appLogger.w('XGIMI release ${selected['tag']} has no version code for this ABI in its notes; skipped.');
+      return null;
+    }
     if (!isNewerXgimiRelease(selected, currentVersion: packageInfo.version, currentBuild: packageInfo.buildNumber)) {
       return null;
     }
@@ -430,6 +445,8 @@ class UpdateService {
       token.cancel();
     });
     File? partialFile;
+    // A network failure keeps the partial file for the next attempt to resume.
+    var keepPartial = false;
     try {
       final url = Uri.parse(updateInfo['installUrl'] as String);
       final expectedSha256 = (updateInfo['installSha256'] as String).toLowerCase();
@@ -443,46 +460,25 @@ class UpdateService {
 
       final downloadDirectory = directory ?? await getTemporaryDirectory();
       final finalFile = File(p.join(downloadDirectory.path, fileName));
-      partialFile = File('${finalFile.path}.partial');
-      await removeStaleXgimiDownloads(downloadDirectory);
+      // Named by the expected digest, so an interrupted download of this
+      // exact APK resumes and a partial of any other build is removed.
+      final partialName = '$fileName.${expectedSha256.substring(0, 16)}.partial';
+      partialFile = File(p.join(downloadDirectory.path, partialName));
+      await removeStaleXgimiDownloads(downloadDirectory, keep: partialName);
 
-      final request = http.AbortableRequest('GET', url, abortTrigger: token._abort.trigger)
-        ..headers['Accept'] = 'application/vnd.android.package-archive';
-      final response = await (client ?? httpClient.inner).send(request).timeout(const Duration(seconds: 30));
-      if (response.statusCode != 200) {
-        throw StateError('APK download returned HTTP ${response.statusCode}');
-      }
-      final contentLength = response.contentLength;
-      if (contentLength != null && (contentLength <= 0 || contentLength > _maximumXgimiApkBytes)) {
-        throw StateError('APK download size is outside the allowed range.');
-      }
-
-      var received = 0;
-      final sink = partialFile.openWrite();
-      try {
+      for (var attempt = 1; ; attempt++) {
         try {
-          await sink.addStream(
-            response.stream.timeout(const Duration(seconds: 45)).map((chunk) {
-              token.throwIfCancelled();
-              received += chunk.length;
-              if (received > _maximumXgimiApkBytes) {
-                throw StateError('APK download exceeded the allowed size.');
-              }
-              onProgress?.call(contentLength == null || contentLength == 0 ? null : received / contentLength);
-              return chunk;
-            }),
-          );
-          await sink.flush();
-        } finally {
-          await sink.close();
+          await _downloadXgimiRange(client ?? httpClient.inner, url, partialFile, token, onProgress);
+          break;
+        } catch (error) {
+          if (token.isCancelled || attempt >= _xgimiDownloadAttempts || !isResumableDownloadError(error)) {
+            keepPartial = !token.isCancelled && isResumableDownloadError(error);
+            rethrow;
+          }
+          appLogger.w('XGIMI update download interrupted; resuming (attempt ${attempt + 1})', error: error);
+          await Future<void>.delayed(Duration(seconds: 2 * attempt));
+          token.throwIfCancelled();
         }
-      } catch (_) {
-        if (await partialFile.exists()) await partialFile.delete();
-        rethrow;
-      }
-      if (contentLength != null && received != contentLength) {
-        await partialFile.delete();
-        throw StateError('APK download was incomplete.');
       }
 
       final actualDigest = (await sha256.bind(partialFile.openRead()).first).toString().toLowerCase();
@@ -514,12 +510,13 @@ class UpdateService {
     } catch (error) {
       if (token.isCancelled && !timedOut) throw XgimiUpdateCancelled();
       if (error is MissingPluginException) throw const XgimiUpdateException(XgimiUpdateFailure.installer);
+      if (timedOut) keepPartial = true;
       throw XgimiUpdateException(XgimiUpdateFailure.network, cause: error);
     } finally {
       deadline.cancel();
       token.cancel();
       try {
-        if (partialFile != null && await partialFile.exists()) {
+        if (partialFile != null && !keepPartial && await partialFile.exists()) {
           try {
             await partialFile.delete();
           } on FileSystemException {
@@ -532,14 +529,100 @@ class UpdateService {
     }
   }
 
-  /// Each update APK is ~95 MB and named per build, so earlier downloads would
-  /// otherwise pile up in the projector's cache.
+  static const int _xgimiDownloadAttempts = 3;
+
+  /// Waits, checking every [poll], until [busy] is false. Used to hold the
+  /// startup update prompt until playback ends.
+  static Future<void> waitWhile(bool Function() busy, {Duration poll = const Duration(seconds: 15)}) async {
+    while (busy()) {
+      await Future<void>.delayed(poll);
+    }
+  }
+
+  /// Failures a later request can continue from: a dropped or stalled
+  /// connection, or a transfer that ended before the expected size.
   @visibleForTesting
-  static Future<void> removeStaleXgimiDownloads(Directory directory) async {
+  static bool isResumableDownloadError(Object error) =>
+      error is TimeoutException ||
+      error is SocketException ||
+      error is HttpException ||
+      error is XgimiDownloadInterrupted ||
+      (error is http.ClientException && error is! http.RequestAbortedException);
+
+  /// Downloads the rest of [partialFile], asking the server for only the
+  /// bytes it does not have yet. A server that ignores the range sends the
+  /// whole file, which then replaces the partial one.
+  static Future<void> _downloadXgimiRange(
+    http.Client client,
+    Uri url,
+    File partialFile,
+    XgimiUpdateCancellation token,
+    ValueChanged<double?>? onProgress,
+  ) async {
+    var existing = await partialFile.exists() ? await partialFile.length() : 0;
+    if (existing >= _maximumXgimiApkBytes) {
+      await partialFile.delete();
+      existing = 0;
+    }
+    final request = http.AbortableRequest('GET', url, abortTrigger: token._abort.trigger)
+      ..headers['Accept'] = 'application/vnd.android.package-archive';
+    if (existing > 0) request.headers['Range'] = 'bytes=$existing-';
+    final response = await client.send(request).timeout(const Duration(seconds: 30));
+
+    final int offset;
+    final contentRange = response.headers['content-range'] ?? '';
+    if (existing > 0 && response.statusCode == 206 && contentRange.startsWith('bytes $existing-')) {
+      offset = existing;
+    } else if (response.statusCode == 200) {
+      offset = 0;
+    } else if (existing > 0 && response.statusCode == 416) {
+      // The partial file does not match what the server has; start over.
+      await response.stream.drain<void>();
+      await partialFile.delete();
+      throw const XgimiDownloadInterrupted('range not satisfiable');
+    } else {
+      await response.stream.drain<void>().catchError((_) {});
+      throw StateError('APK download returned HTTP ${response.statusCode}');
+    }
+    final remaining = response.contentLength;
+    final total = remaining == null ? null : offset + remaining;
+    if (total != null && (total <= 0 || total > _maximumXgimiApkBytes)) {
+      throw StateError('APK download size is outside the allowed range.');
+    }
+
+    var received = offset;
+    final sink = partialFile.openWrite(mode: offset > 0 ? FileMode.append : FileMode.write);
+    try {
+      await sink.addStream(
+        response.stream.timeout(const Duration(seconds: 45)).map((chunk) {
+          token.throwIfCancelled();
+          received += chunk.length;
+          if (received > _maximumXgimiApkBytes) {
+            throw StateError('APK download exceeded the allowed size.');
+          }
+          onProgress?.call(total == null || total == 0 ? null : received / total);
+          return chunk;
+        }),
+      );
+      await sink.flush();
+    } finally {
+      await sink.close();
+    }
+    if (total != null && received != total) {
+      throw XgimiDownloadInterrupted('received $received of $total bytes');
+    }
+  }
+
+  /// Each update APK is ~95 MB and named per build, so earlier downloads would
+  /// otherwise pile up in the projector's cache. [keep] names the partial
+  /// download being resumed.
+  @visibleForTesting
+  static Future<void> removeStaleXgimiDownloads(Directory directory, {String? keep}) async {
     if (!await directory.exists()) return;
     await for (final entry in directory.list()) {
       final name = p.basename(entry.path);
       if (entry is File &&
+          name != keep &&
           name.startsWith('plezy-xgimi-lite-') &&
           (name.endsWith('.apk') || name.endsWith('.apk.partial'))) {
         try {

@@ -387,6 +387,7 @@ class Translations$settings$zh extends Translations$settings$en {
 	@override String get importSettingsInvalidFile => '此文件不是有效的 Plezy 设置导出';
 	@override String get importSettingsNoUser => '导入设置前请先登录';
 	@override String get shortcutsReset => '快捷键已重置为默认值';
+	@override String get resetShortcutsConfirm => '这会用默认设置替换你自定义的快捷键。是否继续？';
 	@override String get about => '关于';
 	@override String get aboutDescription => '应用程序信息和许可证';
 	@override String get updates => '更新';
@@ -472,6 +473,14 @@ class Translations$settings$zh extends Translations$settings$en {
 	@override String get audioPassthroughDescription => '将 Dolby/DTS 音频不经重新编码直接发送到功放或电视，保留环绕声。如果没有声音，请关闭。';
 	@override String get audioPassthroughDescriptionAppleTv => '对 Dolby Digital Plus（含 Atmos）使用 Apple 原生 Dolby 解码器。DTS 和 TrueHD 仍以多声道 PCM 播放。如果没有声音，请关闭。';
 	@override String get audioPassthroughOverriddenByNormalization => '响度标准化开启时停用';
+	@override String get audioChannelLimit => '音频声道';
+	@override String get audioChannelLimitDescription => '为无法播放全部声道的扬声器、耳机或 HDMI 设备混音解码后的音频';
+	@override String get audioChannelLimitOriginal => '原始';
+	@override String get audioChannelLimitOriginalDescription => '播放音轨中的所有声道';
+	@override String get audioChannelLimitSurround51 => '最多 5.1';
+	@override String get audioChannelLimitSurround51Description => '为只接受 5.1 PCM 的电视和功放把 7.1 混音为 5.1。不影响直通。';
+	@override String get audioChannelLimitStereo => '立体声';
+	@override String get audioChannelLimitStereoDescription => '为立体声扬声器或耳机混音为双声道。会关闭直通。';
 	@override String get downmixCenterBoost => '中置声道增强';
 	@override String downmixCenterBoostValue({required Object db}) => '${db} dB';
 	@override String get downmixCenterBoostLabel => '增强（dB）';
@@ -566,6 +575,7 @@ class Translations$search$zh extends Translations$search$en {
 	@override String get tryDifferentTerm => '尝试不同的搜索词';
 	@override String get searchYourMedia => '搜索媒体';
 	@override String get enterTitleActorOrKeyword => '输入标题、演员或关键词';
+	@override String get people => '人物';
 }
 
 // Path: hotkeys
@@ -922,6 +932,7 @@ class Translations$videoControls$zh extends Translations$videoControls$en {
 	@override String get osdSubtitlesOff => '字幕：关闭';
 	@override String osdSubtitles({required Object track}) => '字幕：${track}';
 	@override String osdAudio({required Object track}) => '音频：${track}';
+	@override String get pressBackAgainToStop => '再按一次返回键停止播放';
 }
 
 // Path: messages
@@ -1090,6 +1101,8 @@ class Translations$profiles$zh extends Translations$profiles$en {
 	@override String get signOut => '退出登录';
 	@override String get signOutPlexTitle => '退出 Plex 登录？';
 	@override String signOutPlexMessage({required Object displayName}) => '要移除 ${displayName} 和所有 Plex Home 用户吗？可随时重新登录。';
+	@override String get signOutPlexDeleteDownloads => '同时删除下载内容';
+	@override String get signOutPlexDeleteDownloadsDescription => '否则它们会保留在此设备上，重新登录此帐户后会恢复。';
 	@override String get signedOutPlex => '已退出 Plex 登录。';
 	@override String get signOutFailed => '退出登录失败。';
 	@override String get sectionTitle => '用户资料';
@@ -1324,6 +1337,7 @@ class Translations$libraries$zh extends Translations$libraries$en {
 	@override late final Translations$libraries$groupings$zh groupings = Translations$libraries$groupings$zh.internal(_root);
 	@override late final Translations$libraries$filterCategories$zh filterCategories = Translations$libraries$filterCategories$zh.internal(_root);
 	@override late final Translations$libraries$sortLabels$zh sortLabels = Translations$libraries$sortLabels$zh.internal(_root);
+	@override late final Translations$libraries$advancedFilters$zh advancedFilters = Translations$libraries$advancedFilters$zh.internal(_root);
 }
 
 // Path: about
@@ -2527,6 +2541,7 @@ class Translations$libraries$filterCategories$zh extends Translations$libraries$
 	@override String get unwatched => '未观看';
 	@override String get unplayed => '未播放';
 	@override String get favorites => '收藏夹';
+	@override String get filePath => '文件路径';
 }
 
 // Path: libraries.sortLabels
@@ -2559,6 +2574,41 @@ class Translations$libraries$sortLabels$zh extends Translations$libraries$sortLa
 	@override String get dateDownloaded => '下载日期';
 	@override String get size => '大小';
 	@override String get library => '媒体库';
+}
+
+// Path: libraries.advancedFilters
+class Translations$libraries$advancedFilters$zh extends Translations$libraries$advancedFilters$en {
+	Translations$libraries$advancedFilters$zh.internal(TranslationsZh root) : this._root = root, super.internal(root);
+
+	final TranslationsZh _root; // ignore: unused_field
+
+	// Translations
+	@override String get include => '包含';
+	@override String get exclude => '排除';
+	@override String get any => '任意';
+	@override String get yes => '是';
+	@override String get no => '否';
+	@override String not({required Object value}) => '非 ${value}';
+	@override String valueCount({required Object count}) => '已选 ${count} 项';
+	@override String valueCountExcluded({required Object count}) => '已排除 ${count} 项';
+	@override String get searchValues => '搜索值';
+	@override String get noValues => '没有可选值';
+	@override String get matchContains => '包含';
+	@override String get matchNotContains => '不包含';
+	@override String get matchIs => '是';
+	@override String get matchIsNot => '不是';
+	@override String get matchBeginsWith => '开头是';
+	@override String get matchEndsWith => '结尾是';
+	@override String get textHint => '输入要匹配的文字';
+	@override String get from => '从';
+	@override String get to => '到';
+	@override String range({required Object from, required Object to}) => '${from} 至 ${to}';
+	@override String atLeast({required Object value}) => '${value} 及以上';
+	@override String atMost({required Object value}) => '最多 ${value}';
+	@override String dateLastDays({required Object count}) => '最近 ${count} 天';
+	@override String get dateLastYear => '过去一年';
+	@override String dateOlderThanDays({required Object count}) => '早于 ${count} 天前';
+	@override String get dateOlderThanYear => '早于一年前';
 }
 
 // Path: explore.rows
@@ -2709,6 +2759,7 @@ class Translations$explore$creditRole$zh extends Translations$explore$creditRole
 	final TranslationsZh _root; // ignore: unused_field
 
 	// Translations
+	@override String get actor => '演员';
 	@override String get director => '导演';
 	@override String get writer => '编剧';
 	@override String get producer => '制片人';
@@ -3305,6 +3356,7 @@ extension on TranslationsZh {
 			'settings.importSettingsInvalidFile' => '此文件不是有效的 Plezy 设置导出',
 			'settings.importSettingsNoUser' => '导入设置前请先登录',
 			'settings.shortcutsReset' => '快捷键已重置为默认值',
+			'settings.resetShortcutsConfirm' => '这会用默认设置替换你自定义的快捷键。是否继续？',
 			'settings.about' => '关于',
 			'settings.aboutDescription' => '应用程序信息和许可证',
 			'settings.updates' => '更新',
@@ -3390,6 +3442,14 @@ extension on TranslationsZh {
 			'settings.audioPassthroughDescription' => '将 Dolby/DTS 音频不经重新编码直接发送到功放或电视，保留环绕声。如果没有声音，请关闭。',
 			'settings.audioPassthroughDescriptionAppleTv' => '对 Dolby Digital Plus（含 Atmos）使用 Apple 原生 Dolby 解码器。DTS 和 TrueHD 仍以多声道 PCM 播放。如果没有声音，请关闭。',
 			'settings.audioPassthroughOverriddenByNormalization' => '响度标准化开启时停用',
+			'settings.audioChannelLimit' => '音频声道',
+			'settings.audioChannelLimitDescription' => '为无法播放全部声道的扬声器、耳机或 HDMI 设备混音解码后的音频',
+			'settings.audioChannelLimitOriginal' => '原始',
+			'settings.audioChannelLimitOriginalDescription' => '播放音轨中的所有声道',
+			'settings.audioChannelLimitSurround51' => '最多 5.1',
+			'settings.audioChannelLimitSurround51Description' => '为只接受 5.1 PCM 的电视和功放把 7.1 混音为 5.1。不影响直通。',
+			'settings.audioChannelLimitStereo' => '立体声',
+			'settings.audioChannelLimitStereoDescription' => '为立体声扬声器或耳机混音为双声道。会关闭直通。',
 			'settings.downmixCenterBoost' => '中置声道增强',
 			'settings.downmixCenterBoostValue' => ({required Object db}) => '${db} dB',
 			'settings.downmixCenterBoostLabel' => '增强（dB）',
@@ -3475,6 +3535,7 @@ extension on TranslationsZh {
 			'search.tryDifferentTerm' => '尝试不同的搜索词',
 			'search.searchYourMedia' => '搜索媒体',
 			'search.enterTitleActorOrKeyword' => '输入标题、演员或关键词',
+			'search.people' => '人物',
 			'hotkeys.setShortcutFor' => ({required Object actionName}) => '为 ${actionName} 设置快捷键',
 			'hotkeys.clearShortcut' => '清除快捷键',
 			'hotkeys.noShortcutSet' => '未设置快捷键',
@@ -3543,6 +3604,8 @@ extension on TranslationsZh {
 			'fileInfo.level' => '级别',
 			'fileInfo.bitDepth' => '位深度',
 			'fileInfo.pixelFormat' => '像素格式',
+			_ => null,
+		} ?? switch (path) {
 			'fileInfo.colorSpace' => '色彩空间',
 			'fileInfo.colorRange' => '色彩范围',
 			'fileInfo.colorPrimaries' => '色彩基色',
@@ -3553,8 +3616,6 @@ extension on TranslationsZh {
 			'fileInfo.interlaced' => '隔行扫描',
 			'fileInfo.anamorphic' => '变形宽银幕',
 			'fileInfo.referenceFrames' => '参考帧',
-			_ => null,
-		} ?? switch (path) {
 			'fileInfo.dynamicRange' => '动态范围',
 			'fileInfo.dolbyVision' => 'Dolby Vision',
 			'fileInfo.dolbyVisionLevel' => 'Dolby Vision 级别',
@@ -3786,6 +3847,7 @@ extension on TranslationsZh {
 			'videoControls.osdSubtitlesOff' => '字幕：关闭',
 			'videoControls.osdSubtitles' => ({required Object track}) => '字幕：${track}',
 			'videoControls.osdAudio' => ({required Object track}) => '音频：${track}',
+			'videoControls.pressBackAgainToStop' => '再按一次返回键停止播放',
 			'messages.markedAsWatched' => '已标记为已观看',
 			'messages.markedAsUnwatched' => '已标记为未观看',
 			'messages.markedAsWatchedOffline' => '已标记为已观看（将在联网时同步）',
@@ -3907,6 +3969,8 @@ extension on TranslationsZh {
 			'profiles.signOut' => '退出登录',
 			'profiles.signOutPlexTitle' => '退出 Plex 登录？',
 			'profiles.signOutPlexMessage' => ({required Object displayName}) => '要移除 ${displayName} 和所有 Plex Home 用户吗？可随时重新登录。',
+			'profiles.signOutPlexDeleteDownloads' => '同时删除下载内容',
+			'profiles.signOutPlexDeleteDownloadsDescription' => '否则它们会保留在此设备上，重新登录此帐户后会恢复。',
 			'profiles.signedOutPlex' => '已退出 Plex 登录。',
 			'profiles.signOutFailed' => '退出登录失败。',
 			'profiles.sectionTitle' => '用户资料',
@@ -4054,6 +4118,8 @@ extension on TranslationsZh {
 			'discover.moreLikeThis' => '更多类似内容',
 			'discover.titleCount' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, other: '${n} 个标题', ), 
 			'errors.searchFailed' => ({required Object error}) => '搜索失败：${error}',
+			_ => null,
+		} ?? switch (path) {
 			'errors.searchUnavailable' => '搜索无法连接任何媒体服务器。',
 			'errors.connectionTimeout' => ({required Object context}) => '加载 ${context} 时连接超时',
 			'errors.connectionFailed' => '无法连接到媒体服务器',
@@ -4067,8 +4133,6 @@ extension on TranslationsZh {
 			'errors.failedToRate' => '无法更新评分',
 			'errors.reasonTimedOut' => '连接超时',
 			'errors.reasonUnreachable' => '无法连接到服务器',
-			_ => null,
-		} ?? switch (path) {
 			'errors.reasonRefused' => '服务器拒绝了此请求',
 			'errors.reasonNotFound' => '该项目已不在服务器上',
 			'errors.reasonServerError' => '服务器报告了一个错误',
@@ -4136,6 +4200,7 @@ extension on TranslationsZh {
 			'libraries.filterCategories.unwatched' => '未观看',
 			'libraries.filterCategories.unplayed' => '未播放',
 			'libraries.filterCategories.favorites' => '收藏夹',
+			'libraries.filterCategories.filePath' => '文件路径',
 			'libraries.sortLabels.title' => '标题',
 			'libraries.sortLabels.dateAdded' => '添加日期',
 			'libraries.sortLabels.releaseDate' => '发行日期',
@@ -4159,6 +4224,32 @@ extension on TranslationsZh {
 			'libraries.sortLabels.dateDownloaded' => '下载日期',
 			'libraries.sortLabels.size' => '大小',
 			'libraries.sortLabels.library' => '媒体库',
+			'libraries.advancedFilters.include' => '包含',
+			'libraries.advancedFilters.exclude' => '排除',
+			'libraries.advancedFilters.any' => '任意',
+			'libraries.advancedFilters.yes' => '是',
+			'libraries.advancedFilters.no' => '否',
+			'libraries.advancedFilters.not' => ({required Object value}) => '非 ${value}',
+			'libraries.advancedFilters.valueCount' => ({required Object count}) => '已选 ${count} 项',
+			'libraries.advancedFilters.valueCountExcluded' => ({required Object count}) => '已排除 ${count} 项',
+			'libraries.advancedFilters.searchValues' => '搜索值',
+			'libraries.advancedFilters.noValues' => '没有可选值',
+			'libraries.advancedFilters.matchContains' => '包含',
+			'libraries.advancedFilters.matchNotContains' => '不包含',
+			'libraries.advancedFilters.matchIs' => '是',
+			'libraries.advancedFilters.matchIsNot' => '不是',
+			'libraries.advancedFilters.matchBeginsWith' => '开头是',
+			'libraries.advancedFilters.matchEndsWith' => '结尾是',
+			'libraries.advancedFilters.textHint' => '输入要匹配的文字',
+			'libraries.advancedFilters.from' => '从',
+			'libraries.advancedFilters.to' => '到',
+			'libraries.advancedFilters.range' => ({required Object from, required Object to}) => '${from} 至 ${to}',
+			'libraries.advancedFilters.atLeast' => ({required Object value}) => '${value} 及以上',
+			'libraries.advancedFilters.atMost' => ({required Object value}) => '最多 ${value}',
+			'libraries.advancedFilters.dateLastDays' => ({required Object count}) => '最近 ${count} 天',
+			'libraries.advancedFilters.dateLastYear' => '过去一年',
+			'libraries.advancedFilters.dateOlderThanDays' => ({required Object count}) => '早于 ${count} 天前',
+			'libraries.advancedFilters.dateOlderThanYear' => '早于一年前',
 			'about.title' => '关于',
 			'about.openSourceLicenses' => '开源许可证',
 			'about.versionLabel' => ({required Object version}) => '版本 ${version}',
@@ -4310,6 +4401,7 @@ extension on TranslationsZh {
 			'explore.sourceMaterial.webComic' => '网络漫画',
 			'explore.sourceMaterial.musicRelease' => '音乐',
 			'explore.sourceMaterial.otherMedia' => '其他',
+			'explore.creditRole.actor' => '演员',
 			'explore.creditRole.director' => '导演',
 			'explore.creditRole.writer' => '编剧',
 			'explore.creditRole.producer' => '制片人',
@@ -4540,6 +4632,8 @@ extension on TranslationsZh {
 			'watchTogether.copySessionCode' => '复制会话代码',
 			'watchTogether.hostControlsPlayback' => '主持人控制播放',
 			'watchTogether.anyoneCanControl' => '任何人都可以控制播放',
+			_ => null,
+		} ?? switch (path) {
 			'watchTogether.hostControls' => '主持人控制',
 			'watchTogether.anyoneControls' => '任何人控制',
 			'watchTogether.participants' => '参与者',
@@ -4581,8 +4675,6 @@ extension on TranslationsZh {
 			'watchTogether.joinCurrentPlaybackDescription' => '加入主持人当前正在观看的内容',
 			'watchTogether.failedToOpenCurrentPlayback' => '无法打开当前播放',
 			'watchTogether.participantJoined' => ({required Object name}) => '${name} 已加入',
-			_ => null,
-		} ?? switch (path) {
 			'watchTogether.participantLeft' => ({required Object name}) => '${name} 已离开',
 			'watchTogether.participantPaused' => ({required Object name}) => '${name} 暂停了播放',
 			'watchTogether.participantResumed' => ({required Object name}) => '${name} 恢复了播放',
@@ -5054,6 +5146,8 @@ extension on TranslationsZh {
 			'services.connectFailed' => ({required Object service}) => '无法连接到 ${service}。请重试。',
 			'services.names.mal' => 'MyAnimeList',
 			'services.names.anilist' => 'AniList',
+			_ => null,
+		} ?? switch (path) {
 			'services.names.simkl' => 'Simkl',
 			'services.names.seerr' => 'Seerr',
 			'services.names.mdblist' => 'MDBList',
@@ -5095,8 +5189,6 @@ extension on TranslationsZh {
 			'addServer.signInFailed' => ({required Object error}) => '登录失败：${error}',
 			'addServer.quickConnectFailed' => ({required Object error}) => 'Quick Connect 失败：${error}',
 			'addServer.addPlexTitle' => '使用 Plex 登录',
-			_ => null,
-		} ?? switch (path) {
 			'addServer.pinExpired' => 'PIN 在登录前已过期。请重试。',
 			'addServer.failedToRegisterAccount' => ({required Object error}) => '注册账户失败：${error}',
 			'addServer.enterMediaBrowserUrlError' => ({required Object product}) => '请输入你的 ${product} 服务器 URL',

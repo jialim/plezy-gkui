@@ -78,6 +78,8 @@ jobs:
           test/services/update_service_test.dart
           test/focus/focusable_action_bar_test.dart
           test/utils/update_dialog_test.dart
+          test/widgets/player_exit_confirmation_test.dart
+          test/widgets/family_language_gate_test.dart
           --dart-define=FAMILY_PROJECTOR_MODE=true
 
       # Branch releases and manual builds use the permanent key so every build

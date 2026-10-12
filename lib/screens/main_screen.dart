@@ -844,10 +844,12 @@ class _MainScreenState extends State<MainScreen>
 
     try {
       final updateInfo = await UpdateService.checkForUpdatesOnStartup();
+      if (updateInfo == null || updateInfo['hasUpdate'] != true) return;
 
-      if (updateInfo != null && updateInfo['hasUpdate'] == true && mounted) {
-        await _showUpdateDialog(updateInfo);
-      }
+      // Someone who started a film while the check ran should not get an
+      // update prompt over it; offer the update once the player closes.
+      await UpdateService.waitWhile(() => mounted && VideoPlayerScreenState.activeGlobalKey != null);
+      if (mounted) await _showUpdateDialog(updateInfo);
     } catch (e) {
       appLogger.e('Error checking for updates', error: e);
     }

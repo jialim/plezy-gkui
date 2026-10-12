@@ -187,6 +187,7 @@ class _Translations$common$zh_Hant extends Translations$common$zh {
 	@override String get url => 'URL';
 	@override String get letterKeys => 'ABC';
 	@override late final _Translations$common$mediaKind$zh_Hant mediaKind = _Translations$common$mediaKind$zh_Hant._(_root);
+	@override String get playFromBeginning => '從頭播放';
 }
 
 // Path: screens
@@ -217,6 +218,14 @@ class _Translations$update$zh_Hant extends Translations$update$zh {
 	@override String get viewRelease => '查看版本詳情';
 	@override String get latestVersion => '已安裝的版本為最新版本';
 	@override String get checkFailed => '無法檢查更新';
+	@override String get downloadAndInstall => '下載並安裝';
+	@override String downloading({required Object version}) => '正在下載 ${version}…';
+	@override String get allowInstall => '請允許 Plezy 安裝應用程式。返回後會自動繼續安裝。';
+	@override String get downloadFailed => '更新下載已中斷。請檢查網路後重試。';
+	@override String get storageFailed => '可用儲存空間不足。請清理空間後重試。';
+	@override String get verificationFailed => '無法驗證此更新，或它不比已安裝的版本新。請確認最新發佈版本後再重試。';
+	@override String get installerFailed => '無法開啟 Android 安裝程式。請確認已允許 Plezy XGIMI Lite 安裝應用程式。';
+	@override String get downloadBusy => '另一個更新下載正在結束，請稍後重試。';
 }
 
 // Path: settings
@@ -372,6 +381,7 @@ class _Translations$settings$zh_Hant extends Translations$settings$zh {
 	@override String get importSettingsInvalidFile => '此檔案不是有效的 Plezy 設定匯出檔';
 	@override String get importSettingsNoUser => '匯入設定前請先登入';
 	@override String get shortcutsReset => '快速鍵已重設為預設值';
+	@override String get resetShortcutsConfirm => '這會用預設設定取代你自訂的快捷鍵。是否繼續？';
 	@override String get about => '關於';
 	@override String get aboutDescription => '應用程式資訊與授權條款';
 	@override String get updates => '更新';
@@ -457,6 +467,14 @@ class _Translations$settings$zh_Hant extends Translations$settings$zh {
 	@override String get audioPassthroughDescription => '將 Dolby/DTS 音訊不經重新編碼，直接傳送至擴大機或電視以保留環繞音效。若播放無聲，請關閉此設定。';
 	@override String get audioPassthroughDescriptionAppleTv => '使用 Apple 原生 Dolby 解碼器處理 Dolby Digital Plus（包括 Atmos）。DTS 與 TrueHD 仍以多聲道 PCM 播放。若沒有聲音，請關閉此設定。';
 	@override String get audioPassthroughOverriddenByNormalization => '音量標準化開啟時停用';
+	@override String get audioChannelLimit => '音訊聲道';
+	@override String get audioChannelLimitDescription => '為無法播放全部聲道的揚聲器、耳機或 HDMI 裝置混音解碼後的音訊';
+	@override String get audioChannelLimitOriginal => '原始';
+	@override String get audioChannelLimitOriginalDescription => '播放音軌中的所有聲道';
+	@override String get audioChannelLimitSurround51 => '最多 5.1';
+	@override String get audioChannelLimitSurround51Description => '為只接受 5.1 PCM 的電視和擴大機把 7.1 混音為 5.1。不影響直通。';
+	@override String get audioChannelLimitStereo => '立體聲';
+	@override String get audioChannelLimitStereoDescription => '為立體聲揚聲器或耳機混音為雙聲道。會關閉直通。';
 	@override String get downmixCenterBoost => '中置聲道增強';
 	@override String downmixCenterBoostValue({required Object db}) => '${db} dB';
 	@override String get downmixCenterBoostLabel => '增強（dB）';
@@ -538,6 +556,13 @@ class _Translations$settings$zh_Hant extends Translations$settings$zh {
 	@override String get playerScopeLibrary => '依媒體庫';
 	@override String get playerScopeTitle => '依影集或電影';
 	@override String get exportDialogTitle => '匯出 Plezy 設定';
+	@override String get projectorUiSize => '投影機介面大小';
+	@override String get projectorNormal => '標準（1.2 倍）';
+	@override String get projectorLarge => '大（1.4 倍）';
+	@override String get projectorExtraLarge => '特大（1.6 倍）';
+	@override String get resetProjectorSubtitles => '重設記住的字幕';
+	@override String get resetProjectorSubtitlesDescription => '清除目前觀看者的字幕選擇，其他觀看者不受影響。下次播放時重新使用中文字幕預設設定。';
+	@override String get projectorSubtitlesReset => '已重設目前觀看者記住的字幕';
 }
 
 // Path: search
@@ -551,6 +576,7 @@ class _Translations$search$zh_Hant extends Translations$search$zh {
 	@override String get tryDifferentTerm => '嘗試不同的關鍵字';
 	@override String get searchYourMedia => '搜尋媒體庫';
 	@override String get enterTitleActorOrKeyword => '輸入標題、演員或關鍵字';
+	@override String get people => '人物';
 }
 
 // Path: hotkeys
@@ -907,6 +933,7 @@ class _Translations$videoControls$zh_Hant extends Translations$videoControls$zh 
 	@override String get osdSubtitlesOff => '字幕：關閉';
 	@override String osdSubtitles({required Object track}) => '字幕：${track}';
 	@override String osdAudio({required Object track}) => '音訊：${track}';
+	@override String get pressBackAgainToStop => '再按一次返回鍵停止播放';
 }
 
 // Path: messages
@@ -1075,6 +1102,8 @@ class _Translations$profiles$zh_Hant extends Translations$profiles$zh {
 	@override String get signOut => '登出';
 	@override String get signOutPlexTitle => '登出 Plex？';
 	@override String signOutPlexMessage({required Object displayName}) => '確定要移除 ${displayName} 與所有 Plex Home 使用者嗎？您可以隨時重新登入。';
+	@override String get signOutPlexDeleteDownloads => '同時刪除下載內容';
+	@override String get signOutPlexDeleteDownloadsDescription => '否則它們會保留在此裝置上，重新登入此帳戶後會恢復。';
 	@override String get signedOutPlex => '已登出 Plex。';
 	@override String get signOutFailed => '登出失敗。';
 	@override String get sectionTitle => '使用者設定檔';
@@ -1309,6 +1338,7 @@ class _Translations$libraries$zh_Hant extends Translations$libraries$zh {
 	@override late final _Translations$libraries$groupings$zh_Hant groupings = _Translations$libraries$groupings$zh_Hant._(_root);
 	@override late final _Translations$libraries$filterCategories$zh_Hant filterCategories = _Translations$libraries$filterCategories$zh_Hant._(_root);
 	@override late final _Translations$libraries$sortLabels$zh_Hant sortLabels = _Translations$libraries$sortLabels$zh_Hant._(_root);
+	@override late final _Translations$libraries$advancedFilters$zh_Hant advancedFilters = _Translations$libraries$advancedFilters$zh_Hant._(_root);
 }
 
 // Path: about
@@ -2512,6 +2542,7 @@ class _Translations$libraries$filterCategories$zh_Hant extends Translations$libr
 	@override String get unwatched => '未觀看';
 	@override String get unplayed => '未播放';
 	@override String get favorites => '我的最愛';
+	@override String get filePath => '檔案路徑';
 }
 
 // Path: libraries.sortLabels
@@ -2544,6 +2575,41 @@ class _Translations$libraries$sortLabels$zh_Hant extends Translations$libraries$
 	@override String get dateDownloaded => '下載日期';
 	@override String get size => '大小';
 	@override String get library => '媒體庫';
+}
+
+// Path: libraries.advancedFilters
+class _Translations$libraries$advancedFilters$zh_Hant extends Translations$libraries$advancedFilters$zh {
+	_Translations$libraries$advancedFilters$zh_Hant._(TranslationsZhHant root) : this._root = root, super.internal(root);
+
+	final TranslationsZhHant _root; // ignore: unused_field
+
+	// Translations
+	@override String get include => '包含';
+	@override String get exclude => '排除';
+	@override String get any => '任意';
+	@override String get yes => '是';
+	@override String get no => '否';
+	@override String not({required Object value}) => '非 ${value}';
+	@override String valueCount({required Object count}) => '已選 ${count} 項';
+	@override String valueCountExcluded({required Object count}) => '已排除 ${count} 項';
+	@override String get searchValues => '搜尋值';
+	@override String get noValues => '沒有可選值';
+	@override String get matchContains => '包含';
+	@override String get matchNotContains => '不包含';
+	@override String get matchIs => '是';
+	@override String get matchIsNot => '不是';
+	@override String get matchBeginsWith => '開頭是';
+	@override String get matchEndsWith => '結尾是';
+	@override String get textHint => '輸入要比對的文字';
+	@override String get from => '從';
+	@override String get to => '到';
+	@override String range({required Object from, required Object to}) => '${from} 至 ${to}';
+	@override String atLeast({required Object value}) => '${value} 以上';
+	@override String atMost({required Object value}) => '最多 ${value}';
+	@override String dateLastDays({required Object count}) => '最近 ${count} 天';
+	@override String get dateLastYear => '過去一年';
+	@override String dateOlderThanDays({required Object count}) => '早於 ${count} 天前';
+	@override String get dateOlderThanYear => '早於一年前';
 }
 
 // Path: explore.rows
@@ -2694,6 +2760,7 @@ class _Translations$explore$creditRole$zh_Hant extends Translations$explore$cred
 	final TranslationsZhHant _root; // ignore: unused_field
 
 	// Translations
+	@override String get actor => '演員';
 	@override String get director => '導演';
 	@override String get writer => '編劇';
 	@override String get producer => '製作人';
@@ -3116,6 +3183,7 @@ extension on TranslationsZhHant {
 			'common.mediaKind.clip' => '短片',
 			'common.mediaKind.photo' => '相片',
 			'common.mediaKind.folder' => '資料夾',
+			'common.playFromBeginning' => '從頭播放',
 			'screens.licenses' => '授權條款',
 			'screens.switchProfile' => '切換使用者',
 			'screens.subtitleStyling' => '字幕樣式',
@@ -3128,6 +3196,14 @@ extension on TranslationsZhHant {
 			'update.viewRelease' => '查看版本詳情',
 			'update.latestVersion' => '已安裝的版本為最新版本',
 			'update.checkFailed' => '無法檢查更新',
+			'update.downloadAndInstall' => '下載並安裝',
+			'update.downloading' => ({required Object version}) => '正在下載 ${version}…',
+			'update.allowInstall' => '請允許 Plezy 安裝應用程式。返回後會自動繼續安裝。',
+			'update.downloadFailed' => '更新下載已中斷。請檢查網路後重試。',
+			'update.storageFailed' => '可用儲存空間不足。請清理空間後重試。',
+			'update.verificationFailed' => '無法驗證此更新，或它不比已安裝的版本新。請確認最新發佈版本後再重試。',
+			'update.installerFailed' => '無法開啟 Android 安裝程式。請確認已允許 Plezy XGIMI Lite 安裝應用程式。',
+			'update.downloadBusy' => '另一個更新下載正在結束，請稍後重試。',
 			'settings.title' => '設定',
 			'settings.supportDeveloper' => '贊助 Plezy',
 			'settings.supportDeveloperDescription' => '透過 Liberapay 捐款支持開發者',
@@ -3274,6 +3350,7 @@ extension on TranslationsZhHant {
 			'settings.importSettingsInvalidFile' => '此檔案不是有效的 Plezy 設定匯出檔',
 			'settings.importSettingsNoUser' => '匯入設定前請先登入',
 			'settings.shortcutsReset' => '快速鍵已重設為預設值',
+			'settings.resetShortcutsConfirm' => '這會用預設設定取代你自訂的快捷鍵。是否繼續？',
 			'settings.about' => '關於',
 			'settings.aboutDescription' => '應用程式資訊與授權條款',
 			'settings.updates' => '更新',
@@ -3359,6 +3436,14 @@ extension on TranslationsZhHant {
 			'settings.audioPassthroughDescription' => '將 Dolby/DTS 音訊不經重新編碼，直接傳送至擴大機或電視以保留環繞音效。若播放無聲，請關閉此設定。',
 			'settings.audioPassthroughDescriptionAppleTv' => '使用 Apple 原生 Dolby 解碼器處理 Dolby Digital Plus（包括 Atmos）。DTS 與 TrueHD 仍以多聲道 PCM 播放。若沒有聲音，請關閉此設定。',
 			'settings.audioPassthroughOverriddenByNormalization' => '音量標準化開啟時停用',
+			'settings.audioChannelLimit' => '音訊聲道',
+			'settings.audioChannelLimitDescription' => '為無法播放全部聲道的揚聲器、耳機或 HDMI 裝置混音解碼後的音訊',
+			'settings.audioChannelLimitOriginal' => '原始',
+			'settings.audioChannelLimitOriginalDescription' => '播放音軌中的所有聲道',
+			'settings.audioChannelLimitSurround51' => '最多 5.1',
+			'settings.audioChannelLimitSurround51Description' => '為只接受 5.1 PCM 的電視和擴大機把 7.1 混音為 5.1。不影響直通。',
+			'settings.audioChannelLimitStereo' => '立體聲',
+			'settings.audioChannelLimitStereoDescription' => '為立體聲揚聲器或耳機混音為雙聲道。會關閉直通。',
 			'settings.downmixCenterBoost' => '中置聲道增強',
 			'settings.downmixCenterBoostValue' => ({required Object db}) => '${db} dB',
 			'settings.downmixCenterBoostLabel' => '增強（dB）',
@@ -3440,10 +3525,18 @@ extension on TranslationsZhHant {
 			'settings.playerScopeLibrary' => '依媒體庫',
 			'settings.playerScopeTitle' => '依影集或電影',
 			'settings.exportDialogTitle' => '匯出 Plezy 設定',
+			'settings.projectorUiSize' => '投影機介面大小',
+			'settings.projectorNormal' => '標準（1.2 倍）',
+			'settings.projectorLarge' => '大（1.4 倍）',
+			'settings.projectorExtraLarge' => '特大（1.6 倍）',
+			'settings.resetProjectorSubtitles' => '重設記住的字幕',
+			'settings.resetProjectorSubtitlesDescription' => '清除目前觀看者的字幕選擇，其他觀看者不受影響。下次播放時重新使用中文字幕預設設定。',
+			'settings.projectorSubtitlesReset' => '已重設目前觀看者記住的字幕',
 			'search.hint' => '搜尋電影、影集、音樂…',
 			'search.tryDifferentTerm' => '嘗試不同的關鍵字',
 			'search.searchYourMedia' => '搜尋媒體庫',
 			'search.enterTitleActorOrKeyword' => '輸入標題、演員或關鍵字',
+			'search.people' => '人物',
 			'hotkeys.setShortcutFor' => ({required Object actionName}) => '為 ${actionName} 設定快速鍵',
 			'hotkeys.clearShortcut' => '清除快速鍵',
 			'hotkeys.noShortcutSet' => '未設定快速鍵',
@@ -3512,6 +3605,8 @@ extension on TranslationsZhHant {
 			'fileInfo.level' => '等級',
 			'fileInfo.bitDepth' => '位元深度',
 			'fileInfo.pixelFormat' => '像素格式',
+			_ => null,
+		} ?? switch (path) {
 			'fileInfo.colorSpace' => '色彩空間',
 			'fileInfo.colorRange' => '色彩範圍',
 			'fileInfo.colorPrimaries' => '色彩基色',
@@ -3538,8 +3633,6 @@ extension on TranslationsZhHant {
 			'fileInfo.languageCode' => '語言代碼',
 			'fileInfo.streamTitle' => '軌道名稱',
 			'fileInfo.channels' => '聲道數',
-			_ => null,
-		} ?? switch (path) {
 			'fileInfo.sampleRate' => '取樣率',
 			'fileInfo.spatialAudio' => '空間音訊',
 			'fileInfo.textBased' => '文字型',
@@ -3755,6 +3848,7 @@ extension on TranslationsZhHant {
 			'videoControls.osdSubtitlesOff' => '字幕：關閉',
 			'videoControls.osdSubtitles' => ({required Object track}) => '字幕：${track}',
 			'videoControls.osdAudio' => ({required Object track}) => '音訊：${track}',
+			'videoControls.pressBackAgainToStop' => '再按一次返回鍵停止播放',
 			'messages.markedAsWatched' => '已標記為已觀看',
 			'messages.markedAsUnwatched' => '已標記為未觀看',
 			'messages.markedAsWatchedOffline' => '已標記為已觀看（將在連線時同步）',
@@ -3876,6 +3970,8 @@ extension on TranslationsZhHant {
 			'profiles.signOut' => '登出',
 			'profiles.signOutPlexTitle' => '登出 Plex？',
 			'profiles.signOutPlexMessage' => ({required Object displayName}) => '確定要移除 ${displayName} 與所有 Plex Home 使用者嗎？您可以隨時重新登入。',
+			'profiles.signOutPlexDeleteDownloads' => '同時刪除下載內容',
+			'profiles.signOutPlexDeleteDownloadsDescription' => '否則它們會保留在此裝置上，重新登入此帳戶後會恢復。',
 			'profiles.signedOutPlex' => '已登出 Plex。',
 			'profiles.signOutFailed' => '登出失敗。',
 			'profiles.sectionTitle' => '使用者設定檔',
@@ -4023,6 +4119,8 @@ extension on TranslationsZhHant {
 			'discover.moreLikeThis' => '更多類似內容',
 			'discover.titleCount' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, other: '${n} 部作品', ), 
 			'errors.searchFailed' => ({required Object error}) => '搜尋失敗：${error}',
+			_ => null,
+		} ?? switch (path) {
 			'errors.searchUnavailable' => '搜尋無法連線至任何媒體伺服器。',
 			'errors.connectionTimeout' => ({required Object context}) => '載入 ${context} 時連線逾時',
 			'errors.connectionFailed' => '無法連線至媒體伺服器',
@@ -4052,8 +4150,6 @@ extension on TranslationsZhHant {
 			'libraries.emptyingTrash' => ({required Object title}) => '正在清空「${title}」的垃圾桶…',
 			'libraries.trashEmptied' => ({required Object title}) => '已清空「${title}」的垃圾桶',
 			'libraries.failedToEmptyTrash' => ({required Object error}) => '無法清空垃圾桶：${error}',
-			_ => null,
-		} ?? switch (path) {
 			'libraries.analyzing' => ({required Object title}) => '正在分析「${title}」…',
 			'libraries.analysisStarted' => ({required Object title}) => '已開始分析「${title}」',
 			'libraries.failedToAnalyze' => ({required Object error}) => '無法分析媒體庫：${error}',
@@ -4105,6 +4201,7 @@ extension on TranslationsZhHant {
 			'libraries.filterCategories.unwatched' => '未觀看',
 			'libraries.filterCategories.unplayed' => '未播放',
 			'libraries.filterCategories.favorites' => '我的最愛',
+			'libraries.filterCategories.filePath' => '檔案路徑',
 			'libraries.sortLabels.title' => '標題',
 			'libraries.sortLabels.dateAdded' => '新增日期',
 			'libraries.sortLabels.releaseDate' => '發行日期',
@@ -4128,6 +4225,32 @@ extension on TranslationsZhHant {
 			'libraries.sortLabels.dateDownloaded' => '下載日期',
 			'libraries.sortLabels.size' => '大小',
 			'libraries.sortLabels.library' => '媒體庫',
+			'libraries.advancedFilters.include' => '包含',
+			'libraries.advancedFilters.exclude' => '排除',
+			'libraries.advancedFilters.any' => '任意',
+			'libraries.advancedFilters.yes' => '是',
+			'libraries.advancedFilters.no' => '否',
+			'libraries.advancedFilters.not' => ({required Object value}) => '非 ${value}',
+			'libraries.advancedFilters.valueCount' => ({required Object count}) => '已選 ${count} 項',
+			'libraries.advancedFilters.valueCountExcluded' => ({required Object count}) => '已排除 ${count} 項',
+			'libraries.advancedFilters.searchValues' => '搜尋值',
+			'libraries.advancedFilters.noValues' => '沒有可選值',
+			'libraries.advancedFilters.matchContains' => '包含',
+			'libraries.advancedFilters.matchNotContains' => '不包含',
+			'libraries.advancedFilters.matchIs' => '是',
+			'libraries.advancedFilters.matchIsNot' => '不是',
+			'libraries.advancedFilters.matchBeginsWith' => '開頭是',
+			'libraries.advancedFilters.matchEndsWith' => '結尾是',
+			'libraries.advancedFilters.textHint' => '輸入要比對的文字',
+			'libraries.advancedFilters.from' => '從',
+			'libraries.advancedFilters.to' => '到',
+			'libraries.advancedFilters.range' => ({required Object from, required Object to}) => '${from} 至 ${to}',
+			'libraries.advancedFilters.atLeast' => ({required Object value}) => '${value} 以上',
+			'libraries.advancedFilters.atMost' => ({required Object value}) => '最多 ${value}',
+			'libraries.advancedFilters.dateLastDays' => ({required Object count}) => '最近 ${count} 天',
+			'libraries.advancedFilters.dateLastYear' => '過去一年',
+			'libraries.advancedFilters.dateOlderThanDays' => ({required Object count}) => '早於 ${count} 天前',
+			'libraries.advancedFilters.dateOlderThanYear' => '早於一年前',
 			'about.title' => '關於',
 			'about.openSourceLicenses' => '開源授權條款',
 			'about.versionLabel' => ({required Object version}) => '版本 ${version}',
@@ -4279,6 +4402,7 @@ extension on TranslationsZhHant {
 			'explore.sourceMaterial.webComic' => '網路漫畫',
 			'explore.sourceMaterial.musicRelease' => '音樂',
 			'explore.sourceMaterial.otherMedia' => '其他',
+			'explore.creditRole.actor' => '演員',
 			'explore.creditRole.director' => '導演',
 			'explore.creditRole.writer' => '編劇',
 			'explore.creditRole.producer' => '製作人',
@@ -4509,6 +4633,8 @@ extension on TranslationsZhHant {
 			'watchTogether.copySessionCode' => '複製工作階段代碼',
 			'watchTogether.hostControlsPlayback' => '主持人控制播放',
 			'watchTogether.anyoneCanControl' => '任何人都能控制播放',
+			_ => null,
+		} ?? switch (path) {
 			'watchTogether.hostControls' => '主持人控制',
 			'watchTogether.anyoneControls' => '任何人控制',
 			'watchTogether.participants' => '參與者',
@@ -4566,8 +4692,6 @@ extension on TranslationsZhHant {
 			'watchTogether.guestSwitchUnavailable' => '無法切換 — 伺服器無法進行同步',
 			'watchTogether.guestSwitchFailed' => '無法切換 — 在此伺服器上找不到內容',
 			'watchTogether.defaultDisplayName' => '使用者',
-			_ => null,
-		} ?? switch (path) {
 			'watchTogether.errors.timedOut' => '中繼伺服器未及時回應',
 			'watchTogether.errors.connectionLost' => '工作階段就緒前連線已中斷',
 			'watchTogether.errors.invalidRelayResponse' => '中繼伺服器傳回了非預期的回應',
@@ -5023,6 +5147,8 @@ extension on TranslationsZhHant {
 			'services.connectFailed' => ({required Object service}) => '無法連線至 ${service}。請重試。',
 			'services.names.mal' => 'MyAnimeList',
 			'services.names.anilist' => 'AniList',
+			_ => null,
+		} ?? switch (path) {
 			'services.names.simkl' => 'Simkl',
 			'services.names.seerr' => 'Seerr',
 			'services.names.mdblist' => 'MDBList',
@@ -5080,8 +5206,6 @@ extension on TranslationsZhHant {
 			'addServer.invalidCredentials' => '使用者名稱或密碼無效',
 			'addServer.authResponseNotJson' => '驗證回應不是有效的 JSON',
 			'addServer.authResponseIncomplete' => '伺服器傳回的登入回應不完整',
-			_ => null,
-		} ?? switch (path) {
 			'addServer.quickConnectRejected' => 'Quick Connect 遭到伺服器拒絕',
 			'addServer.quickConnectNotJson' => 'Quick Connect 回應不是有效的 JSON',
 			'addServer.quickConnectMissingFields' => 'Quick Connect 回應缺少代碼或密鑰',

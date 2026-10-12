@@ -797,7 +797,8 @@
     "forcedTrack": "${label} (Forced)",
     "osdSubtitlesOff": "Subtitles: Off",
     "osdSubtitles": "Subtitles: ${track}",
-    "osdAudio": "Audio: ${track}"
+    "osdAudio": "Audio: ${track}",
+    "pressBackAgainToStop": "Press Back again to stop playback"
   },
   "userStatus": {},
   "messages": {
