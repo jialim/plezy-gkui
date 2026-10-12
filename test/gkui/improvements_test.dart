@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plezy/gkui/diagnostics.dart';
@@ -87,5 +88,67 @@ void main() {
     expect(check.describe(), startsWith('Remote route • '));
     expect(check.describe(), endsWith('https://….plex.direct:32400'));
     logs.dispose();
+  });
+
+  testWidgets(
+      'the PIN pad tries a complete PIN and stays open when it is wrong',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final tried = <String>[];
+    bool? result;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () async {
+              result = await showDialog<bool>(
+                context: context,
+                builder: (_) => PinPadDialog(
+                  title: 'PIN for Owner',
+                  onSubmit: (pin) async {
+                    tried.add(pin);
+                    return pin == '1234' ? null : 'Wrong PIN. Try again.';
+                  },
+                ),
+              );
+            },
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    for (final digit in '9999'.split('')) {
+      await tester.tap(find.text(digit));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(tried, <String>['9999']);
+    expect(find.text('Wrong PIN. Try again.'), findsOneWidget);
+    expect(find.text('PIN for Owner'), findsOneWidget);
+
+    for (final digit in '1234'.split('')) {
+      await tester.tap(find.text(digit));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    expect(tried.last, '1234');
+    expect(find.text('PIN for Owner'), findsNothing);
+    expect(result, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('a rejected PIN reads as a wrong PIN', () {
+    final rejected = DioException(
+        requestOptions: RequestOptions(path: '/switch'),
+        response: Response<dynamic>(
+            requestOptions: RequestOptions(path: '/switch'), statusCode: 401),
+        type: DioExceptionType.badResponse);
+    expect(profileSwitchError(rejected, 'fallback'), 'Wrong PIN. Try again.');
+    expect(profileSwitchError(StateError('x'), 'fallback'), 'fallback');
   });
 }

@@ -160,67 +160,34 @@ class HomePane extends StatelessWidget {
     }
     final user = await showDialog<PlexHomeUser>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Switch Plex Home profile'),
-        content: SizedBox(
-          width: 520,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: controller.homeUsers.length,
-            itemBuilder: (_, index) {
-              final item = controller.homeUsers[index];
-              final current = item.uuid == controller.currentHomeUser?.uuid;
-              return ListTile(
-                leading: Icon(item.guest ? Icons.person_outline : Icons.person),
-                title: Text(item.displayName),
-                subtitle: Text(item.admin
-                    ? 'Home owner'
-                    : item.guest
-                        ? 'Guest'
-                        : 'Managed user'),
-                trailing: current
-                    ? const Icon(Icons.check, color: Color(0xFFE5A00D))
-                    : item.protected
-                        ? const Icon(Icons.lock_outline)
-                        : null,
-                onTap: current ? null : () => Navigator.pop(context, item),
-              );
-            },
-          ),
-        ),
+      builder: (_) => ProfilePickerDialog(
+        users: controller.homeUsers,
+        currentUuid: controller.currentHomeUser?.uuid,
       ),
     );
     if (user == null || !context.mounted) return;
-    String? pin;
     if (user.protected) {
-      final field = TextEditingController();
-      pin = await showDialog<String>(
+      // The pad stays open on a wrong PIN, so the switch runs inside it.
+      await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: Text('PIN for ${user.displayName}'),
-          content: TextField(
-            controller: field,
-            autofocus: true,
-            obscureText: true,
-            keyboardType: TextInputType.number,
-            maxLength: 4,
-            decoration: const InputDecoration(labelText: 'Plex Home PIN'),
-          ),
-          actions: <Widget>[
-            TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel')),
-            ElevatedButton(
-                onPressed: () => Navigator.pop(context, field.text),
-                child: const Text('Switch')),
-          ],
+        barrierDismissible: false,
+        builder: (_) => PinPadDialog(
+          title: 'PIN for ${user.displayName}',
+          onSubmit: (pin) async {
+            try {
+              await controller.switchProfile(user, pin: pin);
+              return null;
+            } catch (caught) {
+              return profileSwitchError(
+                  caught, controller.error ?? 'Profile switch failed.');
+            }
+          },
         ),
       );
-      field.dispose();
-      if (pin == null) return;
+      return;
     }
     try {
-      await controller.switchProfile(user, pin: pin);
+      await controller.switchProfile(user);
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(

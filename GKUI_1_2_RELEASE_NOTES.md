@@ -5,6 +5,7 @@ This is the consolidated API 19 / ARMv7 release for the ECARX XE1115H head unit.
 ## 1.2.13 GitHub connection fix
 
 - In-app updates no longer fail with an SSL handshake error. Android 4.4 supports the AES-GCM cipher suites that GitHub and other current servers require, but only enables them by default from Android 4.4W (API 20), so the head unit offered only older CBC suites and GitHub ended the handshake. Every secure connection the app makes now offers the forward-secret AES-GCM and ChaCha20 suites first, keeping the older ones as a fallback.
+- Switching Plex Home profile uses large tiles with each person's initial, and a protected profile asks for its PIN on a big on-screen number pad instead of the system keyboard, which covered most of the screen and offered letters and symbols. The PIN is tried as soon as four digits are in; a wrong PIN says so and clears the pad without closing it.
 - In-app updates trust GitHub's newer Sectigo certificates. GitHub serves github.com and api.github.com from either Let's Encrypt or Sectigo's Public Server Authentication hierarchy; Android 4.4 predates the Sectigo roots, so an update check or download could fail whenever GitHub answered with a Sectigo certificate. The app now bundles Sectigo Public Server Authentication Root R46 and E46 and their USERTrust RSA and ECC cross-signers, next to the Let's Encrypt and DigiCert roots it already carried.
 
 ## 1.2.12 car-sized controls

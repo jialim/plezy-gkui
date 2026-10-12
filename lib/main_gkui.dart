@@ -19,6 +19,7 @@ part 'gkui/app/media_widgets.dart';
 part 'gkui/app/details_screen.dart';
 part 'gkui/app/common_widgets.dart';
 part 'gkui/app/diagnostics_pane.dart';
+part 'gkui/app/profile_widgets.dart';
 
 const String buildLabel = 'Plezy GKUI 1.2.13 / GitHub connection fix';
 const String sourceLabel = 'Plezy 1.8.1 / GKUI compatibility fork';
