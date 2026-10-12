@@ -24,6 +24,7 @@ import '../services/music/music_playback_service.dart';
 import '../services/settings_service.dart';
 import '../utils/music_navigation.dart';
 import '../utils/content_utils.dart';
+import '../services/family_projector_profile.dart';
 import '../utils/platform_detector.dart';
 import '../utils/scroll_utils.dart';
 import '../utils/library_grouping.dart';
@@ -166,22 +167,36 @@ class NavigationRailItem extends StatelessWidget {
     this.onNavigateRight,
   });
 
-  Color? _indicatorColorForLayout(MonoTokens t, {required bool focused, required bool collapsedLayout}) {
+  /// The family projector build marks rail focus in its amber accent: a faint
+  /// white tint on charcoal is nearly invisible on a low-lumen projector.
+  static Color? _projectorAccent(BuildContext context) =>
+      FamilyProjectorProfile.enabled ? Theme.of(context).colorScheme.primary : null;
+
+  Color? _indicatorColorForLayout(MonoTokens t, {required bool focused, required bool collapsedLayout, Color? accent}) {
     // The collapsed TV rail is a transparent overlay strip; a persistent
     // active pill over artwork is noise there, so it shows focus only.
     final showSelected = isSelected && !suppressSelectedBackground && !(collapsedLayout && PlatformDetector.isTV());
+    if (accent != null) {
+      if (focused) return accent.withValues(alpha: 0.3);
+      if (showSelected) return accent.withValues(alpha: 0.14);
+      return null;
+    }
     if (focused) return t.text.withValues(alpha: showSelected ? selectedFocusAlpha : focusAlpha);
     if (showSelected) return t.text.withValues(alpha: 0.1);
     return null;
   }
 
-  Color? _indicatorColor(MonoTokens t, {required bool focused, required double expansion}) {
+  Color? _indicatorColor(MonoTokens t, {required bool focused, required double expansion, Color? accent}) {
     return Color.lerp(
-      _indicatorColorForLayout(t, focused: focused, collapsedLayout: true),
-      _indicatorColorForLayout(t, focused: focused, collapsedLayout: false),
+      _indicatorColorForLayout(t, focused: focused, collapsedLayout: true, accent: accent),
+      _indicatorColorForLayout(t, focused: focused, collapsedLayout: false, accent: accent),
       expansion,
     );
   }
+
+  /// The amber outline the projector build draws around the focused item.
+  static Border? _indicatorBorder(Color? accent, {required bool focused}) =>
+      accent != null && focused ? Border.all(color: accent, width: FamilyProjectorProfile.focusBorderWidth - 1) : null;
 
   Widget _leadingIcon(MonoTokens t) =>
       iconWidget ??
@@ -210,9 +225,16 @@ class NavigationRailItem extends StatelessWidget {
             height: collapsedIndicatorHeight,
             alignment: .center,
             decoration: BoxDecoration(
-              color: _indicatorColor(t, focused: focused, expansion: 0),
+              color: _indicatorColor(t, focused: focused, expansion: 0, accent: _projectorAccent(context)),
               borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
             ),
+            // Drawn on top so the outline never pads the label.
+            foregroundDecoration: focused && _projectorAccent(context) != null
+                ? BoxDecoration(
+                    border: _indicatorBorder(_projectorAccent(context), focused: focused),
+                    borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
+                  )
+                : null,
             child: _leadingIcon(t),
           ),
         ),
@@ -271,9 +293,16 @@ class NavigationRailItem extends StatelessWidget {
       alignment: .centerLeft,
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: fixedHeight ? 0 : 8),
       decoration: BoxDecoration(
-        color: _indicatorColor(t, focused: focused, expansion: 1),
+        color: _indicatorColor(t, focused: focused, expansion: 1, accent: _projectorAccent(context)),
         borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
       ),
+      // Drawn on top so the outline never pads the label.
+      foregroundDecoration: focused && _projectorAccent(context) != null
+          ? BoxDecoration(
+              border: _indicatorBorder(_projectorAccent(context), focused: focused),
+              borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
+            )
+          : null,
       child: _buildExpandedContent(context, t, labelOpacity: 1, showLeading: true),
     );
   }
@@ -311,9 +340,16 @@ class NavigationRailItem extends StatelessWidget {
               width: lerpDouble(collapsedPillWidth, expandedContentWidth, expansion),
               height: lerpDouble(collapsedIndicatorHeight, expandedHeight, expansion),
               decoration: BoxDecoration(
-                color: _indicatorColor(t, focused: focused, expansion: expansion),
+                color: _indicatorColor(t, focused: focused, expansion: expansion, accent: _projectorAccent(context)),
                 borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
               ),
+              // Drawn on top so the outline never pads the label.
+              foregroundDecoration: focused && _projectorAccent(context) != null
+                  ? BoxDecoration(
+                      border: _indicatorBorder(_projectorAccent(context), focused: focused),
+                      borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
+                    )
+                  : null,
             ),
           ),
           Positioned(

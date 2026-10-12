@@ -48,6 +48,8 @@ Test 9 adds, for the remote and the sofa:
 - Update downloads resume after a dropped connection instead of starting the 95 MB APK again, and the startup update prompt waits until the player closes.
 - The Logs screen lists the display's supported modes, density and HDR types, so frame-rate matching can be judged before it is turned on.
 
+Build 11 makes the sidebar easier to follow with the remote: the focused library or tab gets a 3 px amber outline over an amber tint, and the library being viewed keeps a softer amber tint, in place of upstream's faint white tint that disappeared against the charcoal sidebar on the projector.
+
 Update downloads use abortable streaming requests, a Cancel action, stalled/overall timeouts, integrity checks, and separate network/storage/verification/installer errors. Release notes publish actual per-ABI Android version codes; both the updater and native verifier reject equal/older builds. CI requires an increasing build number and runs the Android JVM suite, including APK verifier tests, before building a release. The package ID remains `app.plezylite.xgimi` and the launcher label is now Plezy XGIMI Lite.
 
 ## Playback policy
