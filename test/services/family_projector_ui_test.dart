@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:plezy/focus/input_mode_tracker.dart';
+import 'package:plezy/widgets/side_navigation_rail.dart';
 import 'package:plezy/focus/focus_theme.dart';
 import 'package:plezy/main.dart' as app;
 import 'package:plezy/services/family_projector_profile.dart';
@@ -99,4 +103,59 @@ double _contrast(Color a, Color b) {
   final lighter = a.computeLuminance() > b.computeLuminance() ? a : b;
   final darker = identical(lighter, a) ? b : a;
   return (lighter.computeLuminance() + 0.05) / (darker.computeLuminance() + 0.05);
+
+  testWidgets('library rail focus is an amber outline, not a faint white tint', (tester) async {
+    final focus = FocusNode();
+    final other = FocusNode();
+    addTearDown(focus.dispose);
+    addTearDown(other.dispose);
+    final theme = monoTheme(dark: true);
+    await tester.pumpWidget(
+      InputModeTracker(
+        child: MaterialApp(
+          theme: theme,
+          home: Scaffold(
+            body: Column(
+              children: [
+                NavigationRailItem(
+                  icon: Symbols.movie_rounded,
+                  label: const Text('Movies'),
+                  isSelected: false,
+                  onTap: () {},
+                  focusNode: focus,
+                ),
+                NavigationRailItem(
+                  icon: Symbols.tv_rounded,
+                  label: const Text('Shows'),
+                  isSelected: true,
+                  onTap: () {},
+                  focusNode: other,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    focus.requestFocus();
+    await tester.pumpAndSettle();
+
+    final amber = theme.colorScheme.primary;
+    final outlined = tester
+        .widgetList<Container>(find.byType(Container))
+        .map((c) => c.foregroundDecoration)
+        .whereType<BoxDecoration>()
+        .where((d) => d.border is Border && (d.border! as Border).top.color == amber);
+    expect(outlined, hasLength(1), reason: 'only the focused item is outlined in amber');
+    final fills = tester
+        .widgetList<Container>(find.byType(Container))
+        .map((c) => c.decoration)
+        .whereType<BoxDecoration>()
+        .map((d) => d.color)
+        .whereType<Color>()
+        .toList();
+    expect(fills, contains(amber.withValues(alpha: 0.3)));
+    expect(fills, contains(amber.withValues(alpha: 0.14)));
+  }, skip: !FamilyProjectorProfile.enabled);
 }
