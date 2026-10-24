@@ -177,7 +177,9 @@ class NavigationRailItem extends StatelessWidget {
     // active pill over artwork is noise there, so it shows focus only.
     final showSelected = isSelected && !suppressSelectedBackground && !(collapsedLayout && PlatformDetector.isTV());
     if (accent != null) {
-      if (focused) return accent.withValues(alpha: 0.3);
+      // A solid bar: on a projected image in a lit room, a faint tint or a
+      // thin outline washes out against the charcoal, a bright block does not.
+      if (focused) return accent;
       if (showSelected) return accent.withValues(alpha: 0.14);
       return null;
     }
@@ -194,9 +196,20 @@ class NavigationRailItem extends StatelessWidget {
     );
   }
 
-  /// The amber outline the projector build draws around the focused item.
-  static Border? _indicatorBorder(Color? accent, {required bool focused}) =>
-      accent != null && focused ? Border.all(color: accent, width: FamilyProjectorProfile.focusBorderWidth - 1) : null;
+  /// In the projector build the focused item's icon and label turn black on
+  /// its solid amber bar, and the current library's turn amber. A colour
+  /// filter covers items that build their own labels (Now Playing, chevrons).
+  Widget _projectorTint(BuildContext context, Widget child, {required bool focused}) {
+    final accent = _projectorAccent(context);
+    if (accent == null) return child;
+    final Color? tint = focused
+        ? Theme.of(context).colorScheme.onPrimary
+        : isSelected
+        ? accent
+        : null;
+    if (tint == null) return child;
+    return ColorFiltered(colorFilter: ColorFilter.mode(tint, BlendMode.srcIn), child: child);
+  }
 
   Widget _leadingIcon(MonoTokens t) =>
       iconWidget ??
@@ -228,14 +241,7 @@ class NavigationRailItem extends StatelessWidget {
               color: _indicatorColor(t, focused: focused, expansion: 0, accent: _projectorAccent(context)),
               borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
             ),
-            // Drawn on top so the outline never pads the label.
-            foregroundDecoration: focused && _projectorAccent(context) != null
-                ? BoxDecoration(
-                    border: _indicatorBorder(_projectorAccent(context), focused: focused),
-                    borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
-                  )
-                : null,
-            child: _leadingIcon(t),
+            child: _projectorTint(context, _leadingIcon(t), focused: focused),
           ),
         ),
       ),
@@ -296,14 +302,11 @@ class NavigationRailItem extends StatelessWidget {
         color: _indicatorColor(t, focused: focused, expansion: 1, accent: _projectorAccent(context)),
         borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
       ),
-      // Drawn on top so the outline never pads the label.
-      foregroundDecoration: focused && _projectorAccent(context) != null
-          ? BoxDecoration(
-              border: _indicatorBorder(_projectorAccent(context), focused: focused),
-              borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
-            )
-          : null,
-      child: _buildExpandedContent(context, t, labelOpacity: 1, showLeading: true),
+      child: _projectorTint(
+        context,
+        _buildExpandedContent(context, t, labelOpacity: 1, showLeading: true),
+        focused: focused,
+      ),
     );
   }
 
@@ -343,13 +346,6 @@ class NavigationRailItem extends StatelessWidget {
                 color: _indicatorColor(t, focused: focused, expansion: expansion, accent: _projectorAccent(context)),
                 borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
               ),
-              // Drawn on top so the outline never pads the label.
-              foregroundDecoration: focused && _projectorAccent(context) != null
-                  ? BoxDecoration(
-                      border: _indicatorBorder(_projectorAccent(context), focused: focused),
-                      borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
-                    )
-                  : null,
             ),
           ),
           Positioned(
@@ -360,7 +356,11 @@ class NavigationRailItem extends StatelessWidget {
               height: expandedHeight,
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                child: _buildExpandedContent(context, t, labelOpacity: expansion, showLeading: false),
+                child: _projectorTint(
+                  context,
+                  _buildExpandedContent(context, t, labelOpacity: expansion, showLeading: false),
+                  focused: focused,
+                ),
               ),
             ),
           ),
@@ -370,7 +370,7 @@ class NavigationRailItem extends StatelessWidget {
             child: SizedBox(
               width: iconSize,
               height: iconSize,
-              child: Center(child: _leadingIcon(t)),
+              child: Center(child: _projectorTint(context, _leadingIcon(t), focused: focused)),
             ),
           ),
         ],

@@ -70,26 +70,29 @@ class _FocusableListTileState extends State<FocusableListTile> with FocusableTil
   Widget build(BuildContext context) {
     final automotive = PlatformDetector.isAutomotive();
 
-    return MouseRegion(
-      cursor: widget.enabled && (widget.onTap != null || widget.onLongPress != null)
-          ? SystemMouseCursors.click
-          : MouseCursor.defer,
-      child: ListTile(
-        title: widget.title,
-        subtitle: widget.subtitle,
-        leading: widget.leading,
-        trailing: widget.trailing,
-        onTap: widget.onTap,
-        onLongPress: widget.onLongPress,
-        dense: automotive ? false : widget.dense,
-        enabled: widget.enabled,
-        selected: widget.selected,
-        contentPadding: widget.contentPadding,
-        visualDensity: automotive ? VisualDensity.standard : widget.visualDensity,
-        focusNode: effectiveFocusNode,
-        autofocus: widget.autofocus,
-        horizontalTitleGap: widget.horizontalTitleGap,
-        minLeadingWidth: widget.minLeadingWidth,
+    return projectorFocusFrame(
+      context,
+      MouseRegion(
+        cursor: widget.enabled && (widget.onTap != null || widget.onLongPress != null)
+            ? SystemMouseCursors.click
+            : MouseCursor.defer,
+        child: ListTile(
+          title: widget.title,
+          subtitle: widget.subtitle,
+          leading: widget.leading,
+          trailing: widget.trailing,
+          onTap: widget.onTap,
+          onLongPress: widget.onLongPress,
+          dense: automotive ? false : widget.dense,
+          enabled: widget.enabled,
+          selected: widget.selected,
+          contentPadding: widget.contentPadding,
+          visualDensity: automotive ? VisualDensity.standard : widget.visualDensity,
+          focusNode: effectiveFocusNode,
+          autofocus: widget.autofocus,
+          horizontalTitleGap: widget.horizontalTitleGap,
+          minLeadingWidth: widget.minLeadingWidth,
+        ),
       ),
     );
   }
@@ -164,21 +167,24 @@ class _FocusableSwitchListTileState extends State<FocusableSwitchListTile>
   @override
   Widget build(BuildContext context) {
     final automotive = PlatformDetector.isAutomotive();
-    return ClickableCursor(
-      enabled: widget.onChanged != null,
-      child: SwitchListTile(
-        title: widget.title,
-        subtitle: widget.subtitle,
-        secondary: widget.secondary,
-        value: widget.value,
-        onChanged: widget.onChanged,
-        dense: automotive ? false : widget.dense,
-        visualDensity: automotive ? VisualDensity.standard : widget.visualDensity,
-        contentPadding: widget.contentPadding,
-        focusNode: effectiveFocusNode,
-        autofocus: widget.autofocus,
-        horizontalTitleGap: widget.horizontalTitleGap,
-        minLeadingWidth: widget.minLeadingWidth,
+    return projectorFocusFrame(
+      context,
+      ClickableCursor(
+        enabled: widget.onChanged != null,
+        child: SwitchListTile(
+          title: widget.title,
+          subtitle: widget.subtitle,
+          secondary: widget.secondary,
+          value: widget.value,
+          onChanged: widget.onChanged,
+          dense: automotive ? false : widget.dense,
+          visualDensity: automotive ? VisualDensity.standard : widget.visualDensity,
+          contentPadding: widget.contentPadding,
+          focusNode: effectiveFocusNode,
+          autofocus: widget.autofocus,
+          horizontalTitleGap: widget.horizontalTitleGap,
+          minLeadingWidth: widget.minLeadingWidth,
+        ),
       ),
     );
   }
@@ -229,21 +235,24 @@ class _FocusableCheckboxListTileState extends State<FocusableCheckboxListTile>
   @override
   Widget build(BuildContext context) {
     final automotive = PlatformDetector.isAutomotive();
-    return ClickableCursor(
-      enabled: widget.onChanged != null,
-      child: CheckboxListTile(
-        title: widget.title,
-        subtitle: widget.subtitle,
-        secondary: widget.secondary,
-        value: widget.value,
-        onChanged: widget.onChanged,
-        tristate: widget.tristate,
-        dense: automotive ? false : widget.dense,
-        visualDensity: automotive ? VisualDensity.standard : widget.visualDensity,
-        contentPadding: widget.contentPadding,
-        focusNode: effectiveFocusNode,
-        autofocus: widget.autofocus,
-        controlAffinity: widget.controlAffinity,
+    return projectorFocusFrame(
+      context,
+      ClickableCursor(
+        enabled: widget.onChanged != null,
+        child: CheckboxListTile(
+          title: widget.title,
+          subtitle: widget.subtitle,
+          secondary: widget.secondary,
+          value: widget.value,
+          onChanged: widget.onChanged,
+          tristate: widget.tristate,
+          dense: automotive ? false : widget.dense,
+          visualDensity: automotive ? VisualDensity.standard : widget.visualDensity,
+          contentPadding: widget.contentPadding,
+          focusNode: effectiveFocusNode,
+          autofocus: widget.autofocus,
+          controlAffinity: widget.controlAffinity,
+        ),
       ),
     );
   }
