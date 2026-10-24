@@ -567,6 +567,23 @@ void main() {
       expect(capturedUri!.queryParameters['Fields']!.split(','), contains('MediaSources'));
     });
 
+    test('fetchPlayableDescendantsPage hides virtual placeholder episodes', () async {
+      Uri? capturedUri;
+      final scoped = JellyfinClient.forTesting(
+        connection: _conn(),
+        httpClient: MockClient((request) async {
+          capturedUri = request.url;
+          return http.Response(jsonEncode({'Items': <Object>[], 'TotalRecordCount': 0}), 200);
+        }),
+      );
+      addTearDown(scoped.close);
+
+      await scoped.fetchPlayableDescendantsPage('show-1');
+
+      // Placeholders have no file: queuing one for play-all or download fails.
+      expect(capturedUri!.queryParameters['ExcludeLocationTypes'], 'Virtual');
+    });
+
     test('reportPlaybackProgress sends media source and stream indexes', () async {
       Uri? capturedUri;
       String? capturedBody;
@@ -4757,6 +4774,11 @@ void main() {
       expect(captured!.queryParameters['EnableImageTypes'], 'Primary,Backdrop,Logo');
       expect(captured!.queryParameters['ImageTypeLimit'], '3');
       expect(captured!.queryParameters.containsKey('ParentId'), isFalse);
+      expect(
+        captured!.queryParameters['ExcludeLocationTypes'],
+        'Virtual',
+        reason: 'placeholder episodes carry a fresh DateCreated and would lead the grid (#2551)',
+      );
       client.close();
     });
 
@@ -4822,6 +4844,7 @@ void main() {
       expect(captured!.queryParameters['IncludeItemTypes'], 'Movie,Series,Episode,Video,MusicVideo,Photo');
       expect(captured!.queryParameters['EnableImageTypes'], 'Primary,Backdrop,Logo');
       expect(captured!.queryParameters['ImageTypeLimit'], '3');
+      expect(captured!.queryParameters['ExcludeLocationTypes'], 'Virtual');
       client.close();
     });
 
@@ -5197,6 +5220,43 @@ void main() {
       expect(query['PersonIds'], 'person-1');
       expect(query['StartIndex'], '20');
       expect(query['Limit'], '10');
+    });
+
+    test('fetchPersonDetails maps the Person item fields Jellyfin shows on its person page', () async {
+      final routed = _routedClient({
+        '/Users/user-1/Items/person-1': {
+          'Id': 'person-1',
+          'Name': 'Jeanette Nolan',
+          'Type': 'Person',
+          'Overview': 'Jeanette Nolan was an American actress.',
+          'PremiereDate': '1911-12-30T00:00:00.0000000Z',
+          'EndDate': '1998-06-05T00:00:00.0000000Z',
+          'ProductionLocations': ['Los Angeles, California, USA'],
+        },
+      });
+
+      final details = await routed.client.fetchPersonDetails('person-1');
+
+      expect(details.biography, 'Jeanette Nolan was an American actress.');
+      expect(details.birthDate, DateTime.utc(1911, 12, 30));
+      expect(details.deathDate, DateTime.utc(1998, 6, 5));
+      expect(details.birthPlace, 'Los Angeles, California, USA');
+    });
+
+    test('fetchPersonDetails leaves out the fields a Person item does not fill in', () async {
+      final routed = _routedClient({
+        '/Users/user-1/Items/person-1': {
+          'Id': 'person-1',
+          'Name': 'Tom Hanks',
+          'Type': 'Person',
+          'Overview': '',
+          'ProductionLocations': <String>[],
+        },
+      });
+
+      final details = await routed.client.fetchPersonDetails('person-1');
+
+      expect(details.isEmpty, isTrue);
     });
 
     test('fetchPlayableDescendantsPage uses requested page bounds', () async {

@@ -22,7 +22,7 @@ void main() {
     expect(FamilyProjectorProfile.uiScale, 1.2);
     expect(40 * FamilyProjectorProfile.uiScale, greaterThanOrEqualTo(48));
     expect(TvLayoutConstants.scaleForHeight(900), 1);
-    expect(FocusTheme.focusBorderWidth, 4);
+    expect(FocusTheme.focusBorderWidth, 5);
     expect(FocusTheme.focusScale, 1.06);
     expect(FocusTheme.fullCardFocusScale, 1.07);
     expect(FocusTheme.playerControlFocusScale, 1.18);
@@ -64,15 +64,23 @@ void main() {
   }, skip: skip);
 
   test('projector palette stays highly legible on a low-contrast display', () {
-    final theme = monoTheme(dark: true, oled: true);
+    final theme = monoTheme(MonoPalette.oled);
     final scheme = theme.colorScheme;
     final muted = Color.alphaBlend(theme.textTheme.bodySmall!.color!, scheme.surface);
 
-    expect(scheme.primary, const Color(0xFFFFD54F));
+    expect(scheme.primary, projectorYellow);
+    expect(theme.scaffoldBackgroundColor, const Color(0xFF000000));
     expect(scheme.surface, const Color(0xFF242424));
     expect(_contrast(scheme.onSurface, scheme.surface), greaterThanOrEqualTo(7));
     expect(_contrast(muted, scheme.surface), greaterThanOrEqualTo(7));
     expect(_contrast(scheme.onPrimary, scheme.primary), greaterThanOrEqualTo(7));
+  }, skip: skip);
+
+  test('projector palette keeps a coloured preset accent but forces a black page', () {
+    final theme = monoTheme(MonoPalette.glacier);
+    expect(theme.colorScheme.primary, MonoPalette.glacier.accent);
+    expect(theme.scaffoldBackgroundColor, const Color(0xFF000000));
+    expect(projectorPalette(MonoPalette.light).accent, const Color(0xFF765000));
   }, skip: skip);
 
   testWidgets('projector root enlarges a 1080p logical surface by 1.2x', (tester) async {
@@ -104,7 +112,7 @@ void main() {
     final other = FocusNode();
     addTearDown(focus.dispose);
     addTearDown(other.dispose);
-    final theme = monoTheme(dark: true);
+    final theme = monoTheme(MonoPalette.dark);
     await tester.pumpWidget(
       InputModeTracker(
         child: MaterialApp(
@@ -146,6 +154,12 @@ void main() {
         .toList();
     expect(fills, contains(amber), reason: 'the focused item is a solid amber bar');
     expect(fills, contains(amber.withValues(alpha: 0.14)), reason: 'the current library keeps a soft tint');
+    final glows = tester
+        .widgetList<Container>(find.byType(Container))
+        .map((c) => c.decoration)
+        .whereType<BoxDecoration>()
+        .where((d) => d.boxShadow != null);
+    expect(glows, hasLength(1), reason: 'only the focused bar carries the halo');
     final tints = tester.widgetList<ColorFiltered>(find.byType(ColorFiltered)).map((w) => w.colorFilter).toList();
     expect(tints, contains(ColorFilter.mode(theme.colorScheme.onPrimary, BlendMode.srcIn)));
     expect(tints, contains(ColorFilter.mode(amber, BlendMode.srcIn)));
@@ -154,7 +168,7 @@ void main() {
   testWidgets('a focused settings row is a solid amber bar with black text', (tester) async {
     final focus = FocusNode();
     addTearDown(focus.dispose);
-    final theme = monoTheme(dark: true);
+    final theme = monoTheme(MonoPalette.dark);
     await tester.pumpWidget(
       InputModeTracker(
         child: MaterialApp(

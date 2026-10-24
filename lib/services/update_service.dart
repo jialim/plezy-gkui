@@ -500,6 +500,7 @@ class UpdateService {
     } on PlatformException catch (error) {
       throw XgimiUpdateException(
         error.code == 'UPDATE_REJECTED' ? XgimiUpdateFailure.verification : XgimiUpdateFailure.installer,
+        cause: error.message ?? error.code,
       );
     } on FileSystemException catch (error) {
       if (token.isCancelled && !timedOut) throw XgimiUpdateCancelled();

@@ -60,6 +60,12 @@ abstract class Player {
   /// reporting, scrobbling — must read its last position from here.
   Duration? get outgoingSourcePosition => null;
 
+  /// Where the open source begins on the playback timeline. Every position
+  /// this player reports or accepts is timeline time; a raw backend read
+  /// such as mpv's `time-pos` is source time, which is this much earlier.
+  /// Zero unless [open] laid the source at an offset.
+  Duration get timelineOffset;
+
   /// Whether audio passthrough (bitstream output) is currently active.
   ///
   /// [setRate] with a non-1.0 rate tears passthrough down, so callers that
@@ -72,8 +78,13 @@ abstract class Player {
 
   /// Open a media source for playback.
   ///
-  /// [media] - The media source to open.
+  /// [media] - The media source to open. Its [Media.start] is timeline time.
   /// [play] - Whether to start playback immediately (default: true).
+  /// [timelineDuration] - Overrides the backend's duration (a transcode's
+  /// grows as it encodes; a stacked item spans several files).
+  /// [timelineOffset] - Where this source begins on the timeline, for an
+  /// item stacked across several files: positions are reported shifted by
+  /// it and seeks are shifted back, so consumers see one item timeline.
   ///
   /// Backends that can identify the source they started resolve with its id
   /// (mpv: the playlist entry id carried by that source's stream events, see
@@ -84,6 +95,7 @@ abstract class Player {
     bool isLive = false,
     List<SubtitleTrack>? externalSubtitles,
     Duration? timelineDuration,
+    Duration timelineOffset = Duration.zero,
   });
 
   /// Start or resume playback.
@@ -216,8 +228,9 @@ abstract class Player {
   ///
   /// mpv backends insert/remove the `loudnorm` audio filter and, because a
   /// filter cannot process a bitstream, leave passthrough while it is on.
-  /// Android ExoPlayer attaches platform audio effects (DynamicsProcessing
-  /// on API 28+, LoudnessEnhancer otherwise) and forces decoded non-tunneled
+  /// Android mpv sets `audiotrack-normalize` instead, and Android ExoPlayer
+  /// attaches the same platform audio effects (DynamicsProcessing on API 28+,
+  /// LoudnessEnhancer otherwise); ExoPlayer also forces decoded non-tunneled
   /// PCM output while enabled so the effects can process the stream.
   Future<void> setAudioNormalization(bool enabled);
 
@@ -238,7 +251,7 @@ abstract class Player {
 
   /// Show or hide the video rendering layer.
   ///
-  /// On macOS, this controls the Metal layer visibility.
+  /// On macOS, this controls the video display layer visibility.
   /// On other platforms, this may have no effect.
   ///
   /// When [restoreOnWindowVisible] is true, macOS may restore the layer as soon
@@ -250,7 +263,7 @@ abstract class Player {
 
   /// Update the video frame/surface dimensions.
   ///
-  /// On iOS/macOS, this updates the Metal layer's frame to match the current
+  /// On iOS/macOS, this updates the video display layer's frame to match the current
   /// window size. Call this when the layout changes (e.g., device rotation).
   /// On other platforms, this is a no-op.
   Future<void> updateFrame();
@@ -323,7 +336,7 @@ abstract class Player {
 
   /// Apply custom zoom to the native video layer.
   ///
-  /// ExoPlayer scales its frame layout; iOS/tvOS scale the AVFoundation video
+  /// ExoPlayer scales its frame layout; iOS/tvOS/macOS scale the AVFoundation video
   /// container (mpv's `video-zoom` would force vo_avfoundation's Core Image
   /// path and destroy HDR/Dolby Vision passthrough). Other mpv backends are a
   /// no-op here and zoom via the `video-zoom` property.
@@ -372,7 +385,7 @@ abstract class Player {
   /// Creates a new player instance.
   ///
   /// Returns a platform-specific implementation:
-  /// - macOS/iOS: [PlayerNative] using MPVKit/libmpv with Metal rendering
+  /// - macOS/iOS: [PlayerNative] using MPVKit/libmpv with the AVFoundation video output
   /// - Android: [PlayerNative] using MPV (default) or [PlayerAndroid] using ExoPlayer (opt-in)
   /// - Windows: [PlayerWindows] using libmpv with native window embedding
   /// - Linux: [PlayerLinux] using libmpv on a native Wayland video plane

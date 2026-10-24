@@ -355,7 +355,6 @@ class _Translations$settings$zh_Hant extends Translations$settings$zh {
 	@override String get videoPlayerNavigation => '影片播放器導覽';
 	@override String get videoPlayerNavigationDescription => '使用方向鍵導覽影片播放器控制項';
 	@override String get watchTogetherRelay => '一起看中繼伺服器';
-	@override String get watchTogetherRelayDescription => '設定自訂中繼。所有人必須使用相同的伺服器。';
 	@override String get watchTogetherRelayHint => 'https://my-relay.example.com';
 	@override String get watchTogetherRelayInvalid => '請輸入有效的 HTTP 或 HTTPS 中繼伺服器根網址。';
 	@override String get crashReporting => '當機報告';
@@ -465,7 +464,7 @@ class _Translations$settings$zh_Hant extends Translations$settings$zh {
 	@override String get tunneledPlaybackDescription => '使用影片通道模式。若 HDR 播放出現黑畫面或動態卡頓，請停用此項。';
 	@override String get audioPassthrough => '音訊直通';
 	@override String get audioPassthroughDescription => '將 Dolby/DTS 音訊不經重新編碼，直接傳送至擴大機或電視以保留環繞音效。若播放無聲，請關閉此設定。';
-	@override String get audioPassthroughDescriptionAppleTv => '使用 Apple 原生 Dolby 解碼器處理 Dolby Digital Plus（包括 Atmos）。DTS 與 TrueHD 仍以多聲道 PCM 播放。若沒有聲音，請關閉此設定。';
+	@override String get audioPassthroughDescriptionApple => '使用 Apple 原生 Dolby 解碼器處理 Dolby Digital Plus（包括 Atmos）。DTS 與 TrueHD 仍以多聲道 PCM 播放。若沒有聲音，請關閉此設定。';
 	@override String get audioPassthroughOverriddenByNormalization => '音量標準化開啟時停用';
 	@override String get audioChannelLimit => '音訊聲道';
 	@override String get audioChannelLimitDescription => '為無法播放全部聲道的揚聲器、耳機或 HDMI 裝置混音解碼後的音訊';
@@ -491,6 +490,8 @@ class _Translations$settings$zh_Hant extends Translations$settings$zh {
 	@override String get dvConversionNativeDescription => '強制使用原生 DV7 並停用 DV 轉換重試';
 	@override String get dvConversionDv81Description => '強制將內嵌的 RPU 轉換為 Dolby Vision Profile 8.1';
 	@override String get dvConversionHevcStripDescription => '移除 Dolby Vision RPU/EL 層，並以一般 HEVC 呈現';
+	@override String get disableDolbyVision => '停用 Dolby Vision';
+	@override String get disableDolbyVisionDescription => '檔案包含 HDR10 或 HLG 層時，改為播放該層而非 Dolby Vision';
 	@override String get hdrSdrConversion => 'HDR 轉 SDR';
 	@override String get hdrSdrConversionDescription => '選擇在顯示器無法顯示 HDR 時由誰轉換 HDR 影片。';
 	@override String get hdrSdrConversionAuto => '自動';
@@ -1712,79 +1713,24 @@ class _Translations$watchTogether$zh_Hant extends Translations$watchTogether$zh 
 	// Translations
 	@override String get title => '一起看';
 	@override String get description => '與親友同步觀看內容';
-	@override String get createSession => '建立「一起看」工作階段';
-	@override String get creating => '正在建立…';
-	@override String get joinSession => '加入工作階段';
-	@override String get joining => '正在加入…';
-	@override String get controlMode => '控制模式';
-	@override String get controlModeQuestion => '誰可以控制播放？';
-	@override String get hostOnly => '僅限主持人';
-	@override String get anyone => '任何人';
-	@override String get hostingSession => '主持「一起看」';
-	@override String get inSession => '在工作階段中';
-	@override String get sessionCode => '工作階段代碼';
+	@override String get recentRooms => '最近的房間';
+	@override String get renameRoom => '重新命名房間';
+	@override String get removeRoom => '移除';
 	@override String get openSessionControls => '開啟「一起看」工作階段控制面板';
-	@override String get copySessionCode => '複製工作階段代碼';
+	@override String get youAreHost => '您是主持人';
 	@override String get hostControlsPlayback => '主持人控制播放';
 	@override String get anyoneCanControl => '任何人都能控制播放';
-	@override String get hostControls => '主持人控制';
-	@override String get anyoneControls => '任何人控制';
+	@override String get joinCurrentPlayback => '加入目前播放點';
+	@override String get joinCurrentPlaybackDescription => '同步至主持人目前的觀看進度';
 	@override String get participants => '參與者';
-	@override String get host => '主持人';
 	@override String get hostBadge => '主持人';
-	@override String get youAreHost => '您是主持人';
 	@override String get makeHost => '設為主持人';
 	@override String get makeHostQuestion => '移交主持人？';
 	@override String makeHostConfirm({required Object name}) => '${name} 將控制播放並主導所有人的工作階段。';
 	@override String get transfer => '移交';
-	@override String hostChangedTo({required Object name}) => '${name} 現在是主持人';
-	@override String get youAreNowHost => '您現在是主持人';
-	@override String hostTransferFailed({required Object name}) => '無法將 ${name} 設為主持人';
-	@override String get watchingWithOthers => '與他人一起觀看';
-	@override String get endSession => '結束工作階段';
-	@override String get leaveSession => '離開工作階段';
-	@override String get endSessionQuestion => '結束工作階段？';
-	@override String get leaveSessionQuestion => '離開工作階段？';
-	@override String get endSessionConfirm => '這將為所有參與者結束此「一起看」工作階段。';
-	@override String get leaveSessionConfirm => '您將退出此「一起看」工作階段。';
-	@override String get endSessionConfirmOverlay => '這將為所有參與者結束觀看工作階段。';
-	@override String get leaveSessionConfirmOverlay => '您將中斷與「一起看」工作階段的連線。';
-	@override String get end => '結束';
 	@override String get leave => '離開';
-	@override String get syncing => '同步中…';
-	@override String get joinWatchSession => '加入「一起看」工作階段';
-	@override String get enterCodeHint => '輸入 5 個英數字元的代碼';
-	@override String get pasteFromClipboard => '從剪貼簿貼上';
-	@override String get pleaseEnterCode => '請輸入工作階段代碼';
-	@override String get codeMustBe5Chars => '工作階段代碼必須為 5 個字元';
-	@override String get joinInstructions => '輸入主持人的工作階段代碼以加入「一起看」。';
-	@override String get failedToCreate => '建立工作階段失敗';
-	@override String get failedToJoin => '加入工作階段失敗';
-	@override String get sessionCodeCopied => '工作階段代碼已複製到剪貼簿';
-	@override String get relayUnreachable => '無法連線至中繼伺服器。ISP 封鎖可能會導致「一起看」無法使用。';
-	@override String get reconnectingToHost => '正在重新連線至主持人…';
-	@override String get currentPlayback => '目前播放內容';
-	@override String get joinCurrentPlayback => '加入目前播放點';
-	@override String get joinCurrentPlaybackDescription => '同步至主持人目前的觀看進度';
-	@override String get failedToOpenCurrentPlayback => '無法開啟目前播放點';
-	@override String participantJoined({required Object name}) => '${name} 已加入';
-	@override String participantLeft({required Object name}) => '${name} 已離開';
-	@override String participantPaused({required Object name}) => '${name} 暫停了播放';
-	@override String participantResumed({required Object name}) => '${name} 恢復了播放';
-	@override String participantSeeked({required Object name}) => '${name} 變更了播放位置';
-	@override String participantChangedSpeed({required Object name, required Object speed}) => '${name} 將速度設為 ${speed}';
-	@override String participantBuffering({required Object name}) => '${name} 正在緩衝';
-	@override String participantNeedsUpdate({required Object name}) => '${name} 正在使用舊版應用程式，無法進行同步';
-	@override String resumingWithout({required Object name}) => '不等待 ${name}，繼續播放';
-	@override String get waitingForParticipants => '正在等待其他人載入…';
-	@override String waitingForName({required Object name}) => '正在等待 ${name}…';
-	@override String get recentRooms => '最近的房間';
-	@override String get renameRoom => '重新命名房間';
-	@override String get removeRoom => '移除';
-	@override String get guestSwitchUnavailable => '無法切換 — 伺服器無法進行同步';
-	@override String get guestSwitchFailed => '無法切換 — 在此伺服器上找不到內容';
-	@override String get defaultDisplayName => '使用者';
-	@override late final _Translations$watchTogether$errors$zh_Hant errors = _Translations$watchTogether$errors$zh_Hant._(_root);
+	@override String get end => '結束';
+	@override late final _Translations$watchTogether$notices$zh_Hant notices = _Translations$watchTogether$notices$zh_Hant._(_root);
 }
 
 // Path: downloads
@@ -1964,7 +1910,6 @@ class _Translations$videoSettings$zh_Hant extends Translations$videoSettings$zh 
 	@override String get audioOutputStereo => '立體聲';
 	@override String get audioNormalization => '音量標準化';
 	@override String get audioNormalizationDisablesPassthrough => '將音訊解碼為 PCM；開啟時直通關閉';
-	@override String get audioNormalizationStereoMix => '將音訊解碼為立體聲混音；開啟時直通關閉';
 }
 
 // Path: performanceOverlay
@@ -2339,6 +2284,8 @@ class _Translations$common$ratingSource$zh_Hant extends Translations$common$rati
 	@override String get trakt => 'Trakt';
 	@override String get rottenTomatoesCritic => 'Rotten Tomatoes 影評人';
 	@override String get rottenTomatoesAudience => 'Rotten Tomatoes 觀眾';
+	@override String get metacritic => 'Metacritic';
+	@override String get letterboxd => 'Letterboxd';
 }
 
 // Path: common.mediaKind
@@ -2855,18 +2802,20 @@ class _Translations$music$discography$zh_Hant extends Translations$music$discogr
 	@override String get compilations => '合輯';
 }
 
-// Path: watchTogether.errors
-class _Translations$watchTogether$errors$zh_Hant extends Translations$watchTogether$errors$zh {
-	_Translations$watchTogether$errors$zh_Hant._(TranslationsZhHant root) : this._root = root, super.internal(root);
+// Path: watchTogether.notices
+class _Translations$watchTogether$notices$zh_Hant extends Translations$watchTogether$notices$zh {
+	_Translations$watchTogether$notices$zh_Hant._(TranslationsZhHant root) : this._root = root, super.internal(root);
 
 	final TranslationsZhHant _root; // ignore: unused_field
 
 	// Translations
-	@override String get timedOut => '中繼伺服器未及時回應';
-	@override String get connectionLost => '工作階段就緒前連線已中斷';
-	@override String get invalidRelayResponse => '中繼伺服器傳回了非預期的回應';
-	@override String get sessionEnded => '主持人已結束工作階段';
-	@override String get sessionUnavailable => '無法恢復此工作階段。請加入或建立房間以繼續。';
+	@override String paused({required Object name}) => '${name} 暫停了播放';
+	@override String changedSpeed({required Object name, required Object speed}) => '${name} 將速度設為 ${speed}';
+	@override String waitingFor({required Object name}) => '正在等待 ${name}…';
+	@override String hostChangedTo({required Object name}) => '${name} 現在是主持人';
+	@override String get youAreNowHost => '您現在是主持人';
+	@override String joined({required Object name}) => '${name} 已加入';
+	@override String left({required Object name}) => '${name} 已離開';
 }
 
 // Path: downloads.backgroundWarning
@@ -3168,6 +3117,8 @@ extension on TranslationsZhHant {
 			'common.ratingSource.trakt' => 'Trakt',
 			'common.ratingSource.rottenTomatoesCritic' => 'Rotten Tomatoes 影評人',
 			'common.ratingSource.rottenTomatoesAudience' => 'Rotten Tomatoes 觀眾',
+			'common.ratingSource.metacritic' => 'Metacritic',
+			'common.ratingSource.letterboxd' => 'Letterboxd',
 			'common.notAvailable' => 'N/A',
 			'common.url' => 'URL',
 			'common.letterKeys' => 'ABC',
@@ -3324,7 +3275,6 @@ extension on TranslationsZhHant {
 			'settings.videoPlayerNavigation' => '影片播放器導覽',
 			'settings.videoPlayerNavigationDescription' => '使用方向鍵導覽影片播放器控制項',
 			'settings.watchTogetherRelay' => '一起看中繼伺服器',
-			'settings.watchTogetherRelayDescription' => '設定自訂中繼。所有人必須使用相同的伺服器。',
 			'settings.watchTogetherRelayHint' => 'https://my-relay.example.com',
 			'settings.watchTogetherRelayInvalid' => '請輸入有效的 HTTP 或 HTTPS 中繼伺服器根網址。',
 			'settings.crashReporting' => '當機報告',
@@ -3434,7 +3384,7 @@ extension on TranslationsZhHant {
 			'settings.tunneledPlaybackDescription' => '使用影片通道模式。若 HDR 播放出現黑畫面或動態卡頓，請停用此項。',
 			'settings.audioPassthrough' => '音訊直通',
 			'settings.audioPassthroughDescription' => '將 Dolby/DTS 音訊不經重新編碼，直接傳送至擴大機或電視以保留環繞音效。若播放無聲，請關閉此設定。',
-			'settings.audioPassthroughDescriptionAppleTv' => '使用 Apple 原生 Dolby 解碼器處理 Dolby Digital Plus（包括 Atmos）。DTS 與 TrueHD 仍以多聲道 PCM 播放。若沒有聲音，請關閉此設定。',
+			'settings.audioPassthroughDescriptionApple' => '使用 Apple 原生 Dolby 解碼器處理 Dolby Digital Plus（包括 Atmos）。DTS 與 TrueHD 仍以多聲道 PCM 播放。若沒有聲音，請關閉此設定。',
 			'settings.audioPassthroughOverriddenByNormalization' => '音量標準化開啟時停用',
 			'settings.audioChannelLimit' => '音訊聲道',
 			'settings.audioChannelLimitDescription' => '為無法播放全部聲道的揚聲器、耳機或 HDMI 裝置混音解碼後的音訊',
@@ -3460,6 +3410,8 @@ extension on TranslationsZhHant {
 			'settings.dvConversionNativeDescription' => '強制使用原生 DV7 並停用 DV 轉換重試',
 			'settings.dvConversionDv81Description' => '強制將內嵌的 RPU 轉換為 Dolby Vision Profile 8.1',
 			'settings.dvConversionHevcStripDescription' => '移除 Dolby Vision RPU/EL 層，並以一般 HEVC 呈現',
+			'settings.disableDolbyVision' => '停用 Dolby Vision',
+			'settings.disableDolbyVisionDescription' => '檔案包含 HDR10 或 HLG 層時，改為播放該層而非 Dolby Vision',
 			'settings.hdrSdrConversion' => 'HDR 轉 SDR',
 			'settings.hdrSdrConversionDescription' => '選擇在顯示器無法顯示 HDR 時由誰轉換 HDR 影片。',
 			'settings.hdrSdrConversionAuto' => '自動',
@@ -3602,11 +3554,11 @@ extension on TranslationsZhHant {
 			'fileInfo.aspectRatio' => '寬高比',
 			'fileInfo.pixelAspectRatio' => '像素寬高比',
 			'fileInfo.profile' => '規格檔（Profile）',
+			_ => null,
+		} ?? switch (path) {
 			'fileInfo.level' => '等級',
 			'fileInfo.bitDepth' => '位元深度',
 			'fileInfo.pixelFormat' => '像素格式',
-			_ => null,
-		} ?? switch (path) {
 			'fileInfo.colorSpace' => '色彩空間',
 			'fileInfo.colorRange' => '色彩範圍',
 			'fileInfo.colorPrimaries' => '色彩基色',
@@ -4116,11 +4068,11 @@ extension on TranslationsZhHant {
 			'discover.movie' => '電影',
 			'discover.tvShow' => '影集',
 			'discover.minutesLeft' => ({required Object minutes}) => '剩餘 ${minutes} 分鐘',
+			_ => null,
+		} ?? switch (path) {
 			'discover.moreLikeThis' => '更多類似內容',
 			'discover.titleCount' => ({required num n}) => (_root.$meta.cardinalResolver ?? PluralResolvers.cardinal('zh'))(n, other: '${n} 部作品', ), 
 			'errors.searchFailed' => ({required Object error}) => '搜尋失敗：${error}',
-			_ => null,
-		} ?? switch (path) {
 			'errors.searchUnavailable' => '搜尋無法連線至任何媒體伺服器。',
 			'errors.connectionTimeout' => ({required Object context}) => '載入 ${context} 時連線逾時',
 			'errors.connectionFailed' => '無法連線至媒體伺服器',
@@ -4618,85 +4570,32 @@ extension on TranslationsZhHant {
 			'music.discography.compilations' => '合輯',
 			'watchTogether.title' => '一起看',
 			'watchTogether.description' => '與親友同步觀看內容',
-			'watchTogether.createSession' => '建立「一起看」工作階段',
-			'watchTogether.creating' => '正在建立…',
-			'watchTogether.joinSession' => '加入工作階段',
-			'watchTogether.joining' => '正在加入…',
-			'watchTogether.controlMode' => '控制模式',
-			'watchTogether.controlModeQuestion' => '誰可以控制播放？',
-			'watchTogether.hostOnly' => '僅限主持人',
-			'watchTogether.anyone' => '任何人',
-			'watchTogether.hostingSession' => '主持「一起看」',
-			'watchTogether.inSession' => '在工作階段中',
-			'watchTogether.sessionCode' => '工作階段代碼',
-			'watchTogether.openSessionControls' => '開啟「一起看」工作階段控制面板',
-			'watchTogether.copySessionCode' => '複製工作階段代碼',
-			'watchTogether.hostControlsPlayback' => '主持人控制播放',
-			'watchTogether.anyoneCanControl' => '任何人都能控制播放',
-			_ => null,
-		} ?? switch (path) {
-			'watchTogether.hostControls' => '主持人控制',
-			'watchTogether.anyoneControls' => '任何人控制',
-			'watchTogether.participants' => '參與者',
-			'watchTogether.host' => '主持人',
-			'watchTogether.hostBadge' => '主持人',
-			'watchTogether.youAreHost' => '您是主持人',
-			'watchTogether.makeHost' => '設為主持人',
-			'watchTogether.makeHostQuestion' => '移交主持人？',
-			'watchTogether.makeHostConfirm' => ({required Object name}) => '${name} 將控制播放並主導所有人的工作階段。',
-			'watchTogether.transfer' => '移交',
-			'watchTogether.hostChangedTo' => ({required Object name}) => '${name} 現在是主持人',
-			'watchTogether.youAreNowHost' => '您現在是主持人',
-			'watchTogether.hostTransferFailed' => ({required Object name}) => '無法將 ${name} 設為主持人',
-			'watchTogether.watchingWithOthers' => '與他人一起觀看',
-			'watchTogether.endSession' => '結束工作階段',
-			'watchTogether.leaveSession' => '離開工作階段',
-			'watchTogether.endSessionQuestion' => '結束工作階段？',
-			'watchTogether.leaveSessionQuestion' => '離開工作階段？',
-			'watchTogether.endSessionConfirm' => '這將為所有參與者結束此「一起看」工作階段。',
-			'watchTogether.leaveSessionConfirm' => '您將退出此「一起看」工作階段。',
-			'watchTogether.endSessionConfirmOverlay' => '這將為所有參與者結束觀看工作階段。',
-			'watchTogether.leaveSessionConfirmOverlay' => '您將中斷與「一起看」工作階段的連線。',
-			'watchTogether.end' => '結束',
-			'watchTogether.leave' => '離開',
-			'watchTogether.syncing' => '同步中…',
-			'watchTogether.joinWatchSession' => '加入「一起看」工作階段',
-			'watchTogether.enterCodeHint' => '輸入 5 個英數字元的代碼',
-			'watchTogether.pasteFromClipboard' => '從剪貼簿貼上',
-			'watchTogether.pleaseEnterCode' => '請輸入工作階段代碼',
-			'watchTogether.codeMustBe5Chars' => '工作階段代碼必須為 5 個字元',
-			'watchTogether.joinInstructions' => '輸入主持人的工作階段代碼以加入「一起看」。',
-			'watchTogether.failedToCreate' => '建立工作階段失敗',
-			'watchTogether.failedToJoin' => '加入工作階段失敗',
-			'watchTogether.sessionCodeCopied' => '工作階段代碼已複製到剪貼簿',
-			'watchTogether.relayUnreachable' => '無法連線至中繼伺服器。ISP 封鎖可能會導致「一起看」無法使用。',
-			'watchTogether.reconnectingToHost' => '正在重新連線至主持人…',
-			'watchTogether.currentPlayback' => '目前播放內容',
-			'watchTogether.joinCurrentPlayback' => '加入目前播放點',
-			'watchTogether.joinCurrentPlaybackDescription' => '同步至主持人目前的觀看進度',
-			'watchTogether.failedToOpenCurrentPlayback' => '無法開啟目前播放點',
-			'watchTogether.participantJoined' => ({required Object name}) => '${name} 已加入',
-			'watchTogether.participantLeft' => ({required Object name}) => '${name} 已離開',
-			'watchTogether.participantPaused' => ({required Object name}) => '${name} 暫停了播放',
-			'watchTogether.participantResumed' => ({required Object name}) => '${name} 恢復了播放',
-			'watchTogether.participantSeeked' => ({required Object name}) => '${name} 變更了播放位置',
-			'watchTogether.participantChangedSpeed' => ({required Object name, required Object speed}) => '${name} 將速度設為 ${speed}',
-			'watchTogether.participantBuffering' => ({required Object name}) => '${name} 正在緩衝',
-			'watchTogether.participantNeedsUpdate' => ({required Object name}) => '${name} 正在使用舊版應用程式，無法進行同步',
-			'watchTogether.resumingWithout' => ({required Object name}) => '不等待 ${name}，繼續播放',
-			'watchTogether.waitingForParticipants' => '正在等待其他人載入…',
-			'watchTogether.waitingForName' => ({required Object name}) => '正在等待 ${name}…',
 			'watchTogether.recentRooms' => '最近的房間',
 			'watchTogether.renameRoom' => '重新命名房間',
 			'watchTogether.removeRoom' => '移除',
-			'watchTogether.guestSwitchUnavailable' => '無法切換 — 伺服器無法進行同步',
-			'watchTogether.guestSwitchFailed' => '無法切換 — 在此伺服器上找不到內容',
-			'watchTogether.defaultDisplayName' => '使用者',
-			'watchTogether.errors.timedOut' => '中繼伺服器未及時回應',
-			'watchTogether.errors.connectionLost' => '工作階段就緒前連線已中斷',
-			'watchTogether.errors.invalidRelayResponse' => '中繼伺服器傳回了非預期的回應',
-			'watchTogether.errors.sessionEnded' => '主持人已結束工作階段',
-			'watchTogether.errors.sessionUnavailable' => '無法恢復此工作階段。請加入或建立房間以繼續。',
+			'watchTogether.openSessionControls' => '開啟「一起看」工作階段控制面板',
+			'watchTogether.youAreHost' => '您是主持人',
+			'watchTogether.hostControlsPlayback' => '主持人控制播放',
+			'watchTogether.anyoneCanControl' => '任何人都能控制播放',
+			'watchTogether.joinCurrentPlayback' => '加入目前播放點',
+			'watchTogether.joinCurrentPlaybackDescription' => '同步至主持人目前的觀看進度',
+			'watchTogether.participants' => '參與者',
+			'watchTogether.hostBadge' => '主持人',
+			'watchTogether.makeHost' => '設為主持人',
+			_ => null,
+		} ?? switch (path) {
+			'watchTogether.makeHostQuestion' => '移交主持人？',
+			'watchTogether.makeHostConfirm' => ({required Object name}) => '${name} 將控制播放並主導所有人的工作階段。',
+			'watchTogether.transfer' => '移交',
+			'watchTogether.leave' => '離開',
+			'watchTogether.end' => '結束',
+			'watchTogether.notices.paused' => ({required Object name}) => '${name} 暫停了播放',
+			'watchTogether.notices.changedSpeed' => ({required Object name, required Object speed}) => '${name} 將速度設為 ${speed}',
+			'watchTogether.notices.waitingFor' => ({required Object name}) => '正在等待 ${name}…',
+			'watchTogether.notices.hostChangedTo' => ({required Object name}) => '${name} 現在是主持人',
+			'watchTogether.notices.youAreNowHost' => '您現在是主持人',
+			'watchTogether.notices.joined' => ({required Object name}) => '${name} 已加入',
+			'watchTogether.notices.left' => ({required Object name}) => '${name} 已離開',
 			'downloads.title' => '下載',
 			'downloads.manage' => '管理',
 			'downloads.tvShows' => '影集',
@@ -4923,7 +4822,6 @@ extension on TranslationsZhHant {
 			'videoSettings.audioOutputStereo' => '立體聲',
 			'videoSettings.audioNormalization' => '音量標準化',
 			'videoSettings.audioNormalizationDisablesPassthrough' => '將音訊解碼為 PCM；開啟時直通關閉',
-			'videoSettings.audioNormalizationStereoMix' => '將音訊解碼為立體聲混音；開啟時直通關閉',
 			'performanceOverlay.color' => '色彩',
 			'performanceOverlay.performance' => '效能',
 			'performanceOverlay.buffer' => '緩衝',
@@ -5147,8 +5045,6 @@ extension on TranslationsZhHant {
 			'services.connectFailed' => ({required Object service}) => '無法連線至 ${service}。請重試。',
 			'services.names.mal' => 'MyAnimeList',
 			'services.names.anilist' => 'AniList',
-			_ => null,
-		} ?? switch (path) {
 			'services.names.simkl' => 'Simkl',
 			'services.names.seerr' => 'Seerr',
 			'services.names.mdblist' => 'MDBList',
@@ -5200,6 +5096,8 @@ extension on TranslationsZhHant {
 			'addServer.signInWithPlexCardSubtitleScoped' => '授權 Plex 帳戶。Home 使用者會建立為個別的使用者設定檔。',
 			'addServer.connectToMediaBrowserCard' => ({required Object product}) => '連線至 ${product}',
 			'addServer.connectToMediaBrowserCardSubtitle' => '輸入您的伺服器 URL、使用者名稱與密碼。',
+			_ => null,
+		} ?? switch (path) {
 			'addServer.connectToMediaBrowserCardSubtitleScoped' => ({required Object product, required Object name}) => '登入您的 ${product} 伺服器。將綁定至 ${name}。',
 			'addServer.borrowFromAnotherProfile' => '從另一個使用者設定檔共用',
 			'addServer.borrowFromAnotherProfileSubtitle' => '重複使用另一個使用者設定檔的連線資訊。受 PIN 碼保護的使用者設定檔需輸入 PIN 碼。',

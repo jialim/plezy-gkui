@@ -9,7 +9,11 @@ extension _VideoPlayerDisplayMatchingMethods on VideoPlayerScreenState {
     SettingsService settingsService,
     PlayerOutputFormat output,
   ) {
-    final fps = settingsService.read(SettingsService.matchContentFrameRate) ? output.fps : null;
+    final matchRate = settingsService.read(SettingsService.matchContentFrameRate);
+    if (matchRate && !output.hasFrameRate) {
+      appLogger.d('Display matching: no frame rate to match');
+    }
+    final fps = matchRate ? output.fps : null;
     final matchResolution = settingsService.read(SettingsService.matchContentResolution);
     if (matchResolution && !output.hasDimensions) {
       appLogger.d('Display matching: no decoded dimensions for resolution matching');
@@ -60,7 +64,8 @@ extension _VideoPlayerDisplayMatchingMethods on VideoPlayerScreenState {
   }
 
   /// Post-first-frame display matching for an Android open that no startup
-  /// gate owned: ExoPlayer without a metadata rate. mpv opens behind
+  /// gate owned: ExoPlayer without a metadata rate, VOD and Live TV alike.
+  /// mpv opens — VOD items and Live TV channels — behind
   /// [_FrameRateStartupPlan.needsFirstFrameSwitch] instead, which marks the
   /// item applied before open so this stays a no-op for it.
   Future<void> _applyFrameRateMatching() async {
@@ -84,7 +89,6 @@ extension _VideoPlayerDisplayMatchingMethods on VideoPlayerScreenState {
           });
           return;
         }
-        appLogger.d('Display matching: No valid fps available');
       }
       _frameRate.retries = 0;
       final target = _displayTargetFor(settingsService, output);
@@ -114,14 +118,33 @@ extension _VideoPlayerDisplayMatchingMethods on VideoPlayerScreenState {
     }
   }
 
-  /// Restart the MediaCodec decoder against the reconfigured surface: a seek
-  /// to [targetPosition] (default: in place) for VOD, a buffer flush for live.
-  Future<void> _refreshAndroidMpvDecoderAfterFrameRateSwitch({required String reason, Duration? targetPosition}) async {
+  /// Restart the MediaCodec decoder against the reconfigured surface with a
+  /// seek to [targetPosition] (default: in place). The seek runs the same
+  /// decoder reset `drop-buffers` does but keeps the demuxer cache, and on a
+  /// live stream mpv calls unseekable it is an in-cache seek. `drop-buffers`
+  /// empties that cache, so playback would resume wherever the read-ahead had
+  /// reached — up to a minute past the requested position on a time-shifted
+  /// stream the server delivers faster than real time (#2568).
+  ///
+  /// Live falls back to `drop-buffers` only when the cache no longer holds
+  /// [targetPosition]: mpv fails such a seek before resetting anything.
+  /// [dropIfUncached] is false for a rewind no display switch requires,
+  /// which is skipped instead of jumping playback forward.
+  Future<void> _refreshAndroidMpvDecoderAfterFrameRateSwitch({
+    required String reason,
+    Duration? targetPosition,
+    bool dropIfUncached = true,
+  }) async {
     final p = player;
     if (!mounted || p == null || !p.needsDecoderRefreshAfterDisplaySwitch) return;
 
-    final isLive = widget.isLive;
-    targetPosition ??= p.state.position;
+    final target = targetPosition ?? p.state.position;
+    final seekable =
+        !widget.isLive || p.state.bufferRanges.any((range) => range.start <= target && target <= range.end);
+    if (!seekable && !dropIfUncached) {
+      appLogger.d('Frame rate matching: skipping $reason; the live cache no longer holds ${target.inMilliseconds}ms');
+      return;
+    }
 
     // Subscribe before refreshing so the broadcast event isn't dropped when
     // the restart fires synchronously fast.
@@ -134,21 +157,21 @@ extension _VideoPlayerDisplayMatchingMethods on VideoPlayerScreenState {
     );
     final sw = Stopwatch()..start();
     try {
-      if (isLive) {
-        appLogger.d('Frame rate matching: flushing Android MPV live buffers ($reason, command=drop-buffers)');
-        await p.command(['drop-buffers']);
+      if (seekable) {
+        appLogger.d('Frame rate matching: refreshing Android MPV decoder ($reason, target=${target.inMilliseconds}ms)');
+        await p.seek(target);
       } else {
         appLogger.d(
-          'Frame rate matching: refreshing Android MPV decoder '
-          '($reason, target=${targetPosition.inMilliseconds}ms)',
+          'Frame rate matching: flushing Android MPV live buffers '
+          '($reason, ${target.inMilliseconds}ms no longer cached, command=drop-buffers)',
         );
-        await p.seek(targetPosition);
+        await p.command(['drop-buffers']);
       }
       await restartFuture;
       appLogger.d(
         'Frame rate matching: refreshed Android MPV decoder '
-        '($reason, target=${isLive ? 'live' : '${targetPosition.inMilliseconds}ms'}, waited=${sw.elapsedMilliseconds}ms, '
-        'gate=${timedOut ? 'timeout' : 'playback-restart'})',
+        '($reason, target=${seekable ? '${target.inMilliseconds}ms' : 'cache end'}, '
+        'waited=${sw.elapsedMilliseconds}ms, gate=${timedOut ? 'timeout' : 'playback-restart'})',
       );
     } catch (e) {
       appLogger.w('Failed to refresh Android MPV decoder after frame rate switch ($reason)', error: e);
@@ -194,13 +217,13 @@ extension _VideoPlayerDisplayMatchingMethods on VideoPlayerScreenState {
   /// finishes re-syncing before playback runs on (as the Android switch
   /// does), rather than just waiting while the video keeps playing.
   ///
-  /// The pause and resume are the screen's own, not the viewer's: a bound
-  /// Watch Together room would take them as intents, so the hold runs
-  /// detached like the first-frame display negotiation. The resume answers
-  /// to the playback generation the hold started in: an in-place reload or
-  /// source switch that ran meanwhile owns the play state it left (its own
-  /// resume, or a room startup hold on the replacement), so the resume waits
-  /// for it to settle and stands down if it opened anything.
+  /// The pause and resume are the screen's own, not the viewer's: a Watch
+  /// Together room is held off meanwhile, so it neither takes them for the
+  /// viewer's nor commands the player. The resume answers to the playback
+  /// generation the hold started in: an in-place reload or source switch that
+  /// ran meanwhile owns the play state it left (its own resume, or the room
+  /// starting the replacement), so the resume waits for it to settle and
+  /// stands down if it opened anything.
   Future<void> _holdPlaybackForDisplaySwitch(Player currentPlayer, Duration delay) async {
     if (!currentPlayer.state.playing) {
       await Future<void>.delayed(delay);
@@ -208,7 +231,7 @@ extension _VideoPlayerDisplayMatchingMethods on VideoPlayerScreenState {
     }
     final generation = _transitionGate.generation;
     bool isCurrent() => _isCurrentPlaybackGeneration(generation, currentPlayer);
-    await _withWatchTogetherDetached(() async {
+    await _withWatchTogetherHeld(() async {
       await currentPlayer.pause();
       await Future<void>.delayed(delay);
       // Wait out the transition itself, not just its generation bump: leaving

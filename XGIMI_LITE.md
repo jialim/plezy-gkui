@@ -1,6 +1,6 @@
 # Plezy XGIMI Lite
 
-Plezy XGIMI Lite is a Chinese-first, low-memory Android TV distribution of Plezy for a 1080p family projector. The initial base is the pinned upstream `2.22.0` release. The profile is generic and can be used on other constrained Android TV devices; no behavior is keyed to the XGIMI manufacturer string.
+Plezy XGIMI Lite is a Chinese-first, low-memory Android TV distribution of Plezy for a 1080p family projector. The base is the upstream `2.24.0` release (builds up to 12 were on `2.22.0`). The profile is generic and can be used on other constrained Android TV devices; no behavior is keyed to the XGIMI manufacturer string.
 
 ## Target hardware
 
@@ -49,6 +49,8 @@ Test 9 adds, for the remote and the sofa:
 - The Logs screen lists the display's supported modes, density and HDR types, so frame-rate matching can be judged before it is turned on.
 
 Build 12 makes the remote's position obvious on a projected image in a lit room, where the charcoal background washes out to light grey and any faint tint or thin outline disappears. The focused sidebar item and the focused row in Settings and other lists are now a solid amber bar with black text and icons; switches and checkboxes on that bar switch to black and amber so their state stays readable. The library being viewed keeps a soft amber tint with amber text. (Build 11 tried an amber outline over a tint, which was still too faint on the wall.)
+
+The 2.24.0 builds push it further: the dark page is pure black instead of charcoal, the yellow is a fully saturated lemon (`#FFE000`) that stays yellow through a lamp's warm cast instead of turning peach, the focused bar carries a soft yellow halo and a heavier label, and card focus outlines are 5 px. Upstream's new colour presets keep their own accent on the projector but still get the black page and brighter text.
 
 Update downloads use abortable streaming requests, a Cancel action, stalled/overall timeouts, integrity checks, and separate network/storage/verification/installer errors. Release notes publish actual per-ABI Android version codes; both the updater and native verifier reject equal/older builds. CI requires an increasing build number and runs the Android JVM suite, including APK verifier tests, before building a release. The package ID remains `app.plezylite.xgimi` and the launcher label is now Plezy XGIMI Lite.
 
@@ -103,7 +105,7 @@ Branch releases are signed with the permanent key in the `XGIMI_KEYSTORE_BASE64`
 
 XGIMI Lite uses the package ID `app.plezylite.xgimi` (earlier test builds used upstream's `com.edde746.plezy`). Content-provider authorities derive from it, so it can be installed next to official Plezy. The build moving to the new ID installs as a separate app once; later builds update it in place. CI refuses to publish an APK with any other package ID.
 
-Test 6 adds the XGIMI updater. It selects the newest `xgimi-lite-v<version>` or `xgimi-lite-v<version>-test<N>` release (a stable build sorts after the tests of the same version, and the version is read from `pubspec.yaml` by CI), chooses the APK for the running process ABI, streams it to the app cache, verifies the SHA-256 digest supplied by GitHub, checks that the APK is this app (`app.plezylite.xgimi`) signed with the installed certificate, and only then opens Android's package installer. Android's install confirmation remains mandatory. On first use Android may also require **Allow from this source**; returning to Plezy resumes the pending install automatically. The stable Test 4+ certificate is Android's final protection against an unrelated APK replacing the app.
+Test 6 adds the XGIMI updater. It selects the newest `xgimi-lite-v<version>` or `xgimi-lite-v<version>-test<N>` release (a stable build sorts after the tests of the same version, and the version is read from `pubspec.yaml` by CI), chooses the APK for the running process ABI, streams it to the app cache, verifies the SHA-256 digest supplied by GitHub, checks that the APK is this app (`app.plezylite.xgimi`) signed with the installed certificate, and only then opens Android's package installer. Android's install confirmation remains mandatory. On first use Android may also require **Allow from this source**; returning to Plezy resumes the pending install automatically. Some TV ROMs have no per-app **Install unknown apps** screen or no activity that opens an APK; the updater then falls back to the app list or security settings, and installs through a `PackageInstaller` session so Android's own installer asks for the permission. An installer failure shows Android's reason in small text under the message. The stable Test 4+ certificate is Android's final protection against an unrelated APK replacing the app.
 
 Partially watched movies and episodes also expose a separate, labeled **Play from beginning** action in the projector detail screen. It sends an explicit zero start position through the normal playback path, leaving the ordinary Resume action and stored server progress intact.
 
@@ -116,14 +118,9 @@ base64 -w0 xgimi.jks   # paste into the XGIMI_KEYSTORE_BASE64 secret
 
 ## Upstream updates
 
-XGIMI Lite is upstream Plezy 2.22.0 plus a small, mostly additive set of commits behind the `FAMILY_PROJECTOR_MODE` flag. As of 2026-10-11 there is no newer upstream release tag, but upstream `main` is 43 commits ahead with fixes that matter on this projector:
+XGIMI Lite is upstream Plezy 2.24.0 plus a small, mostly additive set of commits behind the `FAMILY_PROJECTOR_MODE` flag. The 2.24.0 merge (150 upstream commits over 2.23.0 and 2.24.0) brought, among others: Android mpv played through mpv-android's AAR, hardware MPEG-2 decoding, live streams buffered before playback, scrub previews loaded after the first frame and no longer over-buffered on Android TV, remembered audio output, Previous restarting a movie, chapter titles no longer mistaken for credits, Plex reconnects re-fetching the server list, idle connections retired before Plex's keep-alive so posters stop failing, tighter TV home and library sizing, reused hub cards, and colour preset themes with a custom theme editor.
 
-- Xvid/MPEG-4 and MPEG-2 playback on Android mpv, and an ffmpeg DNS wait that stalled stream opening for 18–30 seconds on some networks.
-- Multi-part movies playing past Part 1, and slow servers no longer failing at the 10-second connect timeout.
-- Plex Home profile switches no longer loading the previous user's rows.
-- Dolby Vision played as its HDR10/HLG base layer, and subtitle position above 100 to move subtitles into the letterbox.
-
-A trial merge of upstream `main` conflicts only in three generated translation files (regenerate with `dart run slang`) and `external_player_service.dart`. Merge the next upstream release tag as soon as it is published, while the divergence is this small, and keep new fork behaviour in `family_projector_profile.dart` rather than in shared upstream files.
+The merge conflicted in the generated translations (regenerate with `dart run slang`), the theme (upstream moved to six-colour palettes; the projector look is now `projectorPalette` in `mono_theme.dart`), settings seeding, the external-player start position (an explicit start still wins over resume, now on upstream's per-part clock) and the Activity, which upstream renamed `PlezyActivity` behind a `.MainActivity` launcher alias so the launcher component and existing shortcuts are unchanged. Upstream's app-icon picker stays hidden: it requires a Supporter build mode, which XGIMI builds do not set.
 
 ## Known limitations
 

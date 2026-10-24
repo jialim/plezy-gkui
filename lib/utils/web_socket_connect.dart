@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
-import 'package:web_socket_channel/io.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'happy_eyeballs.dart';
 
@@ -19,9 +17,11 @@ import 'happy_eyeballs.dart';
 /// [connectTimeout] is one deadline over the whole attempt (lookup, connect,
 /// TLS, upgrade), surfaced as a [TimeoutException]; [cancel] settles [socket]
 /// with a [SocketException]. Both are idempotent and safe after completion.
+///
+/// [headers] are sent with the upgrade request.
 class WebSocketConnectAttempt {
-  WebSocketConnectAttempt(Uri uri, {required Duration connectTimeout})
-    : this._(uri, connectTimeout: connectTimeout, connectionFactory: happyEyeballsConnectionFactory);
+  WebSocketConnectAttempt(Uri uri, {required Duration connectTimeout, Map<String, String>? headers})
+    : this._(uri, connectTimeout: connectTimeout, headers: headers, connectionFactory: happyEyeballsConnectionFactory);
 
   /// Injects only transport creation; the real HTTP/WebSocket upgrade and
   /// attempt ownership remain in use.
@@ -36,6 +36,7 @@ class WebSocketConnectAttempt {
     this.uri, {
     required Duration connectTimeout,
     required Future<ConnectionTask<Socket>> Function(Uri, String?, int?) connectionFactory,
+    this.headers,
   }) : _client = HttpClient() {
     _client.connectionFactory = (url, proxyHost, proxyPort) async {
       if (_released) throw _cancelledError();
@@ -54,6 +55,7 @@ class WebSocketConnectAttempt {
   }
 
   final Uri uri;
+  final Map<String, String>? headers;
   final HttpClient _client;
   final _result = Completer<WebSocket>();
   final _tasks = <ConnectionTask<Socket>>[];
@@ -100,7 +102,7 @@ class WebSocketConnectAttempt {
   Future<void> _run() async {
     final WebSocket webSocket;
     try {
-      webSocket = await WebSocket.connect(uri.toString(), customClient: _client);
+      webSocket = await WebSocket.connect(uri.toString(), headers: headers, customClient: _client);
     } catch (error, stackTrace) {
       _fail(error, stackTrace);
       return;
@@ -115,50 +117,5 @@ class WebSocketConnectAttempt {
     // only releases the client's own bookkeeping.
     _release(force: false);
     _result.complete(webSocket);
-  }
-}
-
-/// A [WebSocketChannel] over a [WebSocketConnectAttempt]. Closing the sink
-/// before the channel is ready cancels the attempt instead of waiting for it
-/// to settle, so a caller that gives up on a pending connect also releases
-/// the transport.
-WebSocketChannel connectWebSocketChannel(Uri uri, {required Duration connectTimeout}) =>
-    _AttemptChannel(WebSocketConnectAttempt(uri, connectTimeout: connectTimeout));
-
-class _AttemptChannel extends IOWebSocketChannel {
-  _AttemptChannel(this._attempt) : super(_attempt.socket);
-
-  final WebSocketConnectAttempt _attempt;
-
-  // Closed through the channel like the sink it wraps.
-  // ignore: close_sinks
-  WebSocketSink? _sink;
-
-  @override
-  WebSocketSink get sink => _sink ??= _CancellingSink(super.sink, _attempt);
-}
-
-class _CancellingSink implements WebSocketSink {
-  _CancellingSink(this._sink, this._attempt);
-
-  final WebSocketSink _sink;
-  final WebSocketConnectAttempt _attempt;
-
-  @override
-  void add(dynamic data) => _sink.add(data);
-
-  @override
-  void addError(Object error, [StackTrace? stackTrace]) => _sink.addError(error, stackTrace);
-
-  @override
-  Future<void> addStream(Stream<dynamic> stream) => _sink.addStream(stream);
-
-  @override
-  Future<dynamic> get done => _sink.done;
-
-  @override
-  Future<dynamic> close([int? closeCode, String? closeReason]) {
-    _attempt.cancel();
-    return _sink.close(closeCode, closeReason);
   }
 }

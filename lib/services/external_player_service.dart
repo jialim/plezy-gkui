@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../database/app_database.dart';
 import '../media/media_item.dart';
+import '../media/media_part_timeline.dart';
 import '../media/media_server_client.dart';
 import '../media/watch_progress.dart';
 import '../models/external_player_models.dart';
@@ -89,14 +90,24 @@ class ExternalPlayerService {
     try {
       String resolvedUrl;
       var subtitles = const <SubtitleTrack>[];
+      // An external player is handed one file. For an item stacked across
+      // several files that is one part, on that part's clock.
+      MediaPartTimeline? partTimeline;
+      final resume = (metadata?.viewOffsetMs ?? 0) > 0 ? Duration(milliseconds: metadata!.viewOffsetMs!) : null;
 
       if (videoUrl != null) {
         resolvedUrl = videoUrl;
+        // A downloaded copy is handed over as its first file.
+        final versions = metadata?.mediaVersions;
+        if (versions != null && mediaIndex >= 0 && mediaIndex < versions.length) {
+          partTimeline = MediaPartTimeline.fromParts(versions[mediaIndex].parts);
+        }
       } else if (client != null && metadata != null) {
         final target = await client.resolveExternalPlayback(
           metadata,
           mediaIndex: mediaIndex,
           mediaSourceId: mediaSourceId,
+          position: resume,
         );
         if (target == null || target.url.isEmpty) {
           if (context.mounted) {
@@ -106,10 +117,18 @@ class ExternalPlayerService {
         }
         resolvedUrl = target.url;
         subtitles = target.subtitles;
+        partTimeline = target.partTimeline;
       } else {
         appLogger.e('ExternalPlayerService.launch requires either videoUrl or client+metadata');
         return false;
       }
+      // An explicit start (Play from beginning, a chapter) wins over resume.
+      final requested = initialPosition ?? resume;
+      final startPosition = partTimeline == null
+          ? requested
+          : requested != null && partTimeline.covers(requested)
+          ? requested - partTimeline.current.start
+          : null;
 
       final settings = await SettingsService.getInstance();
       if (!current()) return false;
@@ -140,8 +159,8 @@ class ExternalPlayerService {
           player,
           context,
           metadata: metadata,
+          startPosition: startPosition,
           subtitles: subtitles,
-          initialPosition: initialPosition,
         );
         if (launchResult.launched && current()) onLaunched?.call();
         if (launchResult.launched && metadata != null && current()) {
@@ -151,6 +170,7 @@ class ExternalPlayerService {
             client: client,
             offlineWatchService: offlineWatchService,
             mediaSourceId: mediaSourceId,
+            partTimeline: partTimeline,
             isLaunchCurrent: current,
           );
         }
@@ -204,15 +224,16 @@ class ExternalPlayerService {
     ExternalPlayer player,
     BuildContext context, {
     MediaItem? metadata,
+    Duration? startPosition,
     List<SubtitleTrack> subtitles = const [],
-    Duration? initialPosition,
   }) async {
     try {
       final packages = player.id == 'system_default' ? const <String>[] : KnownPlayers.androidPackageCandidates(player);
       final result = await _externalPlayerChannel.invokeMapMethod<String, Object?>('openVideo', {
         'filePath': url,
         if (metadata?.title?.trim().isNotEmpty == true) 'title': metadata!.title!.trim(),
-        'startPositionMs': externalStartPositionMs(metadata?.viewOffsetMs, initialPosition),
+        // Always sent so "play from start" overrides the player's own memory.
+        'startPositionMs': externalStartPositionMs(null, startPosition),
         if (packages.isNotEmpty) 'packages': packages,
         if (subtitles.isNotEmpty) 'subtitles': [for (final track in subtitles) ?_subtitleArgument(track)],
       });
@@ -241,12 +262,18 @@ class ExternalPlayerService {
     };
   }
 
+  /// [partTimeline] places the handed-over file on its item when the item is
+  /// stacked across several files: the external player's position is on that
+  /// file's clock and its duration is that file's, so both are mapped onto
+  /// the item, and playing out a file with another after it leaves the item
+  /// at the next file instead of finished.
   static Future<void> _reportAndroidExternalProgress(
     _ExternalPlayerLaunchResult result, {
     required MediaItem metadata,
     required MediaServerClient? client,
     OfflineWatchSyncService? offlineWatchService,
     String? mediaSourceId,
+    MediaPartTimeline? partTimeline,
     bool Function()? isLaunchCurrent,
   }) async {
     bool current() => isLaunchCurrent?.call() ?? true;
@@ -256,8 +283,19 @@ class ExternalPlayerService {
       return;
     }
 
-    final durationMs = _positive(result.durationMs) ?? _positive(metadata.durationMs);
-    final reportedPositionMs = _positive(result.positionMs) ?? (result.playbackCompleted ? durationMs : null);
+    final int? durationMs;
+    final int? reportedPositionMs;
+    if (partTimeline != null) {
+      final part = partTimeline.current;
+      durationMs = partTimeline.duration.inMilliseconds;
+      final filePositionMs = _positive(result.positionMs);
+      reportedPositionMs = filePositionMs != null
+          ? part.start.inMilliseconds + filePositionMs
+          : (result.playbackCompleted ? part.end.inMilliseconds : null);
+    } else {
+      durationMs = _positive(result.durationMs) ?? _positive(metadata.durationMs);
+      reportedPositionMs = _positive(result.positionMs) ?? (result.playbackCompleted ? durationMs : null);
+    }
     if (reportedPositionMs == null) return;
 
     final positionMs = durationMs == null ? reportedPositionMs : reportedPositionMs.clamp(0, durationMs).toInt();
@@ -340,6 +378,7 @@ class ExternalPlayerService {
     required MediaServerClient? client,
     OfflineWatchSyncService? offlineWatchService,
     String? mediaSourceId,
+    MediaPartTimeline? partTimeline,
   }) {
     return _reportAndroidExternalProgress(
       _ExternalPlayerLaunchResult(
@@ -353,6 +392,7 @@ class ExternalPlayerService {
       client: client,
       offlineWatchService: offlineWatchService,
       mediaSourceId: mediaSourceId,
+      partTimeline: partTimeline,
     );
   }
 
