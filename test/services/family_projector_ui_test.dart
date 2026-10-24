@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:plezy/focus/input_mode_tracker.dart';
+import 'package:plezy/widgets/focusable_list_tile.dart';
 import 'package:plezy/widgets/side_navigation_rail.dart';
 import 'package:plezy/focus/focus_theme.dart';
 import 'package:plezy/main.dart' as app;
@@ -98,7 +99,7 @@ void main() {
     expect(media.devicePixelRatio, 1.2);
   }, skip: skip);
 
-  testWidgets('library rail focus is an amber outline, not a faint white tint', (tester) async {
+  testWidgets('focused rail item is a solid amber bar with black content', (tester) async {
     final focus = FocusNode();
     final other = FocusNode();
     addTearDown(focus.dispose);
@@ -136,12 +137,6 @@ void main() {
     await tester.pumpAndSettle();
 
     final amber = theme.colorScheme.primary;
-    final outlined = tester
-        .widgetList<Container>(find.byType(Container))
-        .map((c) => c.foregroundDecoration)
-        .whereType<BoxDecoration>()
-        .where((d) => d.border is Border && (d.border! as Border).top.color == amber);
-    expect(outlined, hasLength(1), reason: 'only the focused item is outlined in amber');
     final fills = tester
         .widgetList<Container>(find.byType(Container))
         .map((c) => c.decoration)
@@ -149,8 +144,58 @@ void main() {
         .map((d) => d.color)
         .whereType<Color>()
         .toList();
-    expect(fills, contains(amber.withValues(alpha: 0.3)));
-    expect(fills, contains(amber.withValues(alpha: 0.14)));
+    expect(fills, contains(amber), reason: 'the focused item is a solid amber bar');
+    expect(fills, contains(amber.withValues(alpha: 0.14)), reason: 'the current library keeps a soft tint');
+    final tints = tester.widgetList<ColorFiltered>(find.byType(ColorFiltered)).map((w) => w.colorFilter).toList();
+    expect(tints, contains(ColorFilter.mode(theme.colorScheme.onPrimary, BlendMode.srcIn)));
+    expect(tints, contains(ColorFilter.mode(amber, BlendMode.srcIn)));
+  }, skip: !FamilyProjectorProfile.enabled);
+
+  testWidgets('a focused settings row is a solid amber bar with black text', (tester) async {
+    final focus = FocusNode();
+    addTearDown(focus.dispose);
+    final theme = monoTheme(dark: true);
+    await tester.pumpWidget(
+      InputModeTracker(
+        child: MaterialApp(
+          theme: theme,
+          home: Scaffold(
+            body: Column(
+              children: [
+                FocusableSwitchListTile(
+                  focusNode: focus,
+                  title: const Text('Check for updates on start'),
+                  value: true,
+                  onChanged: (_) {},
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    focus.requestFocus();
+    await tester.pumpAndSettle();
+
+    final bar = tester
+        .widgetList<Material>(find.ancestor(of: find.byType(SwitchListTile), matching: find.byType(Material)))
+        .first;
+    expect(bar.color, theme.colorScheme.primary);
+    final title = tester.widget<RichText>(
+      find.descendant(of: find.byType(SwitchListTile), matching: find.byType(RichText)).first,
+    );
+    expect(title.text.style?.color, theme.colorScheme.onPrimary);
+
+    focus.unfocus();
+    await tester.pumpAndSettle();
+    expect(
+      find.ancestor(
+        of: find.byType(SwitchListTile),
+        matching: find.byWidgetPredicate((w) => w is Material && w.color == theme.colorScheme.primary),
+      ),
+      findsNothing,
+    );
   }, skip: !FamilyProjectorProfile.enabled);
 }
 
