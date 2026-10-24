@@ -138,10 +138,13 @@ mixin _JellyfinPlaybackMethods on _JellyfinClientInternals {
     // whose extraction task has not run answers with a header-only BIF, which
     // parses to zero frames and leaves the service unavailable.
     if (dialect == MediaBrowserDialect.emby) {
-      // load() swallows download/parse failures internally; an unavailable
+      // load() swallows and logs download/parse failures; an unavailable
       // service just suppresses the tooltip.
       final service = BifThumbnailService();
-      await service.load(() => _downloadEmbyBifFile(item.id), aspectRatio: mediaSource.videoAspectRatio);
+      await service.load(
+        (maxBytes) => _downloadEmbyBifFile(item.id, maxBytes: maxBytes),
+        aspectRatio: mediaSource.videoAspectRatio,
+      );
       return service;
     }
 
@@ -155,20 +158,17 @@ mixin _JellyfinPlaybackMethods on _JellyfinClientInternals {
     );
   }
 
-  /// Fetch Emby's scrub-preview BIF for [itemId]. [Width] is required by
-  /// Emby's `GET /Videos/{id}/index.bif`; 320 is the width its extraction
-  /// task generates (`<name>-320-10.bif`). Returns null on failure so
-  /// thumbnails stay silently unavailable.
-  Future<Uint8List?> _downloadEmbyBifFile(String itemId) async {
-    try {
-      final bytes = await _http.getBytes(
-        '/Videos/${Uri.encodeComponent(itemId)}/index.bif?Width=320',
-        timeout: const Duration(seconds: 30),
-      );
-      return bytes.isEmpty ? null : bytes;
-    } catch (_) {
-      return null;
-    }
+  /// Fetch Emby's scrub-preview BIF for [itemId], failing once the body exceeds
+  /// [maxBytes]. [Width] is required by Emby's `GET /Videos/{id}/index.bif`;
+  /// 320 is the width its extraction task generates (`<name>-320-10.bif`).
+  /// Returns null when the server answers with an empty body.
+  Future<Uint8List?> _downloadEmbyBifFile(String itemId, {required int maxBytes}) async {
+    final bytes = await _http.getBytes(
+      '/Videos/${Uri.encodeComponent(itemId)}/index.bif?Width=320',
+      timeout: const Duration(seconds: 30),
+      maxBytes: maxBytes,
+    );
+    return bytes.isEmpty ? null : bytes;
   }
 
   Future<List<MediaMarker>> _fetchMediaSegmentMarkers(String itemId) async {
@@ -248,11 +248,11 @@ mixin _JellyfinPlaybackMethods on _JellyfinClientInternals {
     try {
       // An immediate connection error is asked again (see
       // [retryTransientMediaServerCall]); the deadline only backstops the
-      // HTTP layer's own connect + receive budgets, so it never cuts a slow
-      // but working server short.
+      // HTTP layer's own connect, response and receive budgets, so it never
+      // cuts a slow but working server short.
       bundle = await retryTransientMediaServerCall(
         operation: 'Jellyfin playback item',
-        deadline: MediaServerTimeouts.connect + MediaServerTimeouts.receive,
+        deadline: MediaServerTimeouts.connect + MediaServerTimeouts.response + MediaServerTimeouts.receive,
         call: (_, _) => fetchPlaybackBundle(
           metadata.id,
           sourceIndex: options.selectedMediaIndex,
@@ -449,11 +449,14 @@ mixin _JellyfinPlaybackMethods on _JellyfinClientInternals {
     );
   }
 
+  /// [position] is ignored: a MediaBrowser item is never stacked across
+  /// files (see [MediaPart]).
   @override
   Future<ExternalPlaybackTarget?> resolveExternalPlayback(
     MediaItem item, {
     int mediaIndex = 0,
     String? mediaSourceId,
+    Duration? position,
   }) async {
     // Tracks stream from /Audio/{id}/stream; the URL contract (Static=true,
     // api_key in the query string) is otherwise identical to the video one.
@@ -894,11 +897,11 @@ mixin _JellyfinPlaybackMethods on _JellyfinClientInternals {
         'userId': connection.userId,
         for (final MapEntry(:key, :value) in negotiation.entries) key: value.toString(),
       },
-      // Opening a cold tuner can delay response headers beyond the normal
-      // connect budget (#2274), and the server finishes the open even if we
+      // Opening a cold tuner can delay response headers past the default
+      // response budget (#2274), and the server finishes the open even if we
       // hang up (#2394): the live tune keeps its transport until the server
-      // answers, and its caller bounds the wait. Keep VOD and metadata-only
-      // requests unchanged.
+      // answers, and its caller bounds the wait. VOD and metadata-only
+      // requests stay on the default budget.
       timeout: isLiveTv && autoOpenLiveStream == true ? MediaServerTimeouts.tuneTransport : null,
       body: {
         'UserId': connection.userId,

@@ -36,7 +36,7 @@ abstract final class FamilyProjectorProfile {
   static const double focusScale = 1.06;
   static const double fullCardFocusScale = 1.07;
   static const double playerControlFocusScale = 1.18;
-  static const double focusBorderWidth = 4;
+  static const double focusBorderWidth = 5;
 
   static const String buildName = String.fromEnvironment('FAMILY_PROJECTOR_NAME', defaultValue: 'Plezy XGIMI Lite');
 

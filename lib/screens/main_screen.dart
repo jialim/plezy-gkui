@@ -504,12 +504,12 @@ class _MainScreenState extends State<MainScreen>
   Timer? _startupSettleTimeout;
 
   /// Hard ceiling on how long we wait for [ActiveProfileBinder] to settle
-  /// before priming the UI anyway. The binder always calls
-  /// `markBindingFinished` in its `finally`, but this is a defence in depth:
-  /// if a transient bug or hung HTTP path keeps `isBinding` true, the user
-  /// would otherwise see an empty Discover screen forever. After the
-  /// fallback fires the screens render their normal "no servers" state and
-  /// the user can pull-to-refresh / open settings.
+  /// before priming libraries, watch sync, and downloads anyway. The binder
+  /// always calls `markBindingFinished` in its `finally`, but this is a
+  /// defence in depth against a transient bug or hung HTTP path keeping
+  /// `isBinding` true. Discover never fetches while the binder runs (the
+  /// clients may still carry the previous profile's token, #2599), so a
+  /// fallback prime that fires mid-bind leaves the settle prime armed.
   static const _startupSettleFallback = Duration(seconds: 15);
   static const _backExitWindow = Duration(seconds: 3);
   DateTime? _lastBackPressAt;
@@ -588,8 +588,8 @@ class _MainScreenState extends State<MainScreen>
       activeProfile.addListener(_onActiveProfileChanged);
       _plexHomeService = context.read<PlexHomeService>();
       // `start()` is the live/network entry point: it installs the connection
-      // watch, the refresh timer and an initial `_refreshAll()`. Hydration
-      // already happened from the provider's `create:`, so an offline launch
+      // watch, the refresh timer and an initial `_refreshAll()`. The root app
+      // state already hydrated it when it created the service, so an offline launch
       // keeps its cached Plex Home users without reaching the network.
       // `_handleOfflineStatusChanged` starts it if we come online later.
       if (!_isOffline) unawaited(_plexHomeService!.start());
@@ -663,12 +663,14 @@ class _MainScreenState extends State<MainScreen>
       if (fromTimeout) {
         appLogger.w(
           'ActiveProfileBinder still binding after ${_startupSettleFallback.inSeconds}s '
-          '— priming UI anyway so the user is not stuck on an empty screen.',
+          '— priming services anyway; the settle will prime again.',
         );
       }
       // Set the guard before the await so re-entrant listener fires can't
-      // race a second prime.
-      _startupServicesPrimed = true;
+      // race a second prime. A fallback prime while the binder still runs is
+      // provisional: the real settle must prime again with the rebound
+      // clients.
+      _startupServicesPrimed = !activeProfile.isBinding;
       _startupSettleTimeout?.cancel();
       _startupSettleTimeout = null;
 
@@ -689,8 +691,8 @@ class _MainScreenState extends State<MainScreen>
     _bindingSettleListener = () => primeServicesOnBindingSettle();
     activeProfile.addListener(_bindingSettleListener!);
 
-    // Defence in depth: bypass the binder gate after a hard ceiling so a
-    // hung bind path can't strand the user on an empty screen.
+    // Defence in depth: prime libraries, watch sync, and downloads after a
+    // hard ceiling so a hung bind path can't hold them back indefinitely.
     _startupSettleTimeout?.cancel();
     _startupSettleTimeout = Timer(_startupSettleFallback, () {
       primeServicesOnBindingSettle(fromTimeout: true);
@@ -740,6 +742,8 @@ class _MainScreenState extends State<MainScreen>
   /// means a disconnected server drops out and its reconnect counts as newly
   /// online again. No-op while nothing new is online or no client resolves;
   /// per-item client resolution inside the drain picks the right server.
+  /// The newly online servers also refresh their downloads' collection
+  /// membership.
   void _resumeQueuedDownloadsForServers(Set<String> onlineServerIds, MediaServerClient? onlineClient) {
     final newlyOnline = onlineServerIds.difference(_resumeCoveredServerIds);
     if (!mounted || newlyOnline.isEmpty || onlineClient == null) {
@@ -753,10 +757,12 @@ class _MainScreenState extends State<MainScreen>
       ..clear()
       ..addAll(onlineServerIds);
     final downloadProvider = context.read<DownloadProvider>();
+    final serverManager = context.read<MultiServerProvider>().serverManager;
     unawaited(
       downloadProvider.ensureInitialized().then((_) {
         if (!mounted) return;
         downloadProvider.resumeQueuedDownloads(onlineClient);
+        unawaited(downloadProvider.syncDownloadCollections(serverManager, newlyOnline));
       }),
     );
   }
@@ -863,31 +869,12 @@ class _MainScreenState extends State<MainScreen>
     showSkipVersion: true,
   );
 
-  /// Set up the Watch Together navigation callback for guests
+  /// Lets the Watch Together room open its file when no player is open.
   void _setupWatchTogetherCallback() {
     try {
       final watchTogether = context.read<WatchTogetherProvider>();
-      watchTogether.onMediaSwitched = (ratingKey, serverId, mediaTitle) {
-        appLogger.d('WatchTogether: Media switch received - navigating to $mediaTitle');
-        return _navigateToWatchTogetherMedia(ratingKey, serverId);
-      };
-      watchTogether.onHostExitedPlayer = () {
-        appLogger.d('WatchTogether: Host exited player - exiting player for guest');
-        // Watch Together playback lives in the profile navigator; root-level
-        // dialogs/profile picker must not be affected.
-        if (!mounted) return;
-        final navigator = Navigator.of(context);
-        bool isVideoPlayerOnTop = false;
-        navigator.popUntil((route) {
-          if (route.isCurrent) {
-            isVideoPlayerOnTop = route.settings.name == kVideoPlayerRouteName;
-          }
-          return true;
-        });
-        if (isVideoPlayerOnTop && navigator.canPop()) {
-          navigator.pop();
-        }
-      };
+      _watchTogether = watchTogether;
+      watchTogether.navigatorOpener = _navigateToWatchTogetherMedia;
     } catch (e) {
       appLogger.w('Could not set up Watch Together callback', error: e);
     }
@@ -958,14 +945,12 @@ class _MainScreenState extends State<MainScreen>
     }
   }
 
-  /// Navigate to media when host switches content in Watch Together session.
-  /// Returns whether navigation was initiated; failures are re-dispatched on
-  /// the host's next state heartbeat.
-  Future<bool> _navigateToWatchTogetherMedia(String ratingKey, ServerId serverId) async {
-    if (!mounted) return false; // Check before any context usage
-
+  /// Opens the Watch Together room's file in a new player. Returns whether
+  /// navigation started.
+  Future<bool> _navigateToWatchTogetherMedia(WatchCopy copy) async {
+    if (!mounted) return false;
     try {
-      return await navigateToWatchTogetherPlayback(context, ratingKey: ratingKey, serverId: serverId);
+      return await navigateToWatchTogetherPlayback(context, copy);
     } catch (e) {
       appLogger.e('WatchTogether: Failed to navigate to media', error: e);
       return false;
@@ -973,6 +958,7 @@ class _MainScreenState extends State<MainScreen>
   }
 
   bool _companionRemoteSetup = false;
+  WatchTogetherProvider? _watchTogether;
   ValueChanged<String>? _systemShelfTapCallback;
 
   @override
@@ -1090,6 +1076,7 @@ class _MainScreenState extends State<MainScreen>
 
   @override
   void dispose() {
+    if (_watchTogether?.navigatorOpener == _navigateToWatchTogetherMedia) _watchTogether?.navigatorOpener = null;
     WidgetsBinding.instance.removeObserver(this);
     _profileRouteObserver?.unsubscribe(this);
     if (PlatformDetector.isDesktopOS()) {
@@ -1311,6 +1298,9 @@ class _MainScreenState extends State<MainScreen>
         if (multiServerProvider.hasConnectedServers) {
           _offlineUntilConnected = false;
           _handleOfflineStatusChanged();
+        } else {
+          // Without this a failed press looks ignored (#2616).
+          showMainSnackBar(t.errors.connectionFailed);
         }
       } finally {
         setStateIfMounted(() => _isReconnecting = false);

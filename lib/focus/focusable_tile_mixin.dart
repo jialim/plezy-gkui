@@ -67,26 +67,33 @@ mixin FocusableTileStateMixin<T extends StatefulWidget> on State<T> {
     bool on(Set<WidgetState> states) => states.contains(WidgetState.selected);
     // A Material, not a coloured box: ListTile paints its ink on the nearest
     // Material, which a DecoratedBox in between would cover.
-    return Material(
-      color: accent,
-      borderRadius: BorderRadius.circular(12),
-      clipBehavior: Clip.antiAlias,
-      child: Theme(
-        data: theme.copyWith(
-          focusColor: Colors.transparent,
-          hoverColor: Colors.transparent,
-          switchTheme: SwitchThemeData(
-            thumbColor: WidgetStateProperty.resolveWith((states) => on(states) ? accent : ink),
-            trackColor: WidgetStateProperty.resolveWith((states) => on(states) ? ink : accent),
-            trackOutlineColor: WidgetStatePropertyAll(ink),
+    // The glow sits outside the Material so the tile still inks on it.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.55), blurRadius: 18, spreadRadius: 2)],
+      ),
+      child: Material(
+        color: accent,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: Theme(
+          data: theme.copyWith(
+            focusColor: Colors.transparent,
+            hoverColor: Colors.transparent,
+            switchTheme: SwitchThemeData(
+              thumbColor: WidgetStateProperty.resolveWith((states) => on(states) ? accent : ink),
+              trackColor: WidgetStateProperty.resolveWith((states) => on(states) ? ink : accent),
+              trackOutlineColor: WidgetStatePropertyAll(ink),
+            ),
+            checkboxTheme: CheckboxThemeData(
+              fillColor: WidgetStateProperty.resolveWith((states) => on(states) ? ink : Colors.transparent),
+              checkColor: WidgetStatePropertyAll(accent),
+              side: BorderSide(color: ink, width: 2),
+            ),
           ),
-          checkboxTheme: CheckboxThemeData(
-            fillColor: WidgetStateProperty.resolveWith((states) => on(states) ? ink : Colors.transparent),
-            checkColor: WidgetStatePropertyAll(accent),
-            side: BorderSide(color: ink, width: 2),
-          ),
+          child: ListTileTheme.merge(textColor: ink, iconColor: ink, child: tile),
         ),
-        child: ListTileTheme.merge(textColor: ink, iconColor: ink, child: tile),
       ),
     );
   }

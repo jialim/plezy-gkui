@@ -208,8 +208,20 @@ class NavigationRailItem extends StatelessWidget {
         ? accent
         : null;
     if (tint == null) return child;
-    return ColorFiltered(colorFilter: ColorFilter.mode(tint, BlendMode.srcIn), child: child);
+    final tinted = ColorFiltered(colorFilter: ColorFilter.mode(tint, BlendMode.srcIn), child: child);
+    return focused
+        ? DefaultTextStyle.merge(
+            style: const TextStyle(fontWeight: FontWeight.w800),
+            child: tinted,
+          )
+        : tinted;
   }
+
+  /// A halo of the accent around the focused bar: a projector's soft focus
+  /// and lifted blacks shrink a hard-edged block, the glow wins it back.
+  static List<BoxShadow>? _projectorGlow(Color? accent, {required bool focused}) => accent != null && focused
+      ? [BoxShadow(color: accent.withValues(alpha: 0.55), blurRadius: 18, spreadRadius: 2)]
+      : null;
 
   Widget _leadingIcon(MonoTokens t) =>
       iconWidget ??
@@ -217,7 +229,7 @@ class NavigationRailItem extends StatelessWidget {
         isSelected && selectedIcon != null ? selectedIcon! : icon,
         fill: 1,
         size: iconSize,
-        color: isSelected ? t.text : t.textMuted,
+        color: isSelected ? t.accent : t.textMuted,
       );
 
   static double _collapsedItemWidth(BuildContext context) =>
@@ -239,6 +251,7 @@ class NavigationRailItem extends StatelessWidget {
             alignment: .center,
             decoration: BoxDecoration(
               color: _indicatorColor(t, focused: focused, expansion: 0, accent: _projectorAccent(context)),
+              boxShadow: _projectorGlow(_projectorAccent(context), focused: focused),
               borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
             ),
             child: _projectorTint(context, _leadingIcon(t), focused: focused),
@@ -300,6 +313,7 @@ class NavigationRailItem extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: fixedHeight ? 0 : 8),
       decoration: BoxDecoration(
         color: _indicatorColor(t, focused: focused, expansion: 1, accent: _projectorAccent(context)),
+        boxShadow: _projectorGlow(_projectorAccent(context), focused: focused),
         borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
       ),
       child: _projectorTint(
@@ -344,6 +358,7 @@ class NavigationRailItem extends StatelessWidget {
               height: lerpDouble(collapsedIndicatorHeight, expandedHeight, expansion),
               decoration: BoxDecoration(
                 color: _indicatorColor(t, focused: focused, expansion: expansion, accent: _projectorAccent(context)),
+                boxShadow: _projectorGlow(_projectorAccent(context), focused: focused),
                 borderRadius: BorderRadius.circular(MonoTokens.radiusFull),
               ),
             ),

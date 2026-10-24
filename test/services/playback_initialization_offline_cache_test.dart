@@ -7,16 +7,20 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plezy/database/app_database.dart';
+import 'package:plezy/database/download_operations.dart';
 import 'package:plezy/media/media_backend.dart';
 
 import 'package:plezy/media/media_kind.dart';
 import 'package:plezy/media/media_server_client.dart';
 import 'package:plezy/models/download_models.dart';
+import 'package:plezy/models/transcode_quality_preset.dart';
 import 'package:plezy/services/cached_playback_metadata_service.dart';
 import 'package:plezy/services/download_storage_service.dart';
 import 'package:plezy/services/jellyfin_api_cache.dart';
 import 'package:plezy/services/jellyfin_media_info_mapper.dart';
+import 'package:plezy/services/multi_server_manager.dart';
 import 'package:plezy/services/playback_initialization_service.dart';
+import 'package:plezy/services/playback_source_resolver.dart';
 import 'package:plezy/services/plex_api_cache.dart';
 import 'package:plezy/services/plex_mappers.dart';
 import 'package:plezy/services/saf_storage_service.dart';
@@ -88,6 +92,82 @@ void main() {
     expect(result.mediaInfo?.audioTracks.single.languageCode, 'eng');
   });
 
+  group('a download of a stacked item', () {
+    // Two files: 50 and 40 minutes.
+    Map<String, dynamic> stackedEnvelope() => {
+      'MediaContainer': {
+        'Metadata': [
+          {
+            'ratingKey': 'movie-1',
+            'type': 'movie',
+            'title': 'Movie',
+            'duration': 5400000,
+            'Media': [
+              {
+                'id': 1,
+                'Part': [
+                  {'id': 11, 'duration': 3000000},
+                  {'id': 12, 'duration': 2400000},
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    Future<PlaybackInitializationResult> playFrom(Duration? startPosition, {MediaServerClient? client}) {
+      return PlaybackInitializationService(client: client, database: db).getPlaybackData(
+        PlaybackInitializationOptions(
+          metadata: testMediaItem(id: 'movie-1', backend: MediaBackend.plex, kind: MediaKind.movie, serverId: 'srv-1'),
+          selectedMediaIndex: 0,
+          startPosition: startPosition,
+        ),
+        preferOffline: true,
+      );
+    }
+
+    setUp(() => PlexApiCache.instance.put(ServerId('srv-1'), '/library/metadata/movie-1', stackedEnvelope()));
+
+    test('plays the downloaded file holding the start position', () async {
+      await _insertDownloaded(
+        db,
+        serverId: ServerId('srv-1'),
+        ratingKey: 'movie-1',
+        videoFilePath: 'content://offline/movie-1',
+        additionalPartPaths: const ['content://offline/movie-1 - part2'],
+      );
+
+      final first = await playFrom(const Duration(minutes: 10));
+      expect(first.videoUrl, 'content://offline/movie-1');
+      expect(first.mediaInfo?.partTimeline?.currentIndex, 0);
+
+      final second = await playFrom(const Duration(minutes: 55));
+      expect(second.isOffline, isTrue);
+      expect(second.videoUrl, 'content://offline/movie-1 - part2');
+      expect(second.mediaInfo?.partTimeline?.current.start, const Duration(minutes: 50));
+    });
+
+    test('a copy holding only the first file streams the rest, or fails when it must stay offline', () async {
+      await _insertDownloaded(
+        db,
+        serverId: ServerId('srv-1'),
+        ratingKey: 'movie-1',
+        videoFilePath: 'content://offline/movie-1',
+      );
+
+      final client = _StreamingPlaybackClient(serverId: ServerId('srv-1'));
+      final streamed = await playFrom(const Duration(minutes: 55), client: client);
+      expect(streamed.isOffline, isFalse);
+      expect(client.playbackInitializationCalls, 1);
+
+      await expectLater(
+        playFrom(const Duration(minutes: 55)),
+        throwsA(isA<PlaybackException>().having((e) => e.reason, 'reason', PlaybackFailureReason.noPlayableSource)),
+      );
+    });
+  });
+
   test('downloaded track resolves to its local file through the offline path', () async {
     // Same globalKey shape queueDownload writes (`serverId:ratingKey`) —
     // the music resolver reaches this via preferOffline=true (original
@@ -148,6 +228,39 @@ void main() {
     expect(result.videoUrl, 'content://offline/movie-1');
     expect(result.availableVersions, isEmpty);
     expect(result.mediaInfo?.audioTracks.single.languageCode, 'eng');
+  });
+
+  test('a Watch Together room streams an Original-quality item that is downloaded', () async {
+    await _insertDownloaded(
+      db,
+      serverId: ServerId('srv-1'),
+      ratingKey: 'movie-1',
+      videoFilePath: 'content://offline/movie-1',
+    );
+    await PlexApiCache.instance.put(ServerId('srv-1'), '/library/metadata/movie-1', _plexMetadataEnvelope());
+    final client = _FailingPlaybackClient(serverId: ServerId('srv-1'));
+    final manager = MultiServerManager();
+    addTearDown(manager.dispose);
+    manager.debugRegisterClientForTesting(client, online: true);
+    final resolver = PlaybackSourceResolver(serverManager: manager, database: db);
+    final options = PlaybackInitializationOptions(
+      metadata: testMediaItem(
+        id: 'movie-1',
+        backend: MediaBackend.plex,
+        kind: MediaKind.movie,
+        serverId: ServerId('srv-1'),
+      ),
+      selectedMediaIndex: 0,
+      qualityPreset: TranscodeQualityPreset.original,
+    );
+
+    final alone = await resolver.resolve(options, offlineLibraryMode: false);
+    expect(alone.result.isOffline, isTrue, reason: 'Original quality prefers the download');
+    expect(client.playbackInitializationCalls, 0);
+
+    // The room never gets a downloaded file, so the room's launch streams it.
+    await expectLater(resolver.resolve(options, offlineLibraryMode: false, streamOnly: true), throwsStateError);
+    expect(client.playbackInitializationCalls, 1);
   });
 
   test('pure-offline playback uses cached Plex media source for selected version', () async {
@@ -516,6 +629,9 @@ class _FailingPlaybackClient implements MediaServerClient {
   }
 
   @override
+  void close() {}
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -525,6 +641,7 @@ Future<void> _insertDownloaded(
   String? clientScopeId,
   required String ratingKey,
   required String videoFilePath,
+  List<String>? additionalPartPaths,
   String type = 'movie',
   int mediaIndex = 0,
   String? mediaSourceId,
@@ -540,6 +657,7 @@ Future<void> _insertDownloaded(
           type: type,
           status: DownloadStatus.completed.index,
           videoFilePath: Value(videoFilePath),
+          additionalPartPaths: Value(encodeAdditionalPartPaths(additionalPartPaths)),
           mediaIndex: Value(mediaIndex),
           mediaSourceId: Value(mediaSourceId),
         ),

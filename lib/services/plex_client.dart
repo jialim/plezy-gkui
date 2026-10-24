@@ -360,6 +360,12 @@ mixin _PlexClientInternals on MediaServerCacheMixin {
 
   Map<String, dynamic> _buildPaginationParams(int? start, int? size);
 
+  PlexMetadataDto _createTaggedMetadataWithLibrary(
+    Map<String, dynamic> json, {
+    int? librarySectionID,
+    String? librarySectionTitle,
+  });
+
   Future<_LibraryContentResult> _fetchPaginatedList(
     String path, {
     int? start,
@@ -414,6 +420,12 @@ class PlexClient
   /// Live TV favorites store ([favoriteStoreKey]).
   @override
   String? plexAccountId;
+
+  /// plex.tv token of the [plexAccountId] account, set alongside it.
+  /// Plex's cloud Discover service ([fetchPersonDetails]) takes only plex.tv
+  /// credentials: it rejects a Home or shared user's server [config] token.
+  @override
+  String? plexAccountToken;
 
   Object _authenticationSessionId = Object();
 
@@ -793,7 +805,7 @@ class PlexClient
     MediaServerHttpClient? client;
 
     try {
-      client = MediaServerHttpClient(baseUrl: baseUrl, connectTimeout: timeout, receiveTimeout: timeout);
+      client = MediaServerHttpClient(baseUrl: baseUrl, connectTimeout: timeout);
 
       final headers = <String, String>{'X-Plex-Token': token};
       if (clientIdentifier != null) {
@@ -802,7 +814,7 @@ class PlexClient
         headers['X-Plex-Device-Name'] = sanitizeHeaderValue(identity.deviceName) ?? 'Plezy';
       }
 
-      final response = await client.get('/', headers: headers);
+      final response = await client.get('/', headers: headers, timeout: timeout);
 
       stopwatch.stop();
       final success = response.statusCode == 200;
@@ -1786,19 +1798,16 @@ class PlexClient
     return _http.buildUri(thumbPath).toString().withPlexToken(config.token);
   }
 
-  /// Download the full BIF (Base Index Frames) file for a given part.
-  /// Returns the raw bytes, or null on failure.
-  Future<Uint8List?> downloadBifFile(int partId) async {
-    try {
-      final bytes = await _http.getBytes(
-        '${_http.baseUrl}/library/parts/$partId/indexes/sd',
-        timeout: const Duration(seconds: 30),
-      );
-      if (bytes.isNotEmpty) return bytes;
-      return null;
-    } catch (_) {
-      return null;
-    }
+  /// Download the full BIF (Base Index Frames) file for a given part, failing
+  /// once the body exceeds [maxBytes] instead of buffering it.
+  /// Returns null when the server answers with an empty body.
+  Future<Uint8List?> downloadBifFile(int partId, {required int maxBytes}) async {
+    final bytes = await _http.getBytes(
+      '${_http.baseUrl}/library/parts/$partId/indexes/sd',
+      timeout: const Duration(seconds: 30),
+      maxBytes: maxBytes,
+    );
+    return bytes.isEmpty ? null : bytes;
   }
 
   /// Chapters and markers for [ratingKey], from the shared
@@ -1914,6 +1923,7 @@ class PlexClient
     int mediaIndex = 0,
     String? selectedMediaSourceId,
     String? preferredVersionSignature,
+    Duration? position,
   }) {
     return parsePlexVideoPlaybackDataFromJson(
       metadataJson,
@@ -1922,6 +1932,7 @@ class PlexClient
       mediaIndex: mediaIndex,
       selectedMediaSourceId: selectedMediaSourceId,
       preferredVersionSignature: preferredVersionSignature,
+      position: position,
       onVersionFallback: (requested, fallback) {
         appLogger.w('Version $requested inaccessible/missing — falling back to version $fallback');
       },
@@ -1967,11 +1978,15 @@ class PlexClient
   /// download flow watches for a new external stream to appear): without it,
   /// each successful network fetch re-stamps the shared cache row, so every
   /// later poll inside the freshness window is served the stale snapshot.
+  ///
+  /// [position] (item time) picks the file of a version stacked across
+  /// several files; see [MediaPartTimeline].
   Future<PlexVideoPlaybackData> getVideoPlaybackData(
     String ratingKey, {
     int mediaIndex = 0,
     String? selectedMediaSourceId,
     String? preferredVersionSignature,
+    Duration? position,
     bool forceRefresh = false,
   }) async {
     // Fresh-cache-first: the detail screen writes a strict superset of this
@@ -1997,6 +2012,7 @@ class PlexClient
               mediaIndex: mediaIndex,
               selectedMediaSourceId: selectedMediaSourceId,
               preferredVersionSignature: preferredVersionSignature,
+              position: position,
             );
           }
         } on FormatException {
@@ -2021,6 +2037,7 @@ class PlexClient
       mediaIndex: mediaIndex,
       selectedMediaSourceId: selectedMediaSourceId,
       preferredVersionSignature: preferredVersionSignature,
+      position: position,
     );
   }
 
@@ -3307,10 +3324,9 @@ class PlexClient
       baseUrl: candidateBaseUrl,
       defaultHeaders: const {'Accept': 'application/json'},
       connectTimeout: MediaServerTimeouts.connectionRace,
-      receiveTimeout: MediaServerTimeouts.connectionRace,
     );
     try {
-      final response = await probe.get('/identity', abort: abort);
+      final response = await probe.get('/identity', timeout: MediaServerTimeouts.connectionRace, abort: abort);
       if (response.statusCode != 200) return false;
       return _getMediaContainer(response)?['machineIdentifier']?.toString() == serverId;
     } finally {
@@ -3711,6 +3727,7 @@ class PlexClient
         mediaIndex: options.selectedMediaIndex,
         selectedMediaSourceId: options.selectedMediaSourceId,
         preferredVersionSignature: options.preferredVersionSignature,
+        position: options.startPosition,
       );
 
       if (!data.hasValidVideoUrl) {
@@ -4313,11 +4330,24 @@ class PlexClient
     required MediaSourceInfo mediaSource,
   }) async {
     if (!capabilities.scrubThumbnails) return null;
-    final partId = mediaSource.partId;
+    // A stacked version previews every file: the seek bar spans the item.
+    final timeline = mediaSource.partTimeline;
+    if (timeline != null) {
+      final sources = await Future.wait([
+        for (final part in timeline.parts)
+          _loadBifPreview(int.tryParse(part.partId), aspectRatio: mediaSource.videoAspectRatio),
+      ]);
+      if (sources.every((source) => source == null)) return null;
+      return StackedScrubPreviewSource(timeline: timeline, sources: sources);
+    }
+    return _loadBifPreview(mediaSource.partId, aspectRatio: mediaSource.videoAspectRatio);
+  }
+
+  Future<ScrubPreviewSource?> _loadBifPreview(int? partId, {double? aspectRatio}) async {
     if (partId == null) return null;
     final service = BifThumbnailService();
     try {
-      await service.load(() => downloadBifFile(partId), aspectRatio: mediaSource.videoAspectRatio);
+      await service.load((maxBytes) => downloadBifFile(partId, maxBytes: maxBytes), aspectRatio: aspectRatio);
       return service;
     } catch (e, st) {
       appLogger.w('BIF thumbnail load failed for part $partId', error: e, stackTrace: st);
@@ -4961,12 +4991,14 @@ class PlexClient
     MediaItem item, {
     int mediaIndex = 0,
     String? mediaSourceId,
+    Duration? position,
   }) async {
-    final playbackData = await getVideoPlaybackData(item.id, mediaIndex: mediaIndex);
+    final playbackData = await getVideoPlaybackData(item.id, mediaIndex: mediaIndex, position: position);
     if (!playbackData.hasValidVideoUrl) return null;
     return ExternalPlaybackTarget(
       url: playbackData.videoUrl!,
       subtitles: [for (final sidecar in _buildExternalSubtitles(playbackData.mediaInfo)) sidecar.track],
+      partTimeline: playbackData.mediaInfo?.partTimeline,
     );
   }
 
@@ -4977,35 +5009,64 @@ class PlexClient
       mediaIndex: mediaIndex,
       selectedMediaSourceId: mediaSourceId,
     );
-    final subtitles = <DownloadSubtitleSpec>[];
     final mediaInfo = playbackData.mediaInfo;
     final requestedSourceId = mediaSourceId?.trim();
     if (requestedSourceId != null && requestedSourceId.isNotEmpty && mediaInfo?.mediaSourceId != requestedSourceId) {
       throw StateError('Requested Plex download source is no longer available');
     }
-    if (mediaInfo != null) {
-      for (final subtitle in mediaInfo.subtitleTracks) {
-        if (!subtitle.isExternal || subtitle.key == null) continue;
-        final url = buildExternalSubtitleUrl(subtitle);
-        if (url == null) continue;
-        subtitles.add(
-          DownloadSubtitleSpec(
-            id: subtitle.id,
-            url: url,
-            codec: subtitle.codec,
-            language: subtitle.language,
-            languageCode: subtitle.languageCode,
-            forced: subtitle.forced,
-            displayTitle: subtitle.displayTitle,
-          ),
+    // A stacked version downloads every file; one that is gone leaves the
+    // copy unplayable past it, so the download fails instead of finishing
+    // short.
+    final timeline = mediaInfo?.partTimeline;
+    if (timeline != null && timeline.currentIndex != 0) {
+      throw StateError('Part 1 of the Plex download source is unavailable');
+    }
+    final additionalParts = <DownloadPartResolution>[];
+    if (timeline != null) {
+      for (var index = 1; index < timeline.parts.length; index++) {
+        final partData = await getVideoPlaybackData(
+          item.id,
+          mediaIndex: playbackData.selectedMediaIndex,
+          selectedMediaSourceId: mediaInfo?.mediaSourceId,
+          position: timeline.parts[index].start,
+        );
+        final partUrl = partData.videoUrl;
+        if (partUrl == null || partData.mediaInfo?.partTimeline?.currentIndex != index) {
+          throw StateError('Part ${index + 1} of the Plex download source is unavailable');
+        }
+        additionalParts.add(
+          DownloadPartResolution(url: partUrl, externalSubtitles: _downloadSubtitleSpecs(partData.mediaInfo)),
         );
       }
     }
     return DownloadResolution(
       videoUrl: playbackData.videoUrl,
-      mediaSourceId: playbackData.mediaInfo?.mediaSourceId,
-      externalSubtitles: subtitles,
+      mediaSourceId: mediaInfo?.mediaSourceId,
+      externalSubtitles: _downloadSubtitleSpecs(mediaInfo),
+      additionalParts: additionalParts,
     );
+  }
+
+  List<DownloadSubtitleSpec> _downloadSubtitleSpecs(MediaSourceInfo? mediaInfo) {
+    if (mediaInfo == null) return const [];
+    final subtitles = <DownloadSubtitleSpec>[];
+    for (final subtitle in mediaInfo.subtitleTracks) {
+      if (!subtitle.isExternal || subtitle.key == null) continue;
+      final url = buildExternalSubtitleUrl(subtitle);
+      if (url == null) continue;
+      subtitles.add(
+        DownloadSubtitleSpec(
+          id: subtitle.id,
+          url: url,
+          codec: subtitle.codec,
+          language: subtitle.language,
+          languageCode: subtitle.languageCode,
+          forced: subtitle.forced,
+          displayTitle: subtitle.displayTitle,
+        ),
+      );
+    }
+    return subtitles;
   }
 
   /// Plex metadata rows already carry `librarySectionID`/`librarySectionTitle`,

@@ -47,6 +47,7 @@ class PlaybackSettingsScreen extends StatelessWidget {
         SettingsService.matchContentFrameRate,
         SettingsService.matchContentResolution,
         SettingsService.audioChannelLimit,
+        SettingsService.disableDolbyVision,
       ],
       builder: (context) {
         final svc = SettingsService.instance;
@@ -61,6 +62,12 @@ class PlaybackSettingsScreen extends StatelessWidget {
                 (svc.read(SettingsService.matchRefreshRate) || svc.read(SettingsService.matchDynamicRange))) ||
             (Platform.isAndroid &&
                 (svc.read(SettingsService.matchContentFrameRate) || svc.read(SettingsService.matchContentResolution)));
+        // Android mpv and Apple TV only: ExoPlayer is not taking new features, and
+        // elsewhere no Dolby Vision signal ever reaches the display.
+        final showDisableDolbyVision = (Platform.isAndroid && !exoActive) || PlatformDetector.isAppleTV();
+        // With Dolby Vision disabled mpv strips every Profile 7 file, so the
+        // conversion choices would change nothing.
+        final showDvConversionMode = Platform.isAndroid && (exoActive || !svc.read(SettingsService.disableDolbyVision));
 
         return SettingsPage(
           title: Text(t.settings.videoPlayback),
@@ -86,7 +93,8 @@ class PlaybackSettingsScreen extends StatelessWidget {
                 if (Platform.isWindows) _matchRefreshRateTile(),
                 if (Platform.isWindows) _matchDynamicRangeTile(),
                 if (showDisplaySwitchDelay) _displaySwitchDelayTile(),
-                if (Platform.isAndroid) _dvConversionModeTile(),
+                if (showDisableDolbyVision) _disableDolbyVisionTile(),
+                if (showDvConversionMode) _dvConversionModeTile(),
                 // mpv-only: ExoPlayer always leaves the conversion to the device.
                 if (Platform.isAndroid && !exoActive) _hdrSdrConversionTile(),
                 // mpv-only (#2149): ExoPlayer has no filter chain, so the
@@ -511,16 +519,39 @@ class PlaybackSettingsScreen extends StatelessWidget {
     subtitle: t.settings.matchDynamicRangeDescription,
   );
 
-  Widget _deinterlaceTile() => SettingSwitchTile(
-    pref: SettingsService.deinterlace,
+  Widget _deinterlaceTile() => SettingSelectionTile<DeinterlaceMode>(
+    pref: SettingsService.deinterlaceMode,
     icon: Symbols.deblur_rounded,
     title: t.settings.deinterlace,
-    subtitle: t.settings.deinterlaceDescription,
+    subtitleBuilder: (mode) => '${_deinterlaceModeLabel(mode)} · ${t.settings.deinterlaceDescription}',
+    options: [
+      DialogOption(
+        value: DeinterlaceMode.off,
+        title: t.settings.deinterlaceOff,
+        subtitle: t.settings.deinterlaceOffDescription,
+      ),
+      DialogOption(
+        value: DeinterlaceMode.video,
+        title: t.settings.deinterlaceVideo,
+        subtitle: t.settings.deinterlaceVideoDescription,
+      ),
+      DialogOption(
+        value: DeinterlaceMode.film,
+        title: t.settings.deinterlaceFilm,
+        subtitle: t.settings.deinterlaceFilmDescription,
+      ),
+    ],
   );
 
-  // Normalization wins over passthrough in the player (loudnorm cannot filter
-  // a bitstream), so the switch reports that override instead of promising
-  // bitstreaming that will not happen.
+  String _deinterlaceModeLabel(DeinterlaceMode mode) => switch (mode) {
+    DeinterlaceMode.off => t.settings.deinterlaceOff,
+    DeinterlaceMode.video => t.settings.deinterlaceVideo,
+    DeinterlaceMode.film => t.settings.deinterlaceFilm,
+  };
+
+  // Normalization wins over passthrough in the player (neither loudnorm nor
+  // Android's platform effect can process a bitstream), so the switch reports
+  // that override instead of promising bitstreaming that will not happen.
   Widget _audioPassthroughTile() => SettingsBuilder(
     prefs: const [SettingsService.audioNormalization],
     builder: (context) {
@@ -531,8 +562,10 @@ class PlaybackSettingsScreen extends StatelessWidget {
         title: t.settings.audioPassthrough,
         subtitle: normalizationOn
             ? t.settings.audioPassthroughOverriddenByNormalization
-            : PlatformDetector.isAppleTV()
-            ? t.settings.audioPassthroughDescriptionAppleTv
+            : Platform.isIOS
+            ? t.settings.audioPassthroughDescriptionAppleSpatial
+            : Platform.isMacOS
+            ? t.settings.audioPassthroughDescriptionApple
             : t.settings.audioPassthroughDescription,
         enabled: !normalizationOn,
       );
@@ -592,6 +625,13 @@ class PlaybackSettingsScreen extends StatelessWidget {
     icon: Symbols.tv_options_input_settings_rounded,
     title: t.settings.tunneledPlayback,
     subtitle: t.settings.tunneledPlaybackDescription,
+  );
+
+  Widget _disableDolbyVisionTile() => SettingSwitchTile(
+    pref: SettingsService.disableDolbyVision,
+    icon: Symbols.hdr_off_rounded,
+    title: t.settings.disableDolbyVision,
+    subtitle: t.settings.disableDolbyVisionDescription,
   );
 
   Widget _dvConversionModeTile() => SettingSelectionTile<DvConversionModePreference>(

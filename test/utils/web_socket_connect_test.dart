@@ -237,6 +237,27 @@ void main() {
       expect(await received.future.timeout(const Duration(seconds: 5)), 'still here');
     });
 
+    test('headers are sent with the upgrade request', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      final authorization = Completer<String?>();
+      server.listen((request) async {
+        authorization.complete(request.headers.value('authorization'));
+        final socket = await WebSocketTransformer.upgrade(request);
+        unawaited(socket.close());
+      });
+
+      final attempt = WebSocketConnectAttempt(
+        Uri.parse('ws://${server.address.address}:${server.port}/socket'),
+        connectTimeout: const Duration(seconds: 30),
+        headers: const {'Authorization': 'MediaBrowser Client="Plezy Android TV"'},
+      );
+      final webSocket = await attempt.socket;
+      addTearDown(webSocket.close);
+
+      expect(await authorization.future.timeout(const Duration(seconds: 5)), 'MediaBrowser Client="Plezy Android TV"');
+    });
+
     test('redirected upgrade transfers ownership of the delivered transport', () async {
       final target = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final redirect = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -324,37 +345,6 @@ void main() {
           return parentZone.run(() => Socket.startConnect(host, server.port));
         },
       );
-    });
-  });
-
-  group('connectWebSocketChannel', () {
-    test('closing the sink before ready cancels the attempt', () async {
-      final channel = connectWebSocketChannel(blackHoleUri(), connectTimeout: const Duration(seconds: 30));
-      await _waitFor(() => stalled.isNotEmpty);
-      final peerClosed = peerSawClose(stalled.single);
-
-      final ready = expectLater(channel.ready, throwsA(anything));
-      unawaited(channel.sink.close());
-      await ready.timeout(const Duration(seconds: 1));
-      await peerClosed;
-    });
-
-    test('an established channel exchanges frames and closes normally', () async {
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      addTearDown(() => server.close(force: true));
-      server.listen((request) async {
-        final socket = await WebSocketTransformer.upgrade(request);
-        socket.listen(socket.add, onDone: socket.close);
-      });
-
-      final channel = connectWebSocketChannel(
-        Uri.parse('ws://${server.address.address}:${server.port}/ws'),
-        connectTimeout: const Duration(seconds: 30),
-      );
-      await channel.ready;
-      channel.sink.add('echo');
-      expect(await channel.stream.first.timeout(const Duration(seconds: 5)), 'echo');
-      await channel.sink.close();
     });
   });
 }

@@ -97,7 +97,7 @@ void main() {
     await tester.pumpWidget(
       TranslationProvider(
         child: MaterialApp(
-          theme: monoTheme(dark: true),
+          theme: monoTheme(MonoPalette.dark),
           home: withProfileNavigationScope(child: MediaDetailScreen(metadata: movie)),
         ),
       ),
@@ -133,7 +133,7 @@ void main() {
     await tester.pumpWidget(
       TranslationProvider(
         child: MaterialApp(
-          theme: monoTheme(dark: true),
+          theme: monoTheme(MonoPalette.dark),
           home: withProfileNavigationScope(child: MediaDetailScreen(metadata: movie)),
         ),
       ),
@@ -192,7 +192,7 @@ void main() {
     await tester.pumpWidget(
       TranslationProvider(
         child: MaterialApp(
-          theme: monoTheme(dark: true),
+          theme: monoTheme(MonoPalette.dark),
           home: withProfileNavigationScope(child: MediaDetailScreen(metadata: movie)),
         ),
       ),
@@ -245,7 +245,7 @@ void main() {
     await tester.pumpWidget(
       TranslationProvider(
         child: MaterialApp(
-          theme: monoTheme(dark: true),
+          theme: monoTheme(MonoPalette.dark),
           home: withProfileNavigationScope(child: MediaDetailScreen(metadata: movie)),
         ),
       ),
@@ -286,7 +286,7 @@ void main() {
     await tester.pumpWidget(
       TranslationProvider(
         child: MaterialApp(
-          theme: monoTheme(dark: true),
+          theme: monoTheme(MonoPalette.dark),
           home: withProfileNavigationScope(child: MediaDetailScreen(metadata: movie)),
         ),
       ),
@@ -324,7 +324,7 @@ void main() {
     await tester.pumpWidget(
       TranslationProvider(
         child: MaterialApp(
-          theme: monoTheme(dark: true),
+          theme: monoTheme(MonoPalette.dark),
           home: withProfileNavigationScope(child: MediaDetailScreen(metadata: movie)),
         ),
       ),
@@ -384,7 +384,7 @@ void main() {
     await tester.pumpWidget(
       TranslationProvider(
         child: MaterialApp(
-          theme: monoTheme(dark: true),
+          theme: monoTheme(MonoPalette.dark),
           home: ChangeNotifierProvider<MultiServerProvider>.value(
             value: provider,
             child: withProfileNavigationScope(child: MediaDetailScreen(metadata: movie)),
@@ -509,7 +509,7 @@ void main() {
         child: ChangeNotifierProvider<MultiServerProvider>.value(
           value: provider,
           child: MaterialApp(
-            theme: monoTheme(dark: true),
+            theme: monoTheme(MonoPalette.dark),
             home: withProfileNavigationScope(
               child: SizedBox(width: 1280, height: 720, child: MediaDetailScreen(metadata: show)),
             ),
@@ -599,7 +599,7 @@ void main() {
         child: ChangeNotifierProvider<MultiServerProvider>.value(
           value: provider,
           child: MaterialApp(
-            theme: monoTheme(dark: true),
+            theme: monoTheme(MonoPalette.dark),
             home: withProfileNavigationScope(
               child: SizedBox(width: 1280, height: 720, child: MediaDetailScreen(metadata: show)),
             ),
@@ -684,7 +684,7 @@ void main() {
         child: ChangeNotifierProvider<MultiServerProvider>.value(
           value: provider,
           child: MaterialApp(
-            theme: monoTheme(dark: true),
+            theme: monoTheme(MonoPalette.dark),
             home: withProfileNavigationScope(
               child: SizedBox(width: 1280, height: 720, child: MediaDetailScreen(metadata: show)),
             ),
@@ -733,7 +733,7 @@ void main() {
       title: 'Readable Movie',
       summary: summary,
     );
-    final theme = monoTheme(dark: false);
+    final theme = monoTheme(MonoPalette.light);
 
     await tester.pumpWidget(
       TranslationProvider(
@@ -823,7 +823,7 @@ void main() {
         child: ChangeNotifierProvider<MultiServerProvider>.value(
           value: provider,
           child: MaterialApp(
-            theme: monoTheme(dark: true),
+            theme: monoTheme(MonoPalette.dark),
             home: withProfileNavigationScope(
               child: SizedBox(width: 1280, height: 720, child: MediaDetailScreen(metadata: show)),
             ),
@@ -918,7 +918,7 @@ void main() {
         child: ChangeNotifierProvider<MultiServerProvider>.value(
           value: provider,
           child: MaterialApp(
-            theme: monoTheme(dark: true),
+            theme: monoTheme(MonoPalette.dark),
             home: withProfileNavigationScope(
               child: SizedBox(width: 1280, height: 720, child: MediaDetailScreen(metadata: show)),
             ),
@@ -1007,7 +1007,7 @@ void main() {
         child: ChangeNotifierProvider<MultiServerProvider>.value(
           value: provider,
           child: MaterialApp(
-            theme: monoTheme(dark: true),
+            theme: monoTheme(MonoPalette.dark),
             home: withProfileNavigationScope(
               child: SizedBox(width: 1280, height: 720, child: MediaDetailScreen(metadata: show)),
             ),
@@ -1107,7 +1107,7 @@ void main() {
         child: ChangeNotifierProvider<MultiServerProvider>.value(
           value: provider,
           child: MaterialApp(
-            theme: monoTheme(dark: true),
+            theme: monoTheme(MonoPalette.dark),
             home: withProfileNavigationScope(
               child: SizedBox(width: 1280, height: 720, child: MediaDetailScreen(metadata: show)),
             ),
@@ -1163,6 +1163,126 @@ void main() {
     expect(tester.widget<Text>(heroTitle).data, 'The One After');
     expect(find.text('S1E2'), findsOneWidget);
     expect(find.text('S1E1'), findsNothing);
+    semantics.dispose();
+  });
+
+  testWidgets('TV detail hero adds the scores from the focused episode\'s own fetch (#2539)', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await SettingsService.getInstance();
+    tester.view.physicalSize = const Size(1920, 1080);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final show = testMediaItem(
+      id: 'show_1',
+      backend: MediaBackend.plex,
+      kind: MediaKind.show,
+      title: 'The Show',
+      serverId: 'server_1',
+      serverName: 'Server',
+    ).copyWith(ratings: const [MediaRatingSource(source: 'imdb', value: 8.4)]);
+    final season = testMediaItem(
+      id: 'season_1',
+      backend: MediaBackend.plex,
+      kind: MediaKind.season,
+      title: 'Season 1',
+      index: 1,
+      parentId: show.id,
+      serverId: show.serverId,
+      serverName: show.serverName,
+    );
+    // Rail entries as a Plex children listing sends them: the scalar TMDB
+    // pair only.
+    MediaItem episode(String id, int index, double tmdb) =>
+        testMediaItem(
+          id: id,
+          backend: MediaBackend.plex,
+          kind: MediaKind.episode,
+          title: 'Episode $index',
+          index: index,
+          parentId: season.id,
+          parentIndex: season.index,
+          grandparentId: show.id,
+          grandparentTitle: show.title,
+          serverId: show.serverId,
+          serverName: show.serverName,
+        ).copyWith(
+          ratings: [MediaRatingSource(source: 'tmdb', value: tmdb)],
+        );
+    final client = _FakeMediaServerClient(
+      show: show,
+      childrenByParent: {
+        show.id: [season],
+        season.id: [episode('ep1', 1, 7.7), episode('ep2', 2, 7.1)],
+      },
+      // Episode 1's own `/library/metadata/{id}` adds the `Rating[]` array;
+      // episode 2's fetch returns its listing entry unchanged.
+      rawItems: {
+        'ep1': {
+          'ratingKey': 'ep1',
+          'type': 'episode',
+          'title': 'Episode 1',
+          'parentRatingKey': season.id,
+          'grandparentRatingKey': show.id,
+          'parentIndex': 1,
+          'index': 1,
+          'audienceRating': 7.7,
+          'audienceRatingImage': 'themoviedb://image.rating',
+          'Rating': [
+            {'image': 'imdb://image.rating', 'value': 7.8, 'type': 'audience'},
+            {'image': 'themoviedb://image.rating', 'value': 7.7, 'type': 'audience'},
+          ],
+        },
+      },
+    );
+    final provider = testMultiServer(clients: [client]).provider;
+
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: ChangeNotifierProvider<MultiServerProvider>.value(
+          value: provider,
+          child: MaterialApp(
+            theme: monoTheme(MonoPalette.dark),
+            home: withProfileNavigationScope(
+              child: SizedBox(width: 1920, height: 1080, child: MediaDetailScreen(metadata: show)),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final information = find.bySemanticsIdentifier('tv_detail_information');
+    String announced() => tester.getSemantics(information).label;
+
+    tester.state<TvBrowseRailState>(find.byType(TvBrowseRail)).requestFocus();
+    await tester.pump();
+    // The listing's score alone until the episode's fetch lands — never the
+    // show's IMDb standing in for the episode's.
+    expect(announced(), contains('TMDB 77%'));
+    expect(announced(), isNot(contains('IMDb')));
+
+    // Past the playback probe's debounce: the fetch it already makes carries
+    // the episode's IMDb score.
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(announced(), contains('TMDB 77%, IMDb 7.8'));
+    expect(
+      find.descendant(of: find.byKey(const ValueKey('tv_detail_information_semantics')), matching: find.text('7.8')),
+      findsOneWidget,
+    );
+
+    // The scores belong to that episode alone.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(announced(), contains('Episode 2'));
+    expect(announced(), contains('TMDB 71%'));
+    expect(announced(), isNot(contains('IMDb')));
     semantics.dispose();
   });
 
@@ -1234,7 +1354,7 @@ void main() {
         child: ChangeNotifierProvider<MultiServerProvider>.value(
           value: provider,
           child: MaterialApp(
-            theme: monoTheme(dark: true),
+            theme: monoTheme(MonoPalette.dark),
             home: withProfileNavigationScope(
               child: SizedBox(width: 1920, height: 1080, child: MediaDetailScreen(metadata: show)),
             ),
@@ -1312,7 +1432,7 @@ void main() {
             child: MaterialApp(
               navigatorKey: navigator,
               navigatorObservers: [observer],
-              theme: monoTheme(dark: true),
+              theme: monoTheme(MonoPalette.dark),
               home: ProfileNavigationScope(
                 navigatorKey: navigator,
                 routeObserver: observer,
@@ -1603,7 +1723,7 @@ void main() {
           child: MaterialApp(
             navigatorKey: navigatorKey,
             navigatorObservers: [observer],
-            theme: monoTheme(dark: true),
+            theme: monoTheme(MonoPalette.dark),
             home: withProfileNavigationScope(
               child: SizedBox(width: 1280, height: 720, child: MediaDetailScreen(metadata: show)),
             ),
@@ -1724,7 +1844,7 @@ void main() {
             ],
             child: MaterialApp(
               navigatorObservers: [?observer],
-              theme: theme ?? monoTheme(dark: true),
+              theme: theme ?? monoTheme(MonoPalette.dark),
               home: withProfileNavigationScope(
                 child: MediaDetailScreen(
                   metadata: show,
@@ -1780,7 +1900,7 @@ void main() {
       // The hero scrim washes artwork toward the near-white light background;
       // the old hard-coded white title vanished into it on bright covers.
       final show = buildShow();
-      final theme = monoTheme(dark: false);
+      final theme = monoTheme(MonoPalette.light);
       await pumpPhoneDetail(tester, singleSeasonClient(show), show, theme: theme);
 
       final heroTitle = tester.widget<FittingTitleText>(find.byType(FittingTitleText).first);
@@ -2069,7 +2189,9 @@ void main() {
       // drop by usefulness — rating badges from the end first, then the
       // quality label, certification, and runtime — never by wrapping onto a
       // second run the height clip would hide. The interactive Rate chip and
-      // the year go last and first, respectively.
+      // the year go last and first, respectively. Phone widths take the
+      // scores off the strip onto a row of their own, where the strip's
+      // shedding can no longer hide every one of them (#2569).
       final movie =
           testMediaItem(
             id: 'chip_movie',
@@ -2083,12 +2205,13 @@ void main() {
             serverId: 'server_1',
             serverName: 'Server',
           ).copyWith(
-            // Unbranded sources render a star icon plus the bare value text, so
-            // each badge is findable by its formatted value.
+            // Unbranded sources (Plex's critic and audience scores, a bare
+            // unattributed score) render a square icon plus the bare value
+            // text, so each badge is findable by its formatted value.
             ratings: const [
               MediaRatingSource(source: 'critic', value: 9.2),
-              MediaRatingSource(source: 'simkl', value: 7.4),
-              MediaRatingSource(source: 'mal', value: 6.4),
+              MediaRatingSource(source: 'audience', value: 7.4),
+              MediaRatingSource(source: '', value: 6.4),
             ],
           );
       final client = _FakeMediaServerClient(show: movie, childrenByParent: const {});
@@ -2131,14 +2254,28 @@ void main() {
       await resizeTo(660);
       expectChips(present: ['2017', 'PG-13', '1h 46min', '1080p', '9.2', rate], absent: ['7.4', '6.4']);
 
-      // Then the whole pill, the quality label, and the certification go —
-      // never the runtime, year, or Rate.
+      void expectScoresRow(List<String> scores) {
+        final rateDy = tester.getCenter(find.text(rate)).dy;
+        final rowDy = tester.getCenter(find.text(scores.first)).dy;
+        expect(rowDy, greaterThan(rateDy + 20), reason: 'the scores row sits beneath the strip');
+        for (final score in scores) {
+          expect(find.text(score), findsOneWidget, reason: '"$score" should be on the scores row');
+          expect(tester.getCenter(find.text(score)).dy, moreOrLessEquals(rowDy, epsilon: 4));
+        }
+      }
+
+      // Phone width: every score moves to its own row, and the strip sheds
+      // the quality label and the certification — never the runtime, year,
+      // or Rate.
       await resizeTo(420);
       expectChips(present: ['2017', '1h 46min', rate], absent: ['9.2', '7.4', '6.4', '1080p', 'PG-13']);
+      expectScoresRow(['9.2', '7.4', '6.4']);
 
-      // Down to the bone: the year and the interactive Rate chip survive.
+      // Down to the bone: the strip keeps the year and the interactive Rate
+      // chip, and the scores row still has room for all three.
       await resizeTo(320);
       expectChips(present: ['2017', rate], absent: ['1h 46min', '1080p', 'PG-13', '9.2']);
+      expectScoresRow(['9.2', '7.4', '6.4']);
     });
 
     testWidgets('phone-width hero centres the title, chip rows and actions; wider heroes stay left', (tester) async {
@@ -2712,7 +2849,7 @@ void main() {
               if (downloads != null) ChangeNotifierProvider<DownloadProvider>.value(value: downloads),
             ],
             child: MaterialApp(
-              theme: monoTheme(dark: true),
+              theme: monoTheme(MonoPalette.dark),
               home: ProfileNavigationScope(
                 navigatorKey: profileKey,
                 routeObserver: RouteObserver<PageRoute<dynamic>>(),
@@ -2962,6 +3099,49 @@ void main() {
       LibraryContentNotifier().notifyChanged(bulk);
       deleteExact(movie.id);
       await settleDetail(tester);
+      expect(find.text('home'), findsOneWidget);
+      expect(profileKey.currentState!.canPop(), isFalse);
+    });
+
+    testWidgets('a back on a covered detail leaves the dialog above it in place', (tester) async {
+      final profileKey = await pumpProfileNavigator(
+        tester,
+        homeRoute,
+        client: _FakeMediaServerClient(show: movie, childrenByParent: {}),
+      );
+      final detailClosed = profileKey.currentState!.push(mediaDetailRoute(metadata: movie));
+      await settleDetail(tester);
+      final dialogClosed = showDialog<void>(
+        context: tester.element(find.byType(MediaDetailScreen)),
+        useRootNavigator: false,
+        builder: (_) => const AlertDialog(content: Text('dialog')),
+      );
+      await settleDetail(tester);
+      final info = FocusManager.instance.rootScope.descendants.singleWhere(
+        (node) => node.debugLabel == 'tv_detail_info',
+      );
+
+      // Focus left in the covered detail, where a gamepad back landed (#2370):
+      // a blind pop from there closed the dialog above instead.
+      info.requestFocus();
+      await tester.pump();
+      expect(info.hasPrimaryFocus, isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.gameButtonB);
+      await settleDetail(tester);
+
+      expect(find.text('dialog'), findsOneWidget);
+      expect(find.byType(MediaDetailScreen, skipOffstage: false), findsOneWidget);
+
+      // Uncovered, the same back leaves the detail, and only the detail.
+      profileKey.currentState!.pop();
+      await dialogClosed;
+      await settleDetail(tester);
+      info.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.gameButtonB);
+      await settleDetail(tester);
+
+      expect(await detailClosed, isFalse);
       expect(find.text('home'), findsOneWidget);
       expect(profileKey.currentState!.canPop(), isFalse);
     });

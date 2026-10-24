@@ -65,4 +65,40 @@ void main() {
     expect(find.text('Settings page'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('an installer failure shows the platform reason under the message', (tester) async {
+    await LocaleSettings.setLocale(AppLocale.en);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showUpdateAvailableDialog(
+                context,
+                {
+                  'latestVersion': 'Test 12',
+                  'currentVersion': 'Test 11',
+                  'releaseUrl': 'https://github.com/jialim/plezy-gkui/releases',
+                  'canInstall': true,
+                },
+                title: 'Update',
+                dismissLabel: 'Later',
+                xgimiDownloader: (info, {onProgress, cancellation}) async => throw const XgimiUpdateException(
+                  XgimiUpdateFailure.installer,
+                  cause: 'ActivityNotFoundException: No Activity found',
+                ),
+              ).ignore(),
+              child: const Text('Check updates'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Check updates'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Download and install'));
+    await tester.pumpAndSettle();
+    expect(find.text(t.update.installerFailed), findsOneWidget);
+    expect(find.text('ActivityNotFoundException: No Activity found'), findsOneWidget);
+  });
 }

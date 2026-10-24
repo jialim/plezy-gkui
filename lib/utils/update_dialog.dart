@@ -102,6 +102,7 @@ class _XgimiUpdateProgressDialogState extends State<_XgimiUpdateProgressDialog> 
   bool _running = false;
   bool _closing = false;
   XgimiUpdateFailure? _failure;
+  String? _failureDetail;
   XgimiUpdateCancellation? _cancellation;
 
   @override
@@ -135,6 +136,7 @@ class _XgimiUpdateProgressDialogState extends State<_XgimiUpdateProgressDialog> 
       _running = true;
       _failed = false;
       _failure = null;
+      _failureDetail = null;
       _permissionRequested = false;
       _progress = null;
     });
@@ -168,6 +170,10 @@ class _XgimiUpdateProgressDialogState extends State<_XgimiUpdateProgressDialog> 
         _running = false;
         _failed = true;
         _failure = error is XgimiUpdateException ? error.failure : XgimiUpdateFailure.network;
+        // Shown under the message so a photo of the screen names the cause.
+        _failureDetail = error is XgimiUpdateException && error.failure != XgimiUpdateFailure.network
+            ? error.cause?.toString()
+            : null;
       });
     }
   }
@@ -205,6 +211,10 @@ class _XgimiUpdateProgressDialogState extends State<_XgimiUpdateProgressDialog> 
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleLarge,
               ),
+            ],
+            if (_failed && !_permissionRequested && _failureDetail != null) ...[
+              const SizedBox(height: 8),
+              Text(_failureDetail!, style: Theme.of(context).textTheme.bodySmall),
             ],
           ],
         ),
